@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Family Circle icon">
+  <rect width="64" height="64" rx="16" fill="#2563eb"/>
+  <path d="M32 11 10 29v4h5v18a3 3 0 0 0 3 3h28a3 3 0 0 0 3-3V33h5v-4z" fill="#ffffff"/>
+  <path d="M24 30h16a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4h-6l-5 5v-5h-5a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4z" fill="#2563eb"/>
+  <circle cx="26" cy="37" r="1.9" fill="#fff"/><circle cx="32" cy="37" r="1.9" fill="#fff"/><circle cx="38" cy="37" r="1.9" fill="#fff"/>
+</svg>
