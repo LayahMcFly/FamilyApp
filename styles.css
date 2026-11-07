@@ -184,3 +184,13 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
   .spinner { animation: none; border-top-color: var(--border); border-right-color: var(--accent); }
 }
+
+/* Family switcher and multi-family screens */
+.fam-select, .fam-name { max-width: 46%; min-width: 0; width: auto; padding: 6px 10px; font-size: .9rem; border-radius: 10px; }
+.fam-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand { flex: 0 1 auto; }
+.topbar-inner .fam-select, .topbar-inner .fam-name { margin-left: auto; }
+.card.inner { box-shadow: none; margin-top: 14px; }
+.danger-zone { border-color: var(--danger); }
+.danger-zone h2 { color: var(--danger); }
+@media (max-width: 420px) { .brand span { display: none; } .fam-select, .fam-name { max-width: 60%; } }

@@ -1,5 +1,5 @@
 /*
- * config.js — the ONLY file you normally need to edit.
+ * config.js — public client configuration for the app (you set it once, families never touch it).
  *
  * Everything here is PUBLIC client configuration. It is safe to commit to GitHub.
  * NEVER put an Appwrite API key, server key, or password in this file.
@@ -16,10 +16,10 @@ window.FAMILY_CONFIG = {
   // <<< REPLACE: copy the "Project ID" from Appwrite Console > your project > Settings.
   projectId: "6aef6a03002636be44c2",
 
-  // <<< FILL IN LATER (Setup Guide step 6): the ID of your family Team.
-  // Leave as "" until you create the Team. While it is empty, the first signed-in
-  // person sees a one-time "Create the family team" screen.
-  teamId: "6aef70c8002b376dccce",
+  // The ID of the Appwrite Function that does the trusted work (see the Setup Guide).
+  // There is NO family or team ID in this file: every family creates its own Appwrite Team
+  // from the website, and the app discovers each person's families at sign-in.
+  functionId: "family-api",
 
   // The IDs below match the Setup Guide. If you create your database, tables and
   // bucket with these exact IDs you do not need to change anything here.
@@ -30,7 +30,7 @@ window.FAMILY_CONFIG = {
     comments: "comments",
     reactions: "reactions",
     bookmarks: "bookmarks"
-  },
+  },  // (the "families" table is only used by the function, never by the browser)
   bucketId: "family-media",
 
   // App-side limits. These protect your free plan, but they run in the browser,

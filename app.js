@@ -133,6 +133,7 @@
     if (!CFG.projectId || /YOUR_/i.test(CFG.projectId)) p.push('projectId (your Appwrite project ID)');
     if (!CFG.databaseId) p.push('databaseId');
     if (!CFG.bucketId) p.push('bucketId');
+    if (!CFG.functionId) p.push('functionId (the ID of your family-api function)');
     ['profiles', 'posts', 'comments', 'reactions', 'bookmarks'].forEach(function (k) { if (!T[k]) p.push('tables.' + k); });
     return p;
   }
@@ -149,23 +150,21 @@
    * 3. APPWRITE CONNECTION
    * ===================================================================== */
 
-  var A, client, account, teams, db, storage, Query, ID, Permission, Role;
+  var A, client, account, teams, functions, db, storage, Query, ID, Permission, Role;
   function initAppwrite() {
     A = window.Appwrite;
     client = new A.Client().setEndpoint(CFG.endpoint).setProject(CFG.projectId);
     account = new A.Account(client);
     teams = new A.Teams(client);
+    functions = new A.Functions(client);
     db = new A.TablesDB(client);
     storage = new A.Storage(client);
     Query = A.Query; ID = A.ID; Permission = A.Permission; Role = A.Role;
   }
 
-  // Convenience wrappers so every call looks the same.
+  // Read-only database wrappers. The browser holds NO table-level write permission, so it
+  // cannot create, change or delete a single row. Every write goes through api() below.
   function listRows(table, queries) { return db.listRows({ databaseId: CFG.databaseId, tableId: T[table], queries: queries || [] }); }
-  function getRow(table, id) { return db.getRow({ databaseId: CFG.databaseId, tableId: T[table], rowId: id }); }
-  function createRow(table, id, data, permissions) { return db.createRow({ databaseId: CFG.databaseId, tableId: T[table], rowId: id, data: data, permissions: permissions }); }
-  function updateRow(table, id, data) { return db.updateRow({ databaseId: CFG.databaseId, tableId: T[table], rowId: id, data: data }); }
-  function deleteRow(table, id) { return db.deleteRow({ databaseId: CFG.databaseId, tableId: T[table], rowId: id }); }
 
   async function listAllRows(table, baseQueries, max) {
     var out = [], cursor = null;
@@ -181,16 +180,30 @@
     return out;
   }
 
-  // Permissions that the APP attaches to rows/files it creates (a browser can only
-  // grant roles it holds itself: "my user" and "my team").
-  function permsShared(uid) {
-    return [Permission.read(Role.team(CFG.teamId)), Permission.update(Role.user(uid)), Permission.delete(Role.user(uid))];
+  // Calls the family-api function. The function works out who you are from your own login
+  // token and re-checks on the server that you belong to the family named in the request,
+  // so a forged family ID simply gets a 403.
+  async function api(action, payload) {
+    var body = Object.assign({ action: action, jwt: await getJwt() }, payload || {});
+    var ex = await functions.createExecution({ functionId: CFG.functionId, body: JSON.stringify(body), async: false, xpath: '/', method: 'POST' });
+    var json = null;
+    try { json = JSON.parse(ex.responseBody || 'null'); } catch (e) { json = null; }
+    if (!json || typeof json !== 'object') {
+      var bad = new Error('The family service did not answer correctly. It may be starting up or may have run out of time. Please try again.');
+      bad.code = ex.responseStatusCode || 500; throw bad;
+    }
+    if (!json.ok) {
+      var err = new Error(json.message || 'Something went wrong.');
+      err.code = ex.responseStatusCode; err.apiCode = json.error; throw err;
+    }
+    return json;
   }
-  function permsReaction(uid) {
-    return [Permission.read(Role.team(CFG.teamId)), Permission.delete(Role.user(uid))];
-  }
-  function permsPrivate(uid) {
-    return [Permission.read(Role.user(uid)), Permission.update(Role.user(uid)), Permission.delete(Role.user(uid))];
+
+  // Permissions the browser attaches to a file it uploads. "update" for my own user id is the
+  // proof of ownership that the function checks before it attaches the file to a post; the
+  // function then rewrites the permissions so only the family team can read the file.
+  function uploadPerms(familyId, uid) {
+    return [Permission.read(Role.team(familyId)), Permission.update(Role.user(uid)), Permission.delete(Role.user(uid))];
   }
 
   /* =====================================================================
@@ -272,27 +285,44 @@
    * 5. STATE & FRIENDLY ERRORS
    * ===================================================================== */
 
+  var FAM_KEY = 'fc_last_family';       // only a PREFERENCE; it is checked against the server's list
   var S = {
-    user: null, isMember: false, isOwner: false, memberError: null,
-    profile: null,                 // my profile row
-    profiles: new Map(),           // userId -> profile row (cache)
-    saved: new Map(),              // postId -> my bookmark row id
+    user: null,
+    families: [],                  // [{id, name, role}] as verified by the family-api function
+    canCreateFamily: true, maxOwned: 3,
+    familyId: null, role: null,    // the ACTIVE family
+    isOwner: false, memberError: null,
+    profile: null,                 // my profile in the active family
+    profiles: new Map(),           // userId -> profile row, for the active family only
+    profilesAt: 0,
+    saved: new Map(),              // postId -> my bookmark row id (active family only)
     avatarUrls: new Map(),         // fileId -> Promise<objectURL>
     blobs: [],                     // object URLs for the current view (revoked on navigation)
     io: null,                      // IntersectionObserver for lazy media
     jwt: null, jwtAt: 0,
     nav: 0,                        // increases on every navigation; async work compares to it
+    validatedAt: 0, preferFamily: null,
     notice: null, pending: null, authMode: 'signin'
   };
 
-  function resetState() {
+  // Forget everything that belongs to the active family (used when switching, leaving, signing out).
+  function clearFamilyData() {
+    S.nav++;
     revokeBlobs();
     S.avatarUrls.forEach(function (p) { p.then(function (u) { URL.revokeObjectURL(u); }).catch(function () {}); });
     S.avatarUrls = new Map();
-    S.user = null; S.isMember = false; S.isOwner = false; S.memberError = null; S.profile = null;
-    S.profiles = new Map(); S.saved = new Map(); S.jwt = null; S.jwtAt = 0; S.notice = null; S.pending = null;
+    S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.saved = new Map();
+    S.familyId = null; S.role = null; S.isOwner = false;
+    if (S.main) clear(S.main);
+  }
+
+  function resetState() {
+    clearFamilyData();
+    S.user = null; S.families = []; S.canCreateFamily = true; S.memberError = null;
+    S.jwt = null; S.jwtAt = 0; S.notice = null; S.pending = null; S.preferFamily = null; S.validatedAt = 0;
     clearTimeout(syncTimer);
     try { sessionStorage.clear(); } catch (e) {}
+    try { localStorage.removeItem(FAM_KEY); } catch (e) {}
     try { localStorage.removeItem('cookieFallback'); } catch (e) {}   // the SDK's session fallback
   }
 
@@ -302,12 +332,14 @@
     if (e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(msg)) {
       return "We couldn't reach Appwrite. Check your internet connection. If this keeps happening, the endpoint in config.js may be wrong or this website's hostname may not be added as a Web platform in Appwrite.";
     }
+    if (e.apiCode) return msg;                       // a clear message written by the family-api function
     var byType = {
+      function_not_found: 'The family-api function was not found. Check functionId in config.js and that the function is deployed (see the Setup Guide).',
       user_invalid_credentials: "That email and password don't match. Please try again.",
       user_already_exists: 'There is already an account with that email. Try signing in instead.',
       user_not_found: "We couldn't find that account.",
       user_invalid_token: 'That link is no longer valid. It may have expired or already been used.',
-      user_blocked: 'This account is blocked. Please ask the family admin.',
+      user_blocked: 'This account is blocked.',
       general_rate_limit_exceeded: 'Too many tries in a short time. Please wait a minute and try again.',
       password_recently_used: 'Please choose a password you have not used recently.',
       password_personal_data: "That password is too close to your name or email. Please choose another.",
@@ -453,35 +485,114 @@
    * ===================================================================== */
 
   async function loadSaved() {
+    var fid = S.familyId;
+    var rows = await listAllRows('bookmarks', [Query.equal('userId', [S.user.$id]), Query.equal('familyId', [fid]), Query.orderAsc('$createdAt')], 1000);
+    if (fid !== S.familyId) return;
     S.saved = new Map();
-    var rows = await listAllRows('bookmarks', [Query.equal('userId', [S.user.$id]), Query.orderAsc('$createdAt')], 1000);
     rows.forEach(function (r) { S.saved.set(r.postId, r.$id); });
   }
 
+  // Everyone's profile in the ACTIVE family (names and pictures). Rows from other families are never requested.
+  async function loadProfiles() {
+    var fid = S.familyId;
+    var rows = await listAllRows('profiles', [Query.equal('familyId', [fid]), Query.orderAsc('$createdAt')], 500);
+    if (fid !== S.familyId) return;
+    var m = new Map();
+    rows.forEach(function (r) { m.set(r.userId, r); });
+    S.profiles = m; S.profilesAt = Date.now();
+    S.profile = m.get(S.user.$id) || null;
+  }
+
+  // Asks the server which families I truly belong to (confirmed members of registered Teams).
+  async function loadFamilies() {
+    var r = await api('listFamilies');
+    S.families = r.families || [];
+    S.canCreateFamily = !!r.canCreateFamily;
+    S.maxOwned = r.maxOwnedFamilies || 3;
+  }
+
+  // Chooses the family to open: an invitation just accepted, else the last one used, else the first.
+  // Both hints are checked against the server's list, so a stale or edited value is harmless.
+  function pickFamily() {
+    var ids = S.families.map(function (f) { return f.id; });
+    var want = S.preferFamily; S.preferFamily = null;
+    if (!want || ids.indexOf(want) < 0) { try { want = localStorage.getItem(FAM_KEY); } catch (e) { want = null; } }
+    if (!want || ids.indexOf(want) < 0) want = ids[0] || null;
+    return want;
+  }
+
+  // Opens one family. Only works for a family in the server-verified list; clears the previous family first.
+  async function enterFamily(id) {
+    clearFamilyData();
+    var f = S.families.filter(function (x) { return x.id === id; })[0];
+    if (!f) return false;
+    S.familyId = id; S.role = f.role; S.isOwner = f.role === 'owner';
+    try { localStorage.setItem(FAM_KEY, id); } catch (e) {}
+    await loadProfiles();
+    if (S.familyId !== id) return false;
+    if (S.profile) await loadSaved();
+    S.validatedAt = Date.now();
+    return true;
+  }
+
+  function currentFamily() { return S.families.filter(function (f) { return f.id === S.familyId; })[0] || null; }
+
+  // Re-asks the server whether I still belong to the active family. False means I do not (any more).
+  async function revalidate() {
+    await loadFamilies();
+    var f = currentFamily();
+    if (!f) {
+      var next = pickFamily();
+      clearFamilyData();
+      if (next) await enterFamily(next);
+      S.notice = { kind: 'error', text: 'You are no longer a member of that family.' };
+      return false;
+    }
+    S.role = f.role; S.isOwner = f.role === 'owner'; S.validatedAt = Date.now();
+    return true;
+  }
+
+  async function afterMembershipChange() {
+    await loadFamilies();
+    var id = pickFamily();
+    clearFamilyData();
+    if (id) await enterFamily(id);
+    history.replaceState(null, '', location.pathname + '#/home');
+    render();
+  }
+
+  async function switchFamily(id) {
+    if (id === S.familyId) return;
+    var tok = ++S.nav;
+    if (S.main) { clear(S.main); S.main.appendChild(h('div', { class: 'empty' }, spinnerLine('Opening family…'))); }
+    try {
+      await loadFamilies();                       // the server re-checks my membership before anything loads
+      if (!(await enterFamily(id))) {
+        var fallback = pickFamily();
+        if (fallback) await enterFamily(fallback);
+        S.notice = { kind: 'error', text: 'You are not a member of that family.' };
+      }
+      history.replaceState(null, '', location.pathname + '#/home');
+    } catch (e) { S.memberError = e; }
+    if (tok > S.nav) S.nav = tok;
+    render();
+  }
+
   async function loadSession() {
-    S.user = null; S.isMember = false; S.isOwner = false; S.profile = null; S.memberError = null;
+    clearFamilyData();
+    S.user = null; S.families = []; S.memberError = null;
     try { S.user = await account.get(); }
     catch (e) { if (!isUnauthorized(e)) S.notice = { kind: 'error', text: friendly(e) }; return; }
 
     var ap = S.user.prefs && S.user.prefs.appearance;      // appearance saved on the account wins
     if (ap) { prefs = sanitizePrefs(ap); try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) {} applyPrefs(); }
 
-    if (!CFG.teamId) return;
+    if (!S.user.emailVerification) return;                  // the server refuses family actions until the email is verified
     try {
-      var res = await teams.listMemberships({ teamId: CFG.teamId, queries: [Query.limit(100)] });
-      var mine = res.memberships.filter(function (m) { return m.userId === S.user.$id && m.confirm; })[0];
-      S.isMember = !!mine;
-      S.isOwner = !!mine && mine.roles.indexOf('owner') >= 0;
-    } catch (e) {
-      if (!isUnauthorized(e) && e.code !== 404) S.memberError = e;   // 401/404 simply means "not a member"
-    }
-    if (S.isMember && !S.memberError) {
-      try {
-        S.profile = await getRow('profiles', S.user.$id);
-        S.profiles.set(S.user.$id, S.profile);
-        await loadSaved();
-      } catch (e) { if (e.code !== 404) S.memberError = e; }
-    }
+      await loadFamilies();
+      var id = pickFamily();
+      if (id) await enterFamily(id);
+    } catch (e) { S.memberError = e; }
   }
 
   function readActionParams() {
@@ -501,6 +612,7 @@
         S.pending = { type: 'recover', userId: a.userId, secret: a.secret };
       } else if (a.action === 'invite' && a.teamId && a.membershipId && a.userId && a.secret) {
         await teams.updateMembershipStatus({ teamId: a.teamId, membershipId: a.membershipId, userId: a.userId, secret: a.secret });
+        S.preferFamily = a.teamId;
         S.notice = { kind: 'ok', text: 'Invitation accepted. Welcome to the family!' };
       }
     } catch (e) {
@@ -534,8 +646,8 @@
     if (S.pending && S.pending.type === 'recover') return renderReset();
     if (!S.user) return S.authMode === 'signup' ? renderSignUp() : S.authMode === 'forgot' ? renderForgot() : renderSignIn();
     if (S.memberError) return renderConnectionProblem();
-    if (!CFG.teamId) return renderBootstrap();
-    if (!S.isMember) return renderWaiting();
+    if (!S.user.emailVerification) return renderVerifyEmail();
+    if (!S.families.length || !S.familyId) return renderOnboarding();
     if (!S.profile) return renderProfileSetup();
     renderShell();
     route(true);
@@ -564,12 +676,12 @@
     card.appendChild(h('div', { class: 'row between', style: null },
       h('button', { class: 'link-btn', type: 'button', text: 'Forgot password?', onclick: function () { S.authMode = 'forgot'; render(); } }),
       h('button', { class: 'link-btn', type: 'button', text: 'Create an account', onclick: function () { S.authMode = 'signup'; render(); } })));
-    card.appendChild(h('p', { class: 'hint', text: 'Creating an account does not give access by itself. A family admin must invite you first.' }));
+    card.appendChild(h('p', { class: 'hint', text: 'New here? Create an account and verify your email. Then you can start your own family space or accept an invitation from a family owner.' }));
   }
 
   function renderSignUp() {
     var name = field('name', 'Your name', 'text', { autocomplete: 'name', required: true, maxlength: 60, hint: 'This is the name your family will see.' });
-    var email = field('email', 'Email', 'email', { autocomplete: 'email', required: true, hint: 'Use the same email your family admin will invite.' });
+    var email = field('email', 'Email', 'email', { autocomplete: 'email', required: true, hint: 'If a family owner will invite you, use the email address they have.' });
     var pw = field('password', 'Password', 'password', { autocomplete: 'new-password', required: true, minlength: 8, hint: 'At least 8 characters.' });
     var msg = h('div');
     var btn = h('button', { class: 'btn block', type: 'submit', text: 'Create account' });
@@ -651,41 +763,61 @@
     } });
   }
 
-  function renderWaiting() {
-    var card = authCard('Waiting for family access', 'Your account is ready, but you cannot see anything yet.');
-    card.appendChild(h('p', null, 'Signed in as ', h('strong', { text: S.user.email }), '.'));
-    card.appendChild(h('p', { text: 'A family admin needs to invite this email address. When the invitation email arrives, open the link in it. After that, come back here.' }));
-    if (!S.user.emailVerification) {
-      card.appendChild(h('div', { class: 'alert' }, h('p', { text: 'Your email is not verified yet. Check your inbox for the verification link.' }), resendVerificationButton()));
-    }
+  function renderVerifyEmail() {
+    var card = authCard('Verify your email', 'We confirm your email before you can create or join a family.');
+    card.appendChild(h('p', null, 'Signed in as ', h('strong', { text: S.user.email }), '. Open the link in the email we sent, then press the button below.'));
+    card.appendChild(h('div', { class: 'stack' }, resendVerificationButton()));
     card.appendChild(h('div', { class: 'row' },
-      h('button', { class: 'btn', type: 'button', text: 'Check again', onclick: function (ev) { busy(ev.currentTarget, async function () { await loadSession(); render(); }); } }),
+      h('button', { class: 'btn', type: 'button', text: 'I verified it, continue', onclick: function (ev) { busy(ev.currentTarget, async function () { await loadSession(); render(); }); } }),
       h('button', { class: 'btn secondary', type: 'button', text: 'Sign out', onclick: signOut })));
   }
 
-  // First-time setup only: shown while config.js has an empty teamId.
-  function renderBootstrap() {
-    var card = authCard('One-time setup: create the family team', 'Only the family admin (you) should do this, once.');
+  // A signed-in person who is in no family yet: they can start one or wait for an invitation.
+  function renderOnboarding() {
+    var card = authCard('Welcome to ' + (CFG.appName || 'Family Circle'), 'You are not in a family space yet. Start your own, or join one you were invited to.');
+    card.appendChild(familyCreateCard('Create your family', 'You become its owner and can invite relatives by email. Your family\'s posts, photos and members stay private to your family.'));
+    card.appendChild(h('section', { class: 'card inner', 'aria-label': 'Join with an invitation' },
+      h('h2', { text: 'Joining a family that invited you?' }),
+      h('p', { text: 'Open the link in the invitation email while you are signed in as ' + S.user.email + '. If the invitation went to a different email address, ask the owner to send it again to this one. After you accept, press the button below.' }),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn secondary', type: 'button', text: 'Check for my invitation', onclick: function (ev) { busy(ev.currentTarget, async function () { await loadSession(); render(); }); } }),
+        h('button', { class: 'btn ghost', type: 'button', text: 'Sign out', onclick: signOut }))));
+  }
+
+  // Shared by the onboarding screen and the "Create another family" page.
+  function familyCreateCard(title, lead) {
+    var name = field('familyName', 'Family name', 'text', { required: true, maxlength: 60, placeholder: 'The Rivera family', hint: 'Everyone you invite will see this name.' });
     var msg = h('div');
-    card.appendChild(h('p', { text: 'The family team is the list of people allowed to see posts. Creating it makes your account its owner, which lets you invite relatives.' }));
-    card.appendChild(msg);
-    card.appendChild(h('button', { class: 'btn block', type: 'button', text: 'Create the family team', onclick: function (ev) {
-      busy(ev.currentTarget, async function () {
-        try {
-          var t = await teams.create({ teamId: ID.unique(), name: 'Family' });
-          clear(card);
-          card.appendChild(h('h2', { text: 'Team created' }));
-          card.appendChild(h('p', { text: 'Copy this Team ID into config.js (the teamId line), upload config.js again, and use the same ID when you set the table and bucket permissions in the Setup Guide.' }));
-          card.appendChild(h('input', { type: 'text', readonly: true, value: t.$id, 'aria-label': 'Team ID', onfocus: function (e) { e.target.select(); } }));
-          card.appendChild(h('p', { class: 'hint', text: 'You can also find it later in the Appwrite Console under Auth > Teams.' }));
-        } catch (e) { showAlert(msg, 'error', friendly(e)); }
+    var btn = h('button', { class: 'btn block', type: 'submit', text: 'Create family' });
+    var form = h('form', { novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault();
+      var n = name.input.value.trim();
+      if (!n) return showAlert(msg, 'error', 'Please enter a family name.');
+      if (!S.canCreateFamily) return showAlert(msg, 'error', 'You already own the maximum number of families (' + S.maxOwned + ').');
+      showAlert(msg, 'error', '');
+      busy(btn, async function () {
+        try { await createFamilyFlow(n); }
+        catch (e) { showAlert(msg, 'error', e.message && !e.type ? e.message : friendly(e)); }
       }, 'Creating…');
-    } }));
-    card.appendChild(h('p', null, h('button', { class: 'link-btn', type: 'button', text: 'Sign out', onclick: signOut })));
+    } }, name.wrap, msg, h('div', { class: 'stack' }, btn));
+    return h('section', { class: 'card inner', 'aria-label': title }, h('h2', { text: title }), lead ? h('p', { class: 'muted', text: lead }) : null, form);
+  }
+
+  // 1) the browser creates the Appwrite Team (so I become its owner), 2) the function registers it as a family.
+  async function createFamilyFlow(name) {
+    var team = await teams.create({ teamId: ID.unique(), name: name });
+    try { await api('registerFamily', { teamId: team.$id }); }
+    catch (e) { teams.delete({ teamId: team.$id }).catch(function () {}); throw e; }     // do not leave an unregistered team behind
+    S.preferFamily = team.$id;
+    await loadFamilies();
+    await enterFamily(team.$id);
+    history.replaceState(null, '', location.pathname + '#/home');
+    render();
   }
 
   function renderProfileSetup() {
-    var name = field('displayName', 'Display name', 'text', { required: true, maxlength: 60, value: S.user.name || '', hint: 'Your family will see this name.' });
+    var fam = currentFamily();
+    var name = field('displayName', 'Display name', 'text', { required: true, maxlength: 60, value: S.user.name || '', hint: 'Only members of ' + (fam ? fam.name : 'this family') + ' will see this name.' });
     var file = h('input', { id: 'avatar', type: 'file', accept: 'image/jpeg,image/png,image/webp' });
     var msg = h('div');
     var btn = h('button', { class: 'btn block', type: 'submit', text: 'Save and continue' });
@@ -693,30 +825,31 @@
       ev.preventDefault();
       var n = name.input.value.trim();
       if (!n) return showAlert(msg, 'error', 'Please enter a display name.');
+      var fid = S.familyId;
       busy(btn, async function () {
         var uploaded = null;
         try {
-          var avatarId = null;
+          var payload = { familyId: fid, displayName: n };
           if (file.files[0]) {
             var f = await imageToJpegFile(file.files[0], L.avatarEdge || 256, 0.85, true, 'avatar.jpg');
             uploaded = await uploadFile(f);
-            avatarId = uploaded.$id;
+            payload.avatarFileId = uploaded.$id;
           }
-          var data = { displayName: n };
-          if (avatarId) data.avatarFileId = avatarId;
-          S.profile = await createRow('profiles', S.user.$id, data, permsShared(S.user.$id));
-          S.profiles.set(S.user.$id, S.profile);
+          var r = await api('saveProfile', payload);
+          if (fid !== S.familyId) return;
+          S.profile = Object.assign({ $id: r.profile.id }, r.profile); S.profiles.set(S.user.$id, S.profile);
           await loadSaved(); render();
         } catch (e) {
           if (uploaded) storage.deleteFile({ bucketId: CFG.bucketId, fileId: uploaded.$id }).catch(function () {});
-          if (e.code === 409) { try { S.profile = await getRow('profiles', S.user.$id); render(); return; } catch (x) { /* fall through */ } }
-          showAlert(msg, 'error', friendly(e));
+          showAlert(msg, 'error', e.message && !e.type ? e.message : friendly(e));
         }
       }, 'Saving…');
     } }, name.wrap,
       h('div', null, h('label', { for: 'avatar', text: 'Profile picture (optional)' }), file, h('div', { class: 'hint', text: 'It will be shrunk to a small square before upload.' })),
       msg, h('div', { class: 'stack' }, btn));
-    authCard('Welcome! Set up your profile', 'Just a name is enough. No birthdays or addresses needed.').appendChild(form);
+    var card = authCard('Set up your profile' + (fam ? ' in ' + fam.name : ''), 'Just a name is enough. No birthdays or addresses needed.');
+    card.appendChild(form);
+    if (S.families.length > 1) card.appendChild(h('p', { class: 'hint', text: 'You can pick a different name in each family.' }));
   }
 
   async function signOut() {
@@ -741,6 +874,22 @@
   ];
   var VIEWS = {};
 
+  function familySwitcher() {
+    var cur = currentFamily();
+    if (S.families.length < 2 && !S.canCreateFamily) return h('span', { class: 'fam-name', text: cur ? cur.name : '' });
+    var sel = h('select', { class: 'fam-select', 'aria-label': 'Choose family' }, S.families.map(function (f) {
+      return h('option', { value: f.id, text: f.name + (f.role === 'owner' ? ' (owner)' : ''), selected: f.id === S.familyId });
+    }));
+    if (S.canCreateFamily) sel.appendChild(h('option', { value: '__new', text: '+ Create another family…' }));
+    sel.addEventListener('change', function () {
+      var v = sel.value;
+      sel.value = S.familyId;
+      if (v === '__new') { location.hash = '#/newfamily'; return; }
+      switchFamily(v);
+    });
+    return sel;
+  }
+
   function renderShell() {
     S.main = h('main', { id: 'main', class: 'main', tabindex: '-1' });
     var nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, h('ul', null, NAV.map(function (n) {
@@ -748,18 +897,29 @@
     })));
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
       h('div', { class: 'brand' }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
+      familySwitcher(),
       h('button', { class: 'btn ghost small', type: 'button', text: 'Sign out', onclick: signOut })));
-    var banner = null;
-    if (!S.user.emailVerification) {
-      banner = h('div', { class: 'main', style: null }, h('div', { class: 'alert' }, h('p', { text: 'Please verify your email. The link was sent when you signed up.' }), resendVerificationButton()));
-      banner.style.paddingBottom = '0';
-    }
-    clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, banner, S.main)));
+    clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
   }
 
+  var REVALIDATE_MS = 5 * 60 * 1000;
+
   function route(first) {
-    if (!S.main || !S.user || !S.isMember || !S.profile) return;
+    if (!S.main || !S.user || !S.familyId || !S.profile) return;
+    // Before showing family content again after a while, ask the server whether I am still a member.
+    if (Date.now() - S.validatedAt > REVALIDATE_MS) {
+      var tok = ++S.nav;
+      clear(S.main); S.main.appendChild(h('div', { class: 'empty' }, spinnerLine('Checking your access…')));
+      revalidate().then(function (ok) {
+        if (tok !== S.nav) return;
+        if (!ok) return render();
+        route(first);
+      }).catch(function (e) {
+        if (tok === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
+      });
+      return;
+    }
     var name = (location.hash.replace(/^#\/?/, '') || 'home').split('?')[0];
     if (!VIEWS[name]) name = 'home';
     S.nav++;
@@ -769,8 +929,8 @@
     Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
       if (a.getAttribute('data-route') === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
-    var label = NAV.filter(function (n) { return n.id === name; })[0].label;
-    document.title = label + ' · ' + (CFG.appName || 'Family Circle');
+    var meta = NAV.filter(function (n) { return n.id === name; })[0];
+    document.title = (meta ? meta.label : 'New family') + ' · ' + (CFG.appName || 'Family Circle');
     Promise.resolve().then(function () { return VIEWS[name](S.main, token); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });
@@ -801,13 +961,8 @@
   }
 
   async function ensureProfiles(ids) {
-    var need = ids.filter(function (id, i) { return ids.indexOf(id) === i && !S.profiles.has(id); });
-    for (var i = 0; i < need.length; i += 100) {
-      var chunk = need.slice(i, i + 100);
-      var r = await listRows('profiles', [Query.equal('$id', chunk), Query.limit(100)]);
-      r.rows.forEach(function (x) { S.profiles.set(x.$id, x); });
-    }
-    need.forEach(function (id) { if (!S.profiles.has(id)) S.profiles.set(id, null); });
+    var missing = ids.some(function (id) { return !S.profiles.has(id); });
+    if (missing && Date.now() - S.profilesAt > 30000) await loadProfiles();   // a new member may have joined
   }
 
   // Loads authors, like counts and comment counts for a page of posts.
@@ -820,8 +975,8 @@
       listRows('comments', [Query.equal('postId', ids), Query.select(['postId']), Query.limit(500)]).then(function (r) { comments = r.rows; })
     ]);
     var meta = {};
-    ids.forEach(function (id) { meta[id] = { likes: 0, reactionId: null, comments: 0 }; });
-    reactions.forEach(function (r) { var m = meta[r.postId]; if (!m) return; m.likes++; if (r.userId === S.user.$id) m.reactionId = r.$id; });
+    ids.forEach(function (id) { meta[id] = { likes: 0, liked: false, comments: 0 }; });
+    reactions.forEach(function (r) { var m = meta[r.postId]; if (!m) return; m.likes++; if (r.userId === S.user.$id) m.liked = true; });
     comments.forEach(function (c) { var m = meta[c.postId]; if (m) m.comments++; });
     return meta;
   }
@@ -829,7 +984,7 @@
   function pageSize() { return L.pageSize || 10; }
 
   async function fetchPostsPage(kind, cursor) {
-    var q = [Query.orderDesc('$createdAt'), Query.limit(pageSize())];
+    var q = [Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt'), Query.limit(pageSize())];
     if (kind) q.push(Query.equal('kind', [kind]));
     if (cursor) q.push(Query.cursorAfter(cursor));
     var rows = (await listRows('posts', q)).rows;
@@ -837,7 +992,7 @@
   }
 
   async function fetchSavedPage(cursor) {
-    var q = [Query.equal('userId', [S.user.$id]), Query.orderDesc('$createdAt'), Query.limit(pageSize())];
+    var q = [Query.equal('userId', [S.user.$id]), Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt'), Query.limit(pageSize())];
     if (cursor) q.push(Query.cursorAfter(cursor));
     var rows = (await listRows('bookmarks', q)).rows;
     if (!rows.length) return { posts: [], cursor: cursor, done: true };
@@ -846,8 +1001,8 @@
     var byId = {}; found.forEach(function (p) { byId[p.$id] = p; });
     var posts = [];
     rows.forEach(function (b) {
-      if (byId[b.postId]) posts.push(byId[b.postId]);
-      else { S.saved.delete(b.postId); deleteRow('bookmarks', b.$id).catch(function () {}); }   // post was deleted: tidy my bookmark
+      if (byId[b.postId] && byId[b.postId].familyId === S.familyId) posts.push(byId[b.postId]);
+      else S.saved.delete(b.postId);          // the post is gone (the server removes bookmarks with it)
     });
     return { posts: posts, cursor: rows[rows.length - 1].$id, done: rows.length < pageSize() };
   }
@@ -928,7 +1083,7 @@
   function postCard(post, meta, variant, hooks) {
     hooks = hooks || {};
     var uid = S.user.$id;
-    var st = { likes: meta ? meta.likes : 0, reactionId: meta ? meta.reactionId : null, comments: meta ? meta.comments : 0, busy: false };
+    var st = { likes: meta ? meta.likes : 0, liked: meta ? meta.liked : false, comments: meta ? meta.comments : 0, busy: false };
     var prof = S.profiles.get(post.authorId) || null;
     var name = prof ? prof.displayName : 'Family member';
     var isMine = post.authorId === uid;
@@ -958,7 +1113,7 @@
     var like = actionBtn('heart', 'Like', function () { toggleLike(); });
     var cmt = actionBtn('comment', 'Comments', function () { toggleComments(); });
     var save = actionBtn('bookmark', 'Save', function () { toggleSave(); });
-    function paintLike() { like.setCount(st.likes, (st.reactionId ? 'Remove your like. ' : 'Like. ') + st.likes + ' likes', !!st.reactionId); }
+    function paintLike() { like.setCount(st.likes, (st.liked ? 'Remove your like. ' : 'Like. ') + st.likes + ' likes', !!st.liked); }
     function paintCmt() { cmt.setCount(st.comments, 'Comments. ' + st.comments + ' so far', undefined); cmt.setAttribute('aria-expanded', commentsEl ? 'true' : 'false'); }
     function paintSave() { save.setCount(null, S.saved.has(post.$id) ? 'Remove from saved' : 'Save for later', S.saved.has(post.$id)); }
     var actions = h('div', { class: 'actions' }, like, cmt, save);
@@ -975,18 +1130,10 @@
     async function toggleLike() {
       if (st.busy) return; st.busy = true;
       try {
-        if (st.reactionId) {
-          await deleteRow('reactions', st.reactionId); st.reactionId = null; st.likes = Math.max(0, st.likes - 1);
-        } else {
-          try {
-            var row = await createRow('reactions', ID.unique(), { postId: post.$id, userId: uid, reactionKey: post.$id + '_' + uid }, permsReaction(uid));
-            st.reactionId = row.$id; st.likes++;
-          } catch (e) {
-            if (e.code !== 409) throw e;      // already liked from another device: find that like
-            var existing = (await listRows('reactions', [Query.equal('postId', [post.$id]), Query.limit(500)])).rows.filter(function (r) { return r.userId === uid; })[0];
-            if (existing) st.reactionId = existing.$id;
-          }
-        }
+        var r = await api('toggleReaction', { familyId: S.familyId, postId: post.$id });
+        if (r.liked && !st.liked) st.likes++;
+        if (!r.liked && st.liked) st.likes = Math.max(0, st.likes - 1);
+        st.liked = r.liked;
       } catch (e) { toast(friendly(e)); }
       st.busy = false; paintLike();
     }
@@ -994,19 +1141,9 @@
     async function toggleSave() {
       if (st.busy) return; st.busy = true;
       try {
-        if (S.saved.has(post.$id)) {
-          await deleteRow('bookmarks', S.saved.get(post.$id)); S.saved.delete(post.$id);
-          if (hooks.onUnsave) hooks.onUnsave(card);
-        } else {
-          try {
-            var row = await createRow('bookmarks', ID.unique(), { userId: uid, postId: post.$id, bookmarkKey: uid + '_' + post.$id }, permsPrivate(uid));
-            S.saved.set(post.$id, row.$id);
-          } catch (e) {
-            if (e.code !== 409) throw e;
-            var all = await listAllRows('bookmarks', [Query.equal('userId', [uid]), Query.orderAsc('$createdAt')], 1000);
-            all.forEach(function (r) { S.saved.set(r.postId, r.$id); });
-          }
-        }
+        var r = await api('toggleBookmark', { familyId: S.familyId, postId: post.$id });
+        if (r.saved) S.saved.set(post.$id, true);
+        else { S.saved.delete(post.$id); if (hooks.onUnsave) hooks.onUnsave(card); }
       } catch (e) { toast(friendly(e)); }
       st.busy = false; paintSave();
     }
@@ -1028,8 +1165,8 @@
         if (!text && !post.mediaFileId) return showAlert(msg, 'error', 'A text post needs some text.');
         busy(saveBtn, async function () {
           try {
-            var updated = await updateRow('posts', post.$id, { body: text });
-            post.body = text; post.$updatedAt = updated.$updatedAt; showBody();
+            await api('editPost', { familyId: S.familyId, postId: post.$id, body: text });
+            post.body = text; post.$updatedAt = new Date().toISOString(); showBody();
             toast('Post updated.');
           } catch (e) { showAlert(msg, 'error', friendly(e)); }
         }, 'Saving…');
@@ -1043,35 +1180,21 @@
     async function removePost() {
       var ok = await confirmDialog('Delete this post?',
         isMine ? 'This removes the post, its comments and likes, and any photo or video. It cannot be undone.'
-               : 'You are removing a relative\'s post as the family admin. This removes its comments, likes and media too. It cannot be undone.', 'Delete');
+               : 'You are removing a relative\'s post as a family owner. This removes its comments, likes and media too. It cannot be undone.', 'Delete');
       if (!ok) return;
       card.setAttribute('aria-busy', 'true');
-      try { await deleteRow('posts', post.$id); }
-      catch (e) { card.removeAttribute('aria-busy'); toast(friendly(e)); return; }
+      try {
+        var done = false, n = 0;
+        while (!done && n++ < 20) { done = (await api('deletePost', { familyId: S.familyId, postId: post.$id })).done; }   // the server removes comments, likes, saves and media too
+        if (!done) throw new Error('That is taking longer than expected. Press delete again to finish.');
+      } catch (e) { card.removeAttribute('aria-busy'); toast(e.message && !e.type ? e.message : friendly(e)); return; }
+      S.saved.delete(post.$id);
       if (card.parentNode) card.parentNode.removeChild(card);
-      var left = await cleanupAfterPostDelete(post);
-      toast(left ? 'Post deleted. ' + left + ' comment(s) or like(s) from others could not be removed by you; they stay hidden and the admin can clean them up on the Family page.' : 'Post deleted.');
+      toast('Post deleted.');
     }
     return card;
   }
 
-  // After a post row is gone, remove what belonged to it (best effort).
-  async function cleanupAfterPostDelete(post) {
-    var uid = S.user.$id, left = 0, tasks = [];
-    if (post.mediaFileId) tasks.push(storage.deleteFile({ bucketId: CFG.bucketId, fileId: post.mediaFileId }).catch(function () { left++; }));
-    var comments = [], reactions = [];
-    try { comments = await listAllRows('comments', [Query.equal('postId', [post.$id]), Query.orderAsc('$createdAt')], 500); } catch (e) {}
-    try { reactions = await listAllRows('reactions', [Query.equal('postId', [post.$id]), Query.orderAsc('$createdAt')], 500); } catch (e) {}
-    comments.forEach(function (c) {
-      if (c.authorId === uid || S.isOwner) tasks.push(deleteRow('comments', c.$id).catch(function () { left++; })); else left++;
-    });
-    reactions.forEach(function (r) {
-      if (r.userId === uid || S.isOwner) tasks.push(deleteRow('reactions', r.$id).catch(function () { left++; })); else left++;
-    });
-    if (S.saved.has(post.$id)) { tasks.push(deleteRow('bookmarks', S.saved.get(post.$id)).catch(function () {})); S.saved.delete(post.$id); }
-    await Promise.all(tasks);
-    return left;
-  }
 
   function commentsPanel(post, st, onCount) {
     var uid = S.user.$id;
@@ -1088,7 +1211,7 @@
         del = h('button', { class: 'link-btn small', type: 'button', text: 'Delete', 'aria-label': 'Delete this comment', onclick: async function () {
           var ok = await confirmDialog('Delete this comment?', 'This cannot be undone.', 'Delete');
           if (!ok) return;
-          try { await deleteRow('comments', c.$id); if (item.parentNode) item.parentNode.removeChild(item); st.comments = Math.max(0, st.comments - 1); onCount(); }
+          try { await api('deleteComment', { familyId: S.familyId, commentId: c.$id }); if (item.parentNode) item.parentNode.removeChild(item); st.comments = Math.max(0, st.comments - 1); onCount(); }
           catch (e) { toast(friendly(e)); }
         } });
       }
@@ -1117,7 +1240,8 @@
       if (!text) return showAlert(msg, 'error', 'Write a comment first.');
       busy(send, async function () {
         try {
-          var row = await createRow('comments', ID.unique(), { postId: post.$id, authorId: uid, body: text }, permsShared(uid));
+          var made = await api('createComment', { familyId: S.familyId, postId: post.$id, body: text });
+          var row = { $id: made.commentId, authorId: uid, body: text, $createdAt: new Date().toISOString() };
           S.profiles.set(uid, S.profile);
           clear(status); list.appendChild(commentItem(row));
           ta.value = ''; showAlert(msg, 'error', '');
@@ -1136,7 +1260,7 @@
   function uploadFile(file, onProgress) {
     return storage.createFile({
       bucketId: CFG.bucketId, fileId: ID.unique(), file: file,
-      permissions: [Permission.read(Role.team(CFG.teamId)), Permission.delete(Role.user(S.user.$id))],
+      permissions: uploadPerms(S.familyId, S.user.$id),
       onProgress: onProgress
     });
   }
@@ -1248,31 +1372,33 @@
         if (kind !== 'text' && !file) return showAlert(msg, 'error', 'Please choose a ' + (kind === 'photo' ? 'photo' : 'video') + ' first.');
         if (text.length > (L.bodyMax || 2000)) return showAlert(msg, 'error', 'That is too long. The limit is ' + (L.bodyMax || 2000) + ' characters.');
         showAlert(msg, 'error', '');
+        var fid = S.familyId;
         busy(btn, async function () {
           var uploaded = null;
           try {
-            var data = { authorId: uid, kind: kind };
-            if (text) data.body = text;
+            var payload = { familyId: fid, kind: kind, body: text };
             function onProg(p) { bar.hidden = false; bar.value = Math.round(p.progress || 0); }
             if (kind === 'photo') {
               btn.textContent = 'Preparing photo…';
               var jf = await imageToJpegFile(file, L.imageMaxEdge || 1600, L.imageQuality || 0.82, false, 'photo.jpg');
               btn.textContent = 'Uploading…';
               uploaded = await uploadFile(jf, onProg);
-              data.mediaFileId = uploaded.$id; data.mediaMime = 'image/jpeg'; data.mediaSize = jf.size;
+              payload.mediaFileId = uploaded.$id;
             } else if (kind === 'video' || kind === 'short') {
               var mime = videoMime(file);
               var ext = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }[mime];
               btn.textContent = 'Uploading…';
               uploaded = await uploadFile(new File([file], 'video.' + ext, { type: mime }), onProg);
-              data.mediaFileId = uploaded.$id; data.mediaMime = mime; data.mediaSize = file.size;
+              payload.mediaFileId = uploaded.$id;
             }
-            await createRow('posts', ID.unique(), data, permsShared(uid));
+            btn.textContent = 'Posting…';
+            if (fid !== S.familyId) throw new Error('You switched families while uploading. Nothing was posted.');
+            await api('createPost', payload);
             S.profiles.set(uid, S.profile);
             toast('Posted!');
             location.hash = kind === 'short' ? '#/shorts' : '#/home';
           } catch (e) {
-            if (uploaded) storage.deleteFile({ bucketId: CFG.bucketId, fileId: uploaded.$id }).catch(function () {});   // do not leave an orphan file
+            if (uploaded) storage.deleteFile({ bucketId: CFG.bucketId, fileId: uploaded.$id }).catch(function () {});   // best effort; the server also sweeps leftovers
             bar.hidden = true;
             showAlert(msg, 'error', e.message && !e.type ? e.message : friendly(e));
           }
@@ -1287,26 +1413,47 @@
   };
 
   /* =====================================================================
-   * 11. FAMILY (member list + admin tools for the team owner)
+   * 11. FAMILY (members, invitations, leaving, deleting) + CREATE ANOTHER FAMILY
    * ===================================================================== */
 
+  VIEWS.newfamily = function (main) {
+    main.appendChild(h('h1', { text: 'Create another family' }));
+    if (!S.canCreateFamily) {
+      main.appendChild(h('div', { class: 'card' }, h('p', { text: 'You already own the maximum number of families (' + S.maxOwned + '). Delete one you no longer need, or ask another family\'s owner to make you an owner there.' })));
+      return;
+    }
+    main.appendChild(familyCreateCard('Name your new family', 'You become its owner. It has its own members, posts and photos, completely separate from your other families.'));
+  };
+
   VIEWS.family = async function (main, token) {
-    main.appendChild(h('h1', { text: 'Family' }));
+    var fam = currentFamily();
+    main.appendChild(h('h1', { text: fam ? fam.name : 'Family' }));
     var listBox = h('div', { class: 'card' }, spinnerLine('Loading…'));
     main.appendChild(listBox);
-    var rows = await listAllRows('profiles', [Query.orderAsc('$createdAt')], 200);
+    var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
     if (token !== S.nav) return;
-    rows.forEach(function (r) { S.profiles.set(r.$id, r); });
+    await loadProfiles();
+    if (token !== S.nav) return;
+    var joined = res.memberships.filter(function (m) { return m.confirm; });
+    var me = joined.filter(function (m) { return m.userId === S.user.$id; })[0];
+    if (!me) { S.validatedAt = 0; return route(false); }           // not a member any more: re-check with the server
     clear(listBox);
-    listBox.appendChild(h('h2', { text: rows.length + (rows.length === 1 ? ' member' : ' members') }));
-    rows.forEach(function (r) {
-      listBox.appendChild(h('div', { class: 'member' }, avatarEl(r), h('div', { class: 'grow' }, h('strong', { text: r.displayName }), r.$id === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null)));
+    listBox.appendChild(h('h2', { text: joined.length + (joined.length === 1 ? ' member' : ' members') }));
+    joined.forEach(function (m) {
+      var p = S.profiles.get(m.userId) || null;
+      var isOwnerRow = m.roles.indexOf('owner') >= 0;
+      listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: m.userName || '?' }),
+        h('div', { class: 'grow' }, h('strong', { text: p ? p.displayName : (m.userName || 'Family member') }),
+          m.userId === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null,
+          isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null)));
     });
     if (S.isOwner) renderAdminTools(main, token);
-    else main.appendChild(h('p', { class: 'muted small', text: 'To add a relative, ask the family admin to invite their email address.' }));
+    else main.appendChild(h('p', { class: 'muted small', text: 'To add a relative, ask a family owner to invite their email address.' }));
+    renderLeaveAndDelete(main, me, joined);
   };
 
   function renderAdminTools(main, token) {
+    var fid = S.familyId;
     // ---- invite ----
     var email = field('inviteEmail', 'Relative\'s email', 'email', { required: true, autocomplete: 'off' });
     var name = field('inviteName', 'Their name (optional)', 'text', { maxlength: 60, autocomplete: 'off' });
@@ -1319,8 +1466,8 @@
       if (!emailOk(e)) return showAlert(msg, 'error', 'Please enter a valid email address.');
       busy(btn, async function () {
         try {
-          await teams.createMembership({ teamId: CFG.teamId, roles: ['member'], email: e, name: name.input.value.trim() || undefined, url: baseUrl() + '?action=invite' });
-          showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email.');
+          await teams.createMembership({ teamId: fid, roles: ['member'], email: e, name: name.input.value.trim() || undefined, url: baseUrl() + '?action=invite' });
+          showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email while signed in with that address.');
           email.input.value = ''; name.input.value = '';
           loadMemberships();
         } catch (err) { showAlert(msg, 'error', friendly(err)); }
@@ -1328,57 +1475,88 @@
     } }, email.wrap, name.wrap, msg, h('div', { class: 'stack' }, btn));
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Invite a relative' },
       h('h2', { text: 'Invite a relative' }),
-      h('p', { class: 'muted small', text: 'Only you (the team owner) can do this. Ask them to create an account first with the same email, then send the invitation.' }), form));
+      h('p', { class: 'muted small', text: 'Only family owners can do this. Ask them to create an account and verify their email first, then send the invitation to that same address.' }), form));
 
-    // ---- memberships ----
+    // ---- invitations and members ----
     main.appendChild(memberBox);
     async function loadMemberships() {
       clear(memberBox); memberBox.appendChild(h('h2', { text: 'Invitations and members' })); memberBox.appendChild(spinnerLine('Loading…'));
       try {
-        var res = await teams.listMemberships({ teamId: CFG.teamId, queries: [Query.limit(100)] });
+        var res = await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] });
         if (token !== S.nav) return;
         clear(memberBox); memberBox.appendChild(h('h2', { text: 'Invitations and members' }));
         res.memberships.forEach(function (m) {
           var self = m.userId === S.user.$id;
+          var label = m.userName || m.userEmail || 'Family member';
+          var isOwnerRow = m.roles.indexOf('owner') >= 0;
           memberBox.appendChild(h('div', { class: 'member' },
-            h('div', { class: 'grow' }, h('strong', { text: m.userName || m.userEmail || 'Family member' }),
-              h('div', { class: 'small muted', text: (m.userEmail && m.userName ? m.userEmail + ' · ' : '') + (m.confirm ? 'Joined' : 'Invited, not accepted yet') + (m.roles.indexOf('owner') >= 0 ? ' · Owner' : '') })),
-            self ? null : h('button', { class: 'btn secondary small', type: 'button', text: 'Remove', 'aria-label': 'Remove ' + (m.userName || m.userEmail || 'this member') + ' from the family', onclick: async function () {
-              var ok = await confirmDialog('Remove this person?', 'They will lose access to all family posts and media right away. Their own posts stay unless deleted.', 'Remove');
+            h('div', { class: 'grow' }, h('strong', { text: label }),
+              h('div', { class: 'small muted', text: (m.userEmail && m.userName ? m.userEmail + ' · ' : '') + (m.confirm ? 'Joined' : 'Invited, not accepted yet') + (isOwnerRow ? ' · Owner' : '') })),
+            (m.confirm && !isOwnerRow) ? h('button', { class: 'btn secondary small', type: 'button', text: 'Make owner', 'aria-label': 'Make ' + label + ' an owner', onclick: async function () {
+              var ok = await confirmDialog('Make ' + label + ' an owner?', 'Owners can invite and remove people, delete any post, and delete the whole family.', 'Make owner');
               if (!ok) return;
-              try { await teams.deleteMembership({ teamId: CFG.teamId, membershipId: m.$id }); toast('Removed.'); loadMemberships(); }
+              try { await teams.updateMembership({ teamId: fid, membershipId: m.$id, roles: ['owner'] }); toast('Done.'); loadMemberships(); }
+              catch (e) { toast(friendly(e)); }
+            } }) : null,
+            self ? null : h('button', { class: 'btn secondary small', type: 'button', text: m.confirm ? 'Remove' : 'Cancel invite', 'aria-label': (m.confirm ? 'Remove ' : 'Cancel the invitation for ') + label, onclick: async function () {
+              var ok = await confirmDialog(m.confirm ? 'Remove this person?' : 'Cancel this invitation?', m.confirm ? 'They lose access to all of this family\'s posts and media right away. Their own posts stay unless deleted.' : 'The invitation link will stop working.', m.confirm ? 'Remove' : 'Cancel invite');
+              if (!ok) return;
+              try { await teams.deleteMembership({ teamId: fid, membershipId: m.$id }); toast('Removed.'); loadMemberships(); }
               catch (e) { toast(friendly(e)); }
             } })));
         });
       } catch (e) { clear(memberBox); memberBox.appendChild(alertBox('error', friendly(e))); }
     }
     loadMemberships();
+  }
 
-    // ---- orphan cleanup ----
-    var out = h('div', { class: 'small muted', 'aria-live': 'polite' });
-    var cbtn = h('button', { class: 'btn secondary', type: 'button', text: 'Clean up leftovers', onclick: function () {
-      busy(cbtn, async function () {
+  function renderLeaveAndDelete(main, me, joined) {
+    var fam = currentFamily(), fid = S.familyId;
+    var owners = joined.filter(function (m) { return m.roles.indexOf('owner') >= 0; });
+    var lmsg = h('div');
+    var leaveCard = h('section', { class: 'card', 'aria-label': 'Leave this family' }, h('h2', { text: 'Leave this family' }));
+    if (S.isOwner && owners.length <= 1) {
+      leaveCard.appendChild(h('p', { class: 'muted small', text: 'You are the only owner. Make another member an owner first, or delete the family below.' }));
+    } else {
+      leaveCard.appendChild(h('p', { class: 'muted small', text: 'You will lose access to this family right away. Your posts and comments stay here unless you delete them first.' }));
+      leaveCard.appendChild(lmsg);
+      leaveCard.appendChild(h('div', { class: 'stack' }, h('button', { class: 'btn secondary', type: 'button', text: 'Leave ' + (fam ? fam.name : 'family'), onclick: function (ev) {
+        var btn = ev.currentTarget;
+        busy(btn, async function () {
+          var ok = await confirmDialog('Leave ' + (fam ? fam.name : 'this family') + '?', 'You can only come back if an owner invites you again.', 'Leave');
+          if (!ok) return;
+          try {
+            await teams.deleteMembership({ teamId: fid, membershipId: me.$id });
+            S.notice = { kind: 'ok', text: 'You left the family.' };
+            await afterMembershipChange();
+          } catch (e) { showAlert(lmsg, 'error', friendly(e)); }
+        });
+      } })));
+    }
+    main.appendChild(leaveCard);
+
+    if (!S.isOwner) return;
+    var dmsg = h('div');
+    var confirmInput = h('input', { id: 'delConfirm', type: 'text', autocomplete: 'off', placeholder: fam ? fam.name : '', 'aria-label': 'Type the family name to confirm' });
+    var delBtn = h('button', { class: 'btn danger', type: 'button', text: 'Delete this family for everyone', disabled: true });
+    confirmInput.addEventListener('input', function () { delBtn.disabled = !fam || confirmInput.value.trim() !== fam.name; });
+    delBtn.addEventListener('click', function () {
+      busy(delBtn, async function () {
+        var ok = await confirmDialog('Delete ' + fam.name + '?', 'All posts, comments, likes, photos, videos, profiles and members of this family are removed permanently. This cannot be undone.', 'Delete everything');
+        if (!ok) return;
         try {
-          out.textContent = 'Checking posts…';
-          var posts = await listAllRows('posts', [Query.select(['$id']), Query.orderAsc('$createdAt')], 5000);
-          var live = {}; posts.forEach(function (p) { live[p.$id] = true; });
-          var removed = 0;
-          for (var t = 0; t < 2; t++) {
-            var table = t === 0 ? 'comments' : 'reactions';
-            out.textContent = 'Checking ' + table + '…';
-            var rows = await listAllRows(table, [Query.select(['postId']), Query.orderAsc('$createdAt')], 5000);
-            for (var i = 0; i < rows.length; i++) {
-              if (!live[rows[i].postId]) { try { await deleteRow(table, rows[i].$id); removed++; } catch (e) { /* skip */ } }
-            }
-          }
-          out.textContent = removed ? 'Removed ' + removed + ' leftover item(s).' : 'Nothing to clean up.';
-        } catch (e) { out.textContent = friendly(e); }
-      }, 'Cleaning…');
-    } });
-    main.appendChild(h('section', { class: 'card', 'aria-label': 'Admin cleanup' },
-      h('h2', { text: 'Housekeeping' }),
-      h('p', { class: 'muted small', text: 'When someone deletes a post, other people\'s comments and likes on it cannot be removed by that person. They stay hidden. This button deletes them for good.' }),
-      cbtn, out));
+          var done = false, n = 0;
+          while (!done && n++ < 300) { done = (await api('deleteFamily', { familyId: fid })).done; showAlert(dmsg, 'ok', 'Deleting… this can take a minute for large families.'); }
+          if (!done) throw new Error('Not finished yet. Press the button again to continue.');
+          S.notice = { kind: 'ok', text: 'The family was deleted.' };
+          await afterMembershipChange();
+        } catch (e) { showAlert(dmsg, 'error', e.message && !e.type ? e.message : friendly(e)); }
+      }, 'Deleting…');
+    });
+    main.appendChild(h('section', { class: 'card danger-zone', 'aria-label': 'Delete this family' },
+      h('h2', { text: 'Delete this family' }),
+      h('p', { class: 'muted small', text: 'Type the family name (' + (fam ? fam.name : '') + ') to enable the button.' }),
+      confirmInput, dmsg, h('div', { class: 'stack' }, delBtn)));
   }
 
   /* =====================================================================
@@ -1388,7 +1566,8 @@
   VIEWS.settings = function (main) {
     main.appendChild(h('h1', { text: 'Settings' }));
 
-    // ---- profile ----
+    // ---- profile (per family) ----
+    var fam = currentFamily();
     var name = field('displayName', 'Display name', 'text', { required: true, maxlength: 60, value: S.profile.displayName });
     var pmsg = h('div');
     var avatarBox = h('div', { class: 'row' });
@@ -1397,13 +1576,12 @@
     var file = h('input', { id: 'newAvatar', type: 'file', accept: 'image/jpeg,image/png,image/webp', 'aria-label': 'Choose a new profile picture' });
     var saveName = h('button', { class: 'btn', type: 'submit', text: 'Save name' });
     var removeAv = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove picture' });
+    var fid = S.familyId;
 
-    async function setAvatar(fileId) {
-      var old = S.profile.avatarFileId;
-      var row = await db.updateRow({ databaseId: CFG.databaseId, tableId: T.profiles, rowId: S.user.$id, data: { avatarFileId: fileId } });
-      S.profile = row; S.profiles.set(S.user.$id, row);
-      if (old) storage.deleteFile({ bucketId: CFG.bucketId, fileId: old }).catch(function () {});
-      paintAvatar();
+    async function saveProfile(extra) {
+      var r = await api('saveProfile', Object.assign({ familyId: fid, displayName: S.profile.displayName }, extra));
+      if (fid !== S.familyId) return;
+      S.profile = Object.assign({}, S.profile, r.profile); S.profiles.set(S.user.$id, S.profile);
     }
     file.addEventListener('change', async function () {
       var f = file.files[0]; if (!f) return;
@@ -1412,7 +1590,8 @@
       try {
         toast('Uploading picture…');
         up = await uploadFile(await imageToJpegFile(f, L.avatarEdge || 256, 0.85, true, 'avatar.jpg'));
-        await setAvatar(up.$id);
+        await saveProfile({ avatarFileId: up.$id });
+        paintAvatar();
         toast('Picture updated.');
       } catch (e) {
         if (up) storage.deleteFile({ bucketId: CFG.bucketId, fileId: up.$id }).catch(function () {});
@@ -1423,13 +1602,8 @@
     removeAv.addEventListener('click', function () {
       if (!S.profile.avatarFileId) return toast('You have no picture to remove.');
       busy(removeAv, async function () {
-        try {
-          var old = S.profile.avatarFileId;
-          var row = await db.updateRow({ databaseId: CFG.databaseId, tableId: T.profiles, rowId: S.user.$id, data: { avatarFileId: null } });
-          S.profile = row; S.profiles.set(S.user.$id, row);
-          storage.deleteFile({ bucketId: CFG.bucketId, fileId: old }).catch(function () {});
-          paintAvatar(); toast('Picture removed.');
-        } catch (e) { showAlert(pmsg, 'error', friendly(e)); }
+        try { await saveProfile({ avatarFileId: '' }); paintAvatar(); toast('Picture removed.'); }
+        catch (e) { showAlert(pmsg, 'error', friendly(e)); }
       });
     });
     var pform = h('form', { novalidate: true, onsubmit: function (ev) {
@@ -1437,11 +1611,16 @@
       var n = name.input.value.trim();
       if (!n) return showAlert(pmsg, 'error', 'Your display name cannot be empty.');
       busy(saveName, async function () {
-        try { S.profile = await updateRow('profiles', S.user.$id, { displayName: n }); S.profiles.set(S.user.$id, S.profile); showAlert(pmsg, 'ok', 'Saved.'); }
-        catch (e) { showAlert(pmsg, 'error', friendly(e)); }
+        try {
+          var r = await api('saveProfile', { familyId: fid, displayName: n });
+          S.profile = Object.assign({}, S.profile, r.profile); S.profiles.set(S.user.$id, S.profile);
+          showAlert(pmsg, 'ok', 'Saved.');
+        } catch (e) { showAlert(pmsg, 'error', friendly(e)); }
       }, 'Saving…');
     } }, name.wrap, pmsg, h('div', { class: 'stack' }, saveName));
-    main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile' }, h('h2', { text: 'Profile' }), avatarBox,
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile' }, h('h2', { text: 'Profile' }),
+      h('p', { class: 'hint', text: 'This name and picture are shown only in ' + (fam ? fam.name : 'this family') + '. Each family has its own profile.' }),
+      avatarBox,
       h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), file, h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
       h('div', { class: 'stack' }, removeAv), pform));
 
@@ -1491,7 +1670,7 @@
 
     main.appendChild(h('section', { class: 'card', 'aria-label': 'About privacy' },
       h('h2', { text: 'About privacy' }),
-      h('p', { class: 'small muted', text: 'Posts and media are visible only to approved family members. Nothing is public. No ads, no trackers, no face recognition or AI photo processing. Please remember that anyone who can see a photo could still take a screenshot or share it, so share thoughtfully.' })));
+      h('p', { class: 'small muted', text: 'Posts and media are visible only to members of the family they were shared in. Other families cannot see them, and nothing is public. No ads, no trackers, no face recognition or AI photo processing. Please remember that anyone who can see a photo could still take a screenshot or share it, so share thoughtfully.' })));
   };
 
   /* =====================================================================
@@ -1500,7 +1679,7 @@
 
   async function boot() {
     applyPrefs();
-    if (!window.Appwrite || !window.Appwrite.Client || !window.Appwrite.TablesDB) {
+    if (!window.Appwrite || !window.Appwrite.Client || !window.Appwrite.TablesDB || !window.Appwrite.Functions) {
       return screenMessage("We couldn't load the Appwrite library", [
         'This page needs a small code library from cdn.jsdelivr.net. Check your internet connection, or any ad/content blocker, and refresh.'
       ]);
