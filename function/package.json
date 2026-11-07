@@ -1,0 +1,13 @@
+{
+  "name": "family-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "test": "node --test test/logic.test.js"
+  },
+  "dependencies": {
+    "node-appwrite": "31.1.0"
+  }
+}
