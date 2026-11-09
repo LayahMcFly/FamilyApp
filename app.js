@@ -1046,7 +1046,14 @@
   }
 
   VIEWS.home = function (main, token) {
-    main.appendChild(h('h1', { text: 'Home' }));
+    main.appendChild(h('h1', { class: 'sr-only', text: 'Home' }));
+    var people = Array.from(S.profiles.values());
+    if (people.length) {
+      main.appendChild(h('div', { class: 'stories', role: 'list', 'aria-label': 'Family members' }, people.map(function (p) {
+        var first = String(p.displayName || '').split(' ')[0];
+        return h('div', { class: 'story', role: 'listitem' }, h('div', { class: 'ring' }, avatarEl(p, 'lg')), h('span', { text: p.userId === S.user.$id ? 'You' : first }));
+      })));
+    }
     return pagedFeed(token, main, function (c) { return fetchPostsPage(null, c); }, {
       emptyTitle: 'No posts yet.', emptyHint: 'Be the first to share something with the family.',
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a post' })
@@ -1099,9 +1106,9 @@
 
     // text (can be swapped for an editor)
     var bodyHolder = h('div');
-    function showBody() { clear(bodyHolder); if (post.body) bodyHolder.appendChild(h('p', { class: 'post-body', text: post.body })); }
+    function showBody() { clear(bodyHolder); if (post.body) bodyHolder.appendChild(h('p', { class: 'post-body' }, h('strong', { class: 'cap-name', text: name }), ' ', post.body)); }
     showBody();
-    card.appendChild(bodyHolder);
+    if (!post.mediaFileId) card.appendChild(bodyHolder);   // text-only posts: text first; media posts: caption goes under the buttons
 
     // media
     if (post.mediaFileId) {
@@ -1113,6 +1120,7 @@
     var like = actionBtn('heart', 'Like', function () { toggleLike(); });
     var cmt = actionBtn('comment', 'Comments', function () { toggleComments(); });
     var save = actionBtn('bookmark', 'Save', function () { toggleSave(); });
+    save.className = 'act save';
     function paintLike() { like.setCount(st.likes, (st.liked ? 'Remove your like. ' : 'Like. ') + st.likes + ' likes', !!st.liked); }
     function paintCmt() { cmt.setCount(st.comments, 'Comments. ' + st.comments + ' so far', undefined); cmt.setAttribute('aria-expanded', commentsEl ? 'true' : 'false'); }
     function paintSave() { save.setCount(null, S.saved.has(post.$id) ? 'Remove from saved' : 'Save for later', S.saved.has(post.$id)); }
@@ -1124,6 +1132,7 @@
       actions.appendChild(h('button', { class: 'act', type: 'button', 'aria-label': isMine ? 'Delete your post' : 'Remove this post as family admin', onclick: removePost }, icon('trash')));
     }
     card.appendChild(actions);
+    if (post.mediaFileId) card.appendChild(bodyHolder);
     var commentsEl = null;
     paintLike(); paintCmt(); paintSave();
 
