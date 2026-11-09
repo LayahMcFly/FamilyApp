@@ -1,7 +1,0 @@
-{
-  "name": "family-circle-setup",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "dependencies": { "node-appwrite": "31.1.0" }
-}
