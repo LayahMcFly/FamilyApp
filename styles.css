@@ -432,3 +432,25 @@ progress::-moz-progress-bar { background: var(--accent); }
 body:has(.nav) .site-footer { padding-bottom: calc(var(--nav-h) + 20px + env(safe-area-inset-bottom)); }
 body:has(.nav) .main { padding-bottom: 16px; }
 @media (min-width: 900px) { body:has(.nav) .site-footer { margin-left: 244px; max-width: none; padding-bottom: 24px; } }
+
+/* show the house icon next to the wordmark again */
+.brand { gap: 8px; }
+.brand img { display: block; width: 30px; height: 30px; border-radius: 8px; box-shadow: none; }
+@media (max-width: 380px) { .brand span { font-size: 1.3rem; } .brand img { width: 26px; height: 26px; } }
+
+/* top bar that adapts to wide script fonts: the wordmark shrinks first, the switcher takes what is left */
+.topbar-inner { flex-wrap: nowrap; }
+.brand { flex: 0 1 auto; min-width: 0; }
+.brand span { font-size: clamp(1.1rem, 5.2vw, 1.5rem); line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 2px; }
+.brand img { flex: none; }
+.topbar-inner .fam-select, .topbar-inner .fam-name { flex: 1 1 0; min-width: 0; max-width: none; margin-left: 0; }
+.topbar .btn.small { flex: none; }
+@media (max-width: 360px) { .brand span { display: none; } }
+.topbar-inner .fam-select, .topbar-inner .fam-name { min-width: 120px; }
+@media (max-width: 360px) { .topbar-inner .fam-select, .topbar-inner .fam-name { min-width: 0; } }
+
+/* wordmark font, saved inside the site so it looks the same on every device (Dancing Script, SIL Open Font License) */
+@font-face { font-family: "Dancing Script"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/dancing-script-latin-700-normal.woff2") format("woff2"); }
+.brand span { font-family: "Dancing Script", "Snell Roundhand", "Segoe Script", "Brush Script MT", cursive; font-style: normal; font-weight: 700; font-size: 1.9rem; line-height: 1.1; }
+.brand img { display: none; }
+@media (max-width: 380px) { .brand span { font-size: 1.6rem; } }
