@@ -19,6 +19,21 @@
   var L = CFG.limits || {};
   var T = CFG.tables || {};
   var root = document.getElementById('app');
+  (function footer() {
+    var f = document.getElementById('site-footer'); if (!f) return;
+    var C = window.FAMILY_CONFIG || {};
+    var link = function (href, text) { var el = document.createElement('a'); el.href = href; el.textContent = text; el.target = '_blank'; el.rel = 'noopener noreferrer'; return el; };
+    var line = document.createElement('p');
+    line.appendChild(document.createTextNode((C.appName || 'Family Circle') + ' v' + (C.version || '1.0.0')));
+    f.appendChild(line);
+    if (C.feedbackUrl) {
+      var l2 = document.createElement('p');
+      l2.appendChild(document.createTextNode('Feedback, bug or problem? '));
+      l2.appendChild(link(C.feedbackUrl, 'Tell me on GitHub'));
+      if (C.githubUrl) { l2.appendChild(document.createTextNode(' · ')); l2.appendChild(link(C.githubUrl, 'My GitHub')); }
+      f.appendChild(l2);
+    }
+  })();
 
   /* =====================================================================
    * 1. HELPERS
