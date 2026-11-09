@@ -9,6 +9,13 @@
 window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
+  // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
+  version: "1.0.0",
+
+  // Where feedback, bug reports and questions go (GitHub Issues on the project repo).
+  feedbackUrl: "https://github.com/layahmcfly/FamilyApp/issues/new/choose",
+  githubUrl: "https://github.com/layahmcfly",
+
   // <<< REPLACE: copy the "API Endpoint" from Appwrite Console > your project > Settings.
   // It looks like https://<REGION>.cloud.appwrite.io/v1  (keep the /v1 at the end).
   endpoint: "https://nyc.cloud.appwrite.io/v1",
