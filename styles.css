@@ -424,3 +424,11 @@ progress::-moz-progress-bar { background: var(--accent); }
 .fam-select, .fam-name { max-width: 40%; }
 .topbar-inner { gap: 6px; }
 @media (max-width: 420px) { .fam-select, .fam-name { max-width: 40%; } }
+
+/* footer: version and feedback link */
+.site-footer { max-width: 470px; margin: 0 auto; padding: 20px 16px 24px; text-align: center; font-size: .8rem; color: var(--muted); border-top: 1px solid var(--border); }
+.site-footer p { margin: 0 0 4px; }
+.site-footer a { color: var(--muted); text-decoration: underline; }
+body:has(.nav) .site-footer { padding-bottom: calc(var(--nav-h) + 20px + env(safe-area-inset-bottom)); }
+body:has(.nav) .main { padding-bottom: 16px; }
+@media (min-width: 900px) { body:has(.nav) .site-footer { margin-left: 244px; max-width: none; padding-bottom: 24px; } }
