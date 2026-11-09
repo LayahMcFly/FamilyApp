@@ -10,10 +10,10 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.0.2",
+  version: "1.1.0",
 
   // Where feedback, bug reports and questions go (GitHub Issues on the project repo).
-  feedbackUrl: "https://github.com/layahmcfly/FamilyApp/issues/new/choose",
+  feedbackUrl: "https://github.com/layahmcfly/FamilyCirle/issues/new/choose",
   githubUrl: "https://github.com/layahmcfly",
 
   // <<< REPLACE: copy the "API Endpoint" from Appwrite Console > your project > Settings.
