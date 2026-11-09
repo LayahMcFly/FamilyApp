@@ -912,8 +912,7 @@
     })));
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
       h('div', { class: 'brand' }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
-      familySwitcher(),
-      h('button', { class: 'btn ghost small', type: 'button', text: 'Sign out', onclick: signOut })));
+      familySwitcher()));
     clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
   }
@@ -941,6 +940,7 @@
     var token = S.nav;
     revokeBlobs();
     clear(S.main);
+    S.main.classList.toggle('reels-main', name === 'shorts');
     Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
       if (a.getAttribute('data-route') === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
@@ -1075,8 +1075,8 @@
     });
   };
   VIEWS.shorts = function (main, token) {
-    main.appendChild(h('h1', { text: 'Shorts' }));
-    main.appendChild(h('p', { class: 'muted small', text: 'Short vertical videos. They download only when you tap play.' }));
+    main.appendChild(h('h1', { class: 'sr-only', text: 'Shorts' }));
+    main.appendChild(h('div', { class: 'reels-top' }, h('span', { text: 'Shorts' })));
     return pagedFeed(token, main, function (c) { return fetchPostsPage('short', c); }, {
       className: 'shorts', variant: 'short', emptyTitle: 'No Shorts yet.', emptyHint: 'Record a short vertical video (up to ' + (L.shortMaxSeconds || 60) + ' seconds) and share it.',
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a Short' })
@@ -1091,11 +1091,17 @@
     });
   };
 
+  function compact(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    if (n >= 1e4) return Math.round(n / 1e3) + 'K';
+    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(n);
+  }
   function actionBtn(iconName, label, onclick) {
     var count = h('span', { class: 'count' });
     var b = h('button', { class: 'act', type: 'button', onclick: onclick }, icon(iconName), count);
     b.setCount = function (n, aria, pressed) {
-      count.textContent = n === null || n === undefined ? '' : String(n);
+      count.textContent = n === null || n === undefined ? '' : compact(n);
       b.setAttribute('aria-label', aria);
       if (pressed !== undefined) b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
     };
@@ -1109,21 +1115,24 @@
     var prof = S.profiles.get(post.authorId) || null;
     var name = prof ? prof.displayName : 'Family member';
     var isMine = post.authorId === uid;
-    var card = h('article', { class: 'card' + (variant === 'short' ? ' short' : ''), 'aria-label': 'Post by ' + name });
+    var isReel = variant === 'short';
+    var info = isReel ? h('div', { class: 'reel-info' }) : null;
+    var card = h('article', { class: isReel ? 'reel short' : 'card', 'aria-label': 'Post by ' + name });
 
     // header
     var edited = new Date(post.$updatedAt) - new Date(post.$createdAt) > 3000;
     var kindLabel = { photo: 'Photo', video: 'Video', short: 'Short' }[post.kind];
-    card.appendChild(h('div', { class: 'post-head' }, avatarEl(prof),
+    (isReel ? info : card).appendChild(h('div', { class: 'post-head' }, avatarEl(prof),
       h('div', { class: 'who' }, h('div', { class: 'name', text: name }),
         h('div', { class: 'small muted' }, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), edited ? ' · edited' : '')),
       kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null));
 
     // text (can be swapped for an editor)
     var bodyHolder = h('div');
-    function showBody() { clear(bodyHolder); if (post.body) bodyHolder.appendChild(h('p', { class: 'post-body' }, h('strong', { class: 'cap-name', text: name }), ' ', post.body)); }
+    function showBody() { clear(bodyHolder); if (post.body) bodyHolder.appendChild(h('p', { class: 'post-body' }, isReel ? null : h('strong', { class: 'cap-name', text: name }), isReel ? '' : ' ', post.body)); }
     showBody();
-    if (!post.mediaFileId) card.appendChild(bodyHolder);   // text-only posts: text first; media posts: caption goes under the buttons
+    if (isReel) info.appendChild(bodyHolder);
+    else if (!post.mediaFileId) card.appendChild(bodyHolder);   // text-only posts: text first; media posts: caption goes under the buttons
 
     // media
     if (post.mediaFileId) {
@@ -1147,7 +1156,10 @@
       actions.appendChild(h('button', { class: 'act', type: 'button', 'aria-label': isMine ? 'Delete your post' : 'Remove this post as family admin', onclick: removePost }, icon('trash')));
     }
     card.appendChild(actions);
-    if (post.mediaFileId) card.appendChild(bodyHolder);
+    if (isReel) {
+      info.appendChild(h('button', { class: 'reel-comment', type: 'button', text: 'Add comment…', onclick: function () { toggleComments(); } }));
+      card.appendChild(info);
+    } else if (post.mediaFileId) card.appendChild(bodyHolder);
     var commentsEl = null;
     paintLike(); paintCmt(); paintSave();
 
@@ -1160,6 +1172,7 @@
         st.liked = r.liked;
       } catch (e) { toast(friendly(e)); }
       st.busy = false; paintLike();
+      if (st.liked) { like.classList.add('pop'); setTimeout(function () { like.classList.remove('pop'); }, 450); }
     }
 
     async function toggleSave() {
@@ -1175,6 +1188,10 @@
     function toggleComments() {
       if (commentsEl) { card.removeChild(commentsEl); commentsEl = null; paintCmt(); return; }
       commentsEl = commentsPanel(post, st, paintCmt);
+      if (isReel) {
+        commentsEl = h('div', { class: 'sheet', role: 'dialog', 'aria-label': 'Comments' },
+          h('div', { class: 'sheet-head' }, h('strong', { text: 'Comments' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Close', onclick: toggleComments })), commentsEl);
+      }
       card.appendChild(commentsEl); paintCmt();
     }
 
