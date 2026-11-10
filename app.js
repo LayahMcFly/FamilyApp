@@ -1299,7 +1299,7 @@
       return h('li', null, h('a', { href: n.href || '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
     })));
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
-      h('div', { class: 'brand' }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
+      h('a', { class: 'brand', href: '#/home', 'aria-label': (CFG.appName || 'Family Circle') + ', go to Home', onclick: function () { if (/^#\/home\/?$/.test(location.hash)) window.scrollTo({ top: 0, behavior: 'smooth' }); } }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
       h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity', onclick: function (ev) {
         if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/home'; }
       } }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),

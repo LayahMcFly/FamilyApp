@@ -1273,3 +1273,4 @@ dialog :not(.row):not(.chips) > :is(button.btn, a.btn) + :is(button.btn, a.btn, 
 @media (max-width: 430px) { .pl-time { font-size: .72rem; } .pl-bar { gap: 2px; padding-left: 6px; padding-right: 6px; } .pl-speed { min-width: 38px; } }
 @media (prefers-reduced-motion: reduce) { .pl-big, .pl-bar { transition: none; } }
 .reel .media.reel-media.wide video { object-fit: contain; background: #000; }
+.brand { color: inherit; text-decoration: none; cursor: pointer; }
