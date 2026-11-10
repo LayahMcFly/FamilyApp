@@ -913,3 +913,9 @@ article.card.tile { flex: 0 0 min(78vw, 300px); display: flex; flex-direction: c
 .reel .sheet .comment-row .comment-input { background: transparent; border-color: #55555b; color: #fff; }
 .reel .sheet .comment-row .comment-input::placeholder { color: #a8a8ad; }
 .reel .sheet .author-liked svg { stroke: #1c1c1e; }
+.ring-samples { display: flex; flex-wrap: wrap; gap: 18px; justify-content: space-around; margin: 14px 0 18px; }
+.ring-sample { display: grid; justify-items: center; gap: 4px; text-align: center; max-width: 110px; }
+.ring-sample .ring { width: 84px; height: 84px; margin: 0 0 6px; }
+.card .tabs .btn.secondary { background: var(--bg); border: 1px solid var(--border); }
+.ring:has(.avatar.ring-grand) { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #7f98d1; }
+.ring-sample .ring { padding: 4px; }

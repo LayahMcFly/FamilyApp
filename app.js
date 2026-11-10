@@ -2953,6 +2953,26 @@
   function settingsAppearance(main) {
     var look = h('section', { class: 'card', 'aria-label': 'Appearance' });
     main.appendChild(look);
+    // ---- circle colors: see every version, and try one on your own circle (only on this screen, nothing is saved) ----
+    var ringCard = h('section', { class: 'card', 'aria-label': 'Circle colors' }, h('h2', { text: 'Circle colors' }),
+      h('p', { class: 'muted small', text: 'The circle around a profile picture shows who is who in the family tree. This is just a preview: nothing is saved, and it goes away when you refresh.' }));
+    var samples = h('div', { class: 'ring-samples' });
+    [['', 'Rainbow', 'Everyone else'], ['married', 'Gold', 'Has a partner in the tree'], ['grand', 'Double ring', 'Grandparent']].forEach(function (r) {
+      var av = avatarEl(S.profile); av.classList.add('lg'); if (r[0]) av.classList.add('ring-' + r[0]);
+      samples.appendChild(h('div', { class: 'ring-sample' }, h('div', { class: 'ring' }, av), h('strong', { text: r[1] }), h('span', { class: 'small muted', text: r[2] })));
+    });
+    ringCard.appendChild(samples);
+    ringCard.appendChild(h('h3', { text: 'Try it on my circle' }));
+    var tryTabs = h('div', { class: 'tabs', role: 'group', 'aria-label': 'Try a circle color on my profile' });
+    [['', 'Rainbow'], ['married', 'Gold'], ['grand', 'Double ring']].forEach(function (r) {
+      tryTabs.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: r[1], onclick: function () {
+        if (!S.ringRole) S.ringRole = new Map();
+        if (r[0]) S.ringRole.set(S.user.$id, r[0]); else S.ringRole.delete(S.user.$id);
+        toast(r[0] ? 'Showing ' + r[1] + ' on your circle. Open Home to see it.' : 'Back to Rainbow.');
+      } }));
+    });
+    ringCard.appendChild(tryTabs);
+    main.appendChild(ringCard);
     function paintLook() {
       clear(look);
       look.appendChild(h('h3', { text: 'Light or dark' }));
