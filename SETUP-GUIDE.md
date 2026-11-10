@@ -334,3 +334,5 @@ Use one normal window and one private window, with two different email addresses
 >    - `suggestions` columns: `familyId` (String 36, required), `authorId` (String 36, required), `personId` (String 36), `text` (String 500, required), `status` (String 12, required). Indexes: `idx_familyId`, `idx_authorId`, `idx_status`, each on the column of the same name.
 > 3. Redeploy the `family-api` Function with the new package.
 > New installs made with the setup script get all of this automatically.
+
+> **Added in v1.7.2 (the "edited" label):** in `posts` add a String column `editedAt`, size `32`, not required, then redeploy the `family-api` Function. Until then the label uses a rougher guess.

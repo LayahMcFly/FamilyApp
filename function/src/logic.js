@@ -545,8 +545,15 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       if (post.authorId !== user.$id) throw forbidden('Only the author can edit a post.');
       const text = textOf(body.body ?? '', 'Post', { max: LIMITS.bodyMax });
       if (!text && !post.mediaFileId) throw bad('A post needs text or a file.');
-      await updateRow(TABLES.posts, post.$id, { body: text });
-      return { ok: true };
+      if (text === (post.body || '')) return { ok: true, edited: false };
+      const stamp = new Date(now()).toISOString();
+      try {
+        await updateRow(TABLES.posts, post.$id, { body: text, editedAt: stamp });
+      } catch (e) {
+        if (sdkCode(e) !== 400) throw e;
+        await updateRow(TABLES.posts, post.$id, { body: text }); // the editedAt column has not been added yet
+      }
+      return { ok: true, edited: true };
     },
 
     async deletePost({ user, body, deadline }) {

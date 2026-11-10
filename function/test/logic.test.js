@@ -527,3 +527,15 @@ test('family tree: owner and tree admins edit, members suggest, linked person co
   // another family's tree is out of reach
   assert.equal((await s.call(s.carol, { action: 'treeAddPerson', familyId: 'famA', name: 'X' })).status, 403);
 });
+
+test('editPost: author only, stamps editedAt, ignores unchanged text', async () => {
+  const s = await setup();
+  const post = (await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'hello' })).json.postId;
+  assert.equal((await s.call(s.bob, { action: 'editPost', familyId: 'famA', postId: post, body: 'x' })).status, 403);
+  const same = await s.call(s.alice, { action: 'editPost', familyId: 'famA', postId: post, body: 'hello' });
+  assert.equal(same.json.edited, false);
+  assert.equal(s.world.tables.posts.get(post).editedAt, undefined);
+  const r = await s.call(s.alice, { action: 'editPost', familyId: 'famA', postId: post, body: 'hello again' });
+  assert.equal(r.json.edited, true);
+  assert.ok(s.world.tables.posts.get(post).editedAt);
+});

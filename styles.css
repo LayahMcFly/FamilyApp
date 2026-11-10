@@ -671,3 +671,4 @@ select { width: 100%; }
 .fam-tabs { margin-inline: 0; }
 .main > .btn.block { margin-inline: 12px; width: calc(100% - 24px); }
 .profile-top { margin-inline: 4px; }
+.edited[hidden]{display:none}

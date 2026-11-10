@@ -1534,11 +1534,14 @@
     var card = h('article', { class: isReel ? 'reel short' : 'card', 'aria-label': 'Post by ' + name });
 
     // header
-    var edited = new Date(post.$updatedAt) - new Date(post.$createdAt) > 3000;
+    // "edited" comes from editedAt, which only an edit to the text sets. Until that column exists, fall back to the old guess.
+    function isEdited() { return post.editedAt ? true : (post.editedAt === undefined && !post.pinnedCommentIds && new Date(post.$updatedAt) - new Date(post.$createdAt) > 3000); }
+    var editedEl = h('span', { class: 'edited', text: ' \u00B7 edited', hidden: !isEdited() });
+    function paintEdited() { editedEl.hidden = !isEdited(); }
     var kindLabel = { photo: 'Photo', video: 'Video', short: 'Short' }[post.kind];
     (isReel ? info : card).appendChild(h('div', { class: 'post-head' }, avatarEl(prof),
       h('div', { class: 'who' }, h('div', { class: 'name' }, h('a', { class: 'member-link', href: '#/profile/' + post.authorId, text: name })),
-        h('div', { class: 'small muted' }, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), edited ? ' · edited' : '')),
+        h('div', { class: 'small muted' }, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), editedEl)),
       S.trend && S.trend.ids.has(post.$id) ? h('span', { class: 'badge hot' }, icon('flame'), ' Trending') : null,
       kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null));
 
@@ -1623,9 +1626,11 @@
         if (!text && !post.mediaFileId) return showAlert(msg, 'error', 'A text post needs some text.');
         busy(saveBtn, async function () {
           try {
-            await api('editPost', { familyId: S.familyId, postId: post.$id, body: text });
-            post.body = text; post.$updatedAt = new Date().toISOString(); showBody();
-            toast('Post updated.');
+            var er = await api('editPost', { familyId: S.familyId, postId: post.$id, body: text });
+            post.body = text; post.$updatedAt = new Date().toISOString();
+            if (er.edited) post.editedAt = post.$updatedAt;
+            showBody(); paintEdited();
+            toast(er.edited ? 'Post updated.' : 'No changes to save.');
           } catch (e) { showAlert(msg, 'error', friendly(e)); }
         }, 'Saving…');
       });
