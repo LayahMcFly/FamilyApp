@@ -1,7 +1,7 @@
 /*
  * One-time Appwrite setup for the optional Photo Gifts shop.
  * Adds five tables (shopCatalog, shopDesigns, shopOrders, shopEvents, giftPermissions) to the
- * existing `family` database and one private bucket (`shop-designs`).
+ * existing `family` database and an index so the family-api cleanup can recognise gift designs. No bucket is created: the free plan allows one, so designs live in `family-media`.
  * Safe to run again: anything that already exists is skipped.
  *
  *   APPWRITE_ENDPOINT=... APPWRITE_PROJECT=... APPWRITE_KEY=... node setup-shop.mjs
@@ -10,12 +10,12 @@
  * Table permissions are empty on purpose: the browser can never read or write these tables directly.
  * Only the shop-api function (using its own key) writes them. Orders and designs are readable by their owner only.
  */
-import { Client, TablesDB, Storage, Permission, Role } from 'node-appwrite';
+import { Client, TablesDB } from 'node-appwrite';
 
 const endpoint = process.env.APPWRITE_ENDPOINT, projectId = process.env.APPWRITE_PROJECT, apiKey = process.env.APPWRITE_KEY;
 if (!endpoint || !projectId || !apiKey) { console.error('Missing APPWRITE_ENDPOINT, APPWRITE_PROJECT or APPWRITE_KEY. See SHOP-GUIDE.md step 21.'); process.exit(1); }
 const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
-const db = new TablesDB(client), storage = new Storage(client);
+const db = new TablesDB(client);
 const databaseId = 'family';
 
 const S = (key, size, required, def) => ({ type: 'string', key, size, required: !!required, def });
@@ -29,7 +29,7 @@ const schema = {
   },
   shopDesigns: {
     columns: [S('ownerId', 36, true), S('familyId', 36, true), S('postId', 36, true), S('productKey', 40, true), I('variantId', true), S('fileId', 36, true), S('fileSha', 64, true), I('width', true), I('height', true), TX('spec', true), I('quantity', true), S('orderId', 40, false, '')],
-    indexes: [['idx_ownerId', 'key', ['ownerId']], ['idx_familyId', 'key', ['familyId']], ['idx_orderId', 'key', ['orderId']]]
+    indexes: [['idx_ownerId', 'key', ['ownerId']], ['idx_familyId', 'key', ['familyId']], ['idx_orderId', 'key', ['orderId']], ['idx_fileId', 'key', ['fileId']]]
   },
   shopOrders: {
     columns: [S('ownerId', 36, true), S('familyId', 36, true), S('paymentStatus', 24, true), S('fulfillmentStatus', 24, true), TX('items', true), TX('address', true),
@@ -84,10 +84,4 @@ for (const [tableId, def] of Object.entries(schema)) {
   for (const [key, type, columns] of def.indexes) await step('index ' + key, () => db.createIndex({ databaseId, tableId, key, type, columns, orders: columns.map(() => 'asc') }));
 }
 
-console.log('\nStorage bucket');
-await step('bucket "shop-designs"', () => storage.createBucket({
-  bucketId: 'shop-designs', name: 'shop-designs',
-  permissions: [Permission.create(Role.label('family'))],   // same label family-api gives every member; each file is then readable only by its owner
-  fileSecurity: true, maximumFileSize: 6291456, allowedFileExtensions: ['jpg', 'jpeg'], encryption: true
-}));
-console.log('\nDone. Next: delete the temporary API key, then create the shop-api Function (SHOP-GUIDE.md step 22).');
+console.log('\nDone. Next: update family-api and create the shop-api Function (SHOP-GUIDE.md steps 22-23).');

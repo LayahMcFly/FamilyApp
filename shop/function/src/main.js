@@ -26,7 +26,7 @@ export default async ({ req, res, log, error }) => {
   const stripeKey = env('STRIPE_SECRET_KEY');
   const cfg = {
     databaseId: env('DATABASE_ID', 'family'),
-    designBucketId: env('SHOP_DESIGN_BUCKET_ID', 'shop-designs'),
+    designBucketId: env('SHOP_DESIGN_BUCKET_ID', 'family-media'),
     siteUrl: env('SITE_URL', 'https://layahmcfly.github.io/FamilyCircle/'),
     adminIds: env('SHOP_ADMIN_USER_IDS').split(',').map((s) => s.trim()).filter(Boolean),
     countries: env('SHOP_COUNTRIES', 'US').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),

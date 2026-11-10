@@ -21,7 +21,8 @@ export const TABLES = {
   reactions: 'reactions',
   bookmarks: 'bookmarks',
   people: 'people',
-  suggestions: 'suggestions'
+  suggestions: 'suggestions',
+  shopDesigns: 'shopDesigns'   // optional shop: its print files share this bucket, so the cleanup must not delete them
 };
 
 export const LIMITS = {
@@ -1010,7 +1011,13 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       for (const f of page.files) {
         const inPost = await firstRow(TABLES.posts, [Query.equal('mediaFileId', [f.$id])]);
         const inProfile = inPost ? null : await firstRow(TABLES.profiles, [Query.equal('avatarFileId', [f.$id])]);
+        let inDesign = false;
         if (!inPost && !inProfile) {
+          // A saved gift design. If the shop is not installed the table is simply missing (404), which means "no". Any other
+          // error means "could not check", and an unchecked file is kept rather than risk deleting a print file.
+          try { inDesign = !!(await firstRow(TABLES.shopDesigns, [Query.equal('fileId', [f.$id])])); } catch (e) { if (sdkCode(e) !== 404) inDesign = true; }
+        }
+        if (!inPost && !inProfile && !inDesign) {
           await deleteFileQuiet(f.$id);
           removed += 1;
         }

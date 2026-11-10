@@ -115,16 +115,19 @@ appwrite tablesdb create-index --database-id family --table-id giftPermissions -
 ```
 
 
-## Block 6: the private design bucket
+## Block 6: one more index (no new bucket)
+
+Your free plan allows only 1 bucket, so gift designs are stored in the existing `family-media` bucket. They are private to each buyer. The family-api cleanup job needs one index to recognise them. Wait for the shopDesigns columns to say Available, then paste:
 
 ```
-appwrite storage create-bucket --bucket-id shop-designs --name shop-designs --permissions 'create("label:family")' --file-security true --maximum-file-size 6291456 --allowed-file-extensions jpg --encryption true
+appwrite tablesdb create-index --database-id family --table-id shopDesigns --key idx_fileId --type key --columns fileId
 ```
 
+Then update the family-api function with the new `family-api.tar.gz` (Deployments, Create deployment, Manual, upload, activate). Do this **before** anyone saves a gift design. Until it is live, the old cleanup could remove design files after an hour.
 
 ## Check
 
-In the Console, open Databases, family. You should see five new tables, and under Storage a bucket named shop-designs. Table permissions must be empty and Row security on for each table.
+In the Console, open Databases, family. You should see five new tables, and and no new bucket (the shop uses family-media). Table permissions must be empty and Row security on for each table.
 
 
 ## Catch-up block (only if the Console shows something missing)
@@ -142,4 +145,4 @@ appwrite tablesdb create-boolean-column --database-id family --table-id giftPerm
 appwrite tablesdb create-index --database-id family --table-id giftPermissions --key idx_postId --type key --columns postId
 ```
 
-Expected counts in Databases, family: shopCatalog 8 columns; shopDesigns 12 columns and 3 indexes; shopOrders 23 columns and 2 indexes; shopEvents 4 columns; giftPermissions 4 columns and 2 indexes. Every column and index should say Available.
+Expected counts in Databases, family: shopCatalog 8 columns; shopDesigns 12 columns and 4 indexes (including idx_fileId); shopOrders 23 columns and 2 indexes; shopEvents 4 columns; giftPermissions 4 columns and 2 indexes. Every column and index should say Available.

@@ -397,6 +397,16 @@ test('sweep (no user): removes old orphan files, keeps referenced and fresh ones
   assert.ok(s.world.files.keep && s.world.files.fresh && !s.world.files.orphan);
 });
 
+test('sweep keeps saved gift-design files that share the bucket, and still removes true orphans', async () => {
+  const s = await setup();
+  s.addFile('design1', { owner: 'bob', familyId: 'famA', old: true });
+  s.addFile('orphan2', { owner: 'bob', familyId: 'famA', old: true });
+  s.world.tables[TABLES.shopDesigns].set('d1', { $id: 'd1', fileId: 'design1' });
+  const r = await s.call(null, {});
+  assert.equal(r.status, 200);
+  assert.ok(s.world.files.design1 && !s.world.files.orphan2);
+});
+
 test('storage allowance: usage is reported, a full family pauses new uploads, nothing existing is deleted', async () => {
   const s = await setup();
   const mb = 1024 * 1024;

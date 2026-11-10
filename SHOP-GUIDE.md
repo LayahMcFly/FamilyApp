@@ -25,6 +25,7 @@ Routes: `#/shop`, `#/shop/product/:key`, `#/shop/product/:key/:postId`, `#/shop/
 
 | File | Change |
 |---|---|
+| `function/` (family-api) | The cleanup job skips gift-design files. New `family-api.tar.gz`. |
 | `index.html` | Adds `shop.css` and `shop.js`, bumps `?v=` to 1.28.0. The Content-Security-Policy is unchanged: Stripe's hosted page opens by normal navigation, so no new script or frame sources are needed. |
 | `config.js` | Adds `shopEnabled`, `shopFunctionId`, `shopBucketId` (public IDs). Version 1.28.0. |
 | `app.js` | `bag` icon; Shop pill in the top bar; "Make a gift" and "Allow gifts with this photo" in the photo ⋯ menu; "My orders" on your profile; a "Let family order gifts with this photo" checkbox (off by default) on the photo Create form; `fetchMedia` accepts an optional bucket; `S.shop` is cleared when you switch family or sign out; one call to `FCShop.install(...)` at startup. |
@@ -37,7 +38,7 @@ Routes: `#/shop`, `#/shop/product/:key`, `#/shop/product/:key/:postId`, `#/shop/
 ```
 Phone (GitHub Pages)                    Appwrite Cloud                           Outside
 shop.js  --JWT--> shop-api function --> database `family` (shop tables)
-  | draws layout on a canvas            bucket `shop-designs` (private)
+  | draws layout on a canvas            bucket `family-media` (file readable by buyer only)
   | uploads print-ready JPEG ---------> (only the buyer can read it)
   | redirect  --------------------------------------------------------------> Stripe Checkout (card entry)
                                          shop-api <---- webhook (signed) ----- Stripe
@@ -59,7 +60,7 @@ Rules the code enforces:
 ### What stays on the phone, what is shared, and when
 
 - The **layout preview** is drawn on the phone from the print area measurements. It is not a Printify mockup and not a picture of the finished item; the screen says so. I did not use Printify's mockup generator because it would require sending the image to Printify before payment.
-- At **Add to cart** the print-ready JPEG (at most 4096 px on the long side, at most about 5 MB) is uploaded to your private `shop-designs` bucket. Only that person can read it.
+- At **Add to cart** the print-ready JPEG (at most 4096 px on the long side, at most about 5 MB) is uploaded to your `family-media` bucket, readable only by that person. Only that person can read it.
 - The **photo is sent to Printify only after payment is verified**, as a base64 upload of the print-ready file, not the original. Printify and its print partners then hold it. Their retention is their own policy; this app cannot promise deletion there. Printify's pages are the place to confirm it.
 - Consent shown before the first image is prepared: "To create your product, the selected image will be shared with Printify and the fulfillment partners needed to make and deliver it." The cart has a separate checkbox for sharing the delivery name, address, email and phone with Printify and shipping partners. Both boxes are required, and the server refuses a checkout without them.
 - Shipping addresses are never placed on profiles or in the feed.
@@ -99,13 +100,13 @@ All tables are in database `family`, have **no table-level permissions** (the br
 | `shopEvents` (row id = hash of provider + event id; used to ignore duplicate webhooks) | source, eventId, type, note | none | none |
 | `giftPermissions` (row id = post id) | familyId, postId, ownerId, allowed | familyId, postId | read: the family team |
 
-Bucket `shop-designs`: private, file security on, JPEG only, 6 MB limit. Any signed-in family member may create a file; each file is readable only by its owner.
+Gift designs are stored in the existing bucket `family-media` (the free plan allows only 1 bucket). Each design file is created readable only by its owner, and frozen when the design is saved. The `family-api` cleanup job skips files listed in `shopDesigns`; that needs the `idx_fileId` index and the updated family-api code (step 22).
 
-Appwrite limits to be aware of on the free plan: the shop adds 1 function (you will have 2 of 5) and 1 bucket (2 of 3) and no extra database.
+Appwrite limits to be aware of on the free plan: the shop adds 1 function (you will have 2 of 5) and no new bucket or database. The plan allows 1 bucket, which is why designs share `family-media`.
 
 ## 6. Environment variables
 
-**Public (safe in `config.js`, which is on GitHub):** `shopEnabled`, `shopFunctionId` (`shop-api`), `shopBucketId` (`shop-designs`).
+**Public (safe in `config.js`, which is on GitHub):** `shopEnabled`, `shopFunctionId` (`shop-api`), `shopBucketId` (`family-media`).
 
 **Secret or private: only in the `shop-api` function settings in the Appwrite Console. Never in chat, GitHub or `config.js`:**
 
@@ -123,7 +124,7 @@ Appwrite limits to be aware of on the free plan: the shop adds 1 function (you w
 | `SHOP_COUNTRIES` | default `US` | Delivery countries. Start with US only. |
 | `PRINTIFY_AUTO_SUBMIT` | default `false` | `true` sends paid orders to production without your approval. |
 | `STRIPE_AUTOMATIC_TAX` | default `false` | `true` turns on Stripe Tax (see step 18). |
-| `DATABASE_ID`, `SHOP_DESIGN_BUCKET_ID` | defaults `family`, `shop-designs` | Only change if you renamed them. |
+| `DATABASE_ID`, `SHOP_DESIGN_BUCKET_ID` | defaults `family`, `family-media` | Only change if you renamed them. |
 
 ## 7. Order states and retries
 
@@ -215,7 +216,7 @@ Do the parts in order. Every step says **Where**, **Do**, **Copy** (what to save
 
 **21. Create the tables.** *Where:* that terminal. *Do:* open `SHOP-CONSOLE-COMMANDS.md` and paste Blocks 1 to 5 one at a time, waiting for the prompt after each. Where a block says to wait 30 seconds, do that before pasting the index lines. *Secret?* No. No API key is needed, because the Console terminal is already signed in as you. *Check:* Databases, family, lists shopCatalog, shopDesigns, shopOrders, shopEvents and giftPermissions. *If it fails:* "already exists" is fine. A message about a flag name means to add `--help` to that command and tell me what it prints.
 
-**22. Create the private bucket.** *Do:* paste Block 6. *Check:* Storage shows `shop-designs`. (The optional `setup/setup-shop.mjs` does steps 21 and 22 for people who can run Node on their own computer; you do not need it.)
+**22. Add one index and update family-api (no new bucket).** *Why:* the free plan allows 1 bucket, so gift designs live in `family-media`, in files only their owner can read. The family-api cleanup job deletes unattached files after an hour, so it must be taught to skip gift designs. *Do:* paste Block 6 in `SHOP-CONSOLE-COMMANDS.md`, then upload the new `family-api.tar.gz` to the `family-api` function (Deployments, Create deployment, Manual, activate). *Check:* the index says Available and the new deployment is active. Do this before saving any gift design.
 
 **23. Create the function.** *Where:* Console, Functions, Create function, Manual. *Do:* Name `shop-api`, **Function ID `shop-api`** (type it exactly), Runtime Node.js 22 or newest, Entrypoint `src/main.js`, Build command `npm install`. *Settings:* **Timeout 30 seconds**. **Execute access:** add **Any**. (Stripe and Printify have no login. The function refuses every request that has neither a valid signature nor a signed-in verified family member.) **Scopes:** `users.read`, `rows.read`, `rows.write`, `files.read`, `files.write`. Nothing else. *Check:* the function is listed.
 
@@ -237,7 +238,7 @@ Do the parts in order. Every step says **Where**, **Do**, **Copy** (what to save
 
 **31.** Unzip the update into your local `FamilyCircle` folder, or use the files I committed to the repository (the shop files are in the `main` branch of `LayahMcFly/FamilyCircle` after this update).
 
-**32.** Confirm `config.js` says `version: "1.28.0"`, `shopFunctionId: "shop-api"`, `shopBucketId: "shop-designs"`. These are public.
+**32.** Confirm `config.js` says `version: "1.28.0"`, `shopFunctionId: "shop-api"`, `shopBucketId: "family-media"`. These are public.
 
 **33.** Confirm no secret is in any file: search the folder for `sk_`, `rk_`, `whsec_`, and your Printify token. The only places they should exist are your password manager and the function's variables.
 

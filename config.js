@@ -45,7 +45,7 @@ window.FAMILY_CONFIG = {
   // Set shopEnabled to false, or leave the function unset, to hide the shop completely.
   shopEnabled: true,
   shopFunctionId: "shop-api",
-  shopBucketId: "shop-designs",
+  shopBucketId: "family-media",
 
   // The IDs below match the Setup Guide. If you create your database, tables and
   // bucket with these exact IDs you do not need to change anything here.

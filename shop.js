@@ -291,14 +291,14 @@
           }
           if (!blob || blob.size > 4.9 * 1048576) throw new Error('This design is too large to send. Try a smaller product.');
           var uid = X.S.user.$id;
-          uploaded = await X.storage.createFile({ bucketId: X.CFG.shopBucketId || 'shop-designs', fileId: X.ID.unique(), file: new File([blob], 'design.jpg', { type: 'image/jpeg' }),
+          uploaded = await X.storage.createFile({ bucketId: X.CFG.shopBucketId || 'family-media', fileId: X.ID.unique(), file: new File([blob], 'design.jpg', { type: 'image/jpeg' }),
             permissions: [X.Permission.read(X.Role.user(uid)), X.Permission.update(X.Role.user(uid)), X.Permission.delete(X.Role.user(uid))] });
           if (fid !== X.S.familyId) throw new Error('You switched families. Nothing was added.');
           await shopApi('shopSaveDesign', { familyId: fid, postId: photo.postId, productKey: prod.key, variantId: variant.id, fileId: uploaded.$id, quantity: Number(qtyEl.value),
             spec: { fit: spec.fit, zoom: spec.zoom, ox: spec.ox, oy: spec.oy, caption: spec.caption, srcW: photo.bmp.width, srcH: photo.bmp.height } });
           st().designs = null; toast('Added to your cart.'); location.hash = '#/shop/cart';
         } catch (e) {
-          if (uploaded) X.storage.deleteFile({ bucketId: X.CFG.shopBucketId || 'shop-designs', fileId: uploaded.$id }).catch(function () {});
+          if (uploaded) X.storage.deleteFile({ bucketId: X.CFG.shopBucketId || 'family-media', fileId: uploaded.$id }).catch(function () {});
           X.showAlert(msg, 'error', msgOf(e));
         }
       }, 'Saving…');
@@ -362,7 +362,7 @@
     var list = h('div', { class: 'cart-list' }), summary = h('div', { class: 'card inner' }), form = h('form', { class: 'cart-form', novalidate: true }), msg = h('div');
     designs.forEach(function (d) {
       var img = h('img', { class: 'cart-thumb', alt: 'Your design for ' + d.title });
-      X.fetchMedia(d.fileId, false, X.CFG.shopBucketId || 'shop-designs').then(function (b) { img.src = X.blobUrl(b, 'image/jpeg'); }).catch(function () {});
+      X.fetchMedia(d.fileId, false, X.CFG.shopBucketId || 'family-media').then(function (b) { img.src = X.blobUrl(b, 'image/jpeg'); }).catch(function () {});
       var qty = h('select', { 'aria-label': 'Quantity for ' + d.title, onchange: async function () { try { await shopApi('shopUpdateDesign', { designId: d.id, quantity: Number(qty.value) }); st().requestId = null; X.route(false); } catch (e) { toast(msgOf(e)); } } },
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return h('option', { value: String(n), text: String(n) }); }));
       qty.value = String(d.quantity);
