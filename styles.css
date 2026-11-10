@@ -613,3 +613,7 @@ dialog form input[type="text"] { margin: 8px 0; }
 .act-ico svg { width: 18px; height: 18px; }
 .act-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .topbar-inner .bell ~ * { margin-left: 0; }
+
+/* touch screens keep :hover after a tap, which left the heart looking faded */
+@media (hover: none) { .act:hover, .reel .act:hover { opacity: 1; background: transparent; } }
+.act:focus:not(:focus-visible) { opacity: 1; }

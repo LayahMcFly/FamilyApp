@@ -1032,7 +1032,9 @@
     })));
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
       h('div', { class: 'brand' }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
-      h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity' }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
+      h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity', onclick: function (ev) {
+        if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/home'; }
+      } }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
       familySwitcher()));
     clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
@@ -1072,6 +1074,7 @@
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });
     if (!first) { S.main.focus({ preventScroll: true }); window.scrollTo(0, 0); }
+    if (name !== 'activity') S.beforeActivity = location.hash || '#/home';
     refreshBadge(false);
   }
 
@@ -1396,6 +1399,14 @@
         h('span', { class: 'act-text', text: it.text }),
         h('span', { class: 'small muted', text: timeAgo(it.at) })));
     });
+    var demo = h('div'), demoBtn = h('button', { class: 'btn secondary small', type: 'button', text: 'See an example of what shows up here' });
+    demoBtn.addEventListener('click', function () {
+      var rows = [['heart', 'Grandma Rose liked your post', '2 min ago'], ['comment', 'Uncle Dev commented: Those look delicious!', '10 min ago'], ['heart', 'Uncle Dev and 1 more liked your comment', '1 h ago'], ['flame', 'Your post is trending in the family', '3 h ago']];
+      clear(demo);
+      demo.appendChild(h('p', { class: 'small muted', text: 'Example only. These are not real. Real ones appear when other family members like or comment.' }));
+      rows.forEach(function (r) { demo.appendChild(h('div', { class: 'act-item fresh' }, h('span', { class: 'act-ico' }, icon(r[0])), h('span', { class: 'act-text', text: r[1] }), h('span', { class: 'small muted', text: r[2] }))); });
+    });
+    main.appendChild(h('div', { class: 'row' }, demoBtn)); main.appendChild(demo);
     var now = new Date().toISOString();
     S.badgeAt = Date.now(); setBadge(0);
     try { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { notifSeen: now }) }); } catch (e) { /* badge will return; harmless */ }
