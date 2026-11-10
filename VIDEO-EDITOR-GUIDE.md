@@ -1,6 +1,6 @@
 # Video editor (added in v1.24.0)
 
-When someone picks a video on the Create page, an editing screen opens. Nothing is uploaded until they tap **Post**, and only the edited video is uploaded.
+When someone picks a video on the Create page, an editing screen opens. Nothing is uploaded until they tap **Export and post**. Then the edited video is uploaded and posted in one step, using the caption already typed. The original is never uploaded.
 
 ## What it does
 - **Trim** the start and end (blue handles or typed times).
@@ -30,9 +30,9 @@ FFmpeg for the browser downloads about 30 MB, runs slowly on phones, and its fas
 6. Drag the blue handles, or type times into Start and End.
 7. Move the orange handles around a part, tap **Remove section**, and do it again for a second part. Tap **Play** and check it jumps over the removed parts.
 8. Move the Brightness slider. Tap **Show original colors** to compare, then tap it again.
-9. Tap **Export and continue**. Keep the screen on until it finishes.
-10. Back on the Create page you should see "Edited video ready". Tap **Post**.
-11. Open the post and play it. The removed parts should be gone and the sound should match the picture.
+9. Tap **Export and post**. Keep the screen on until it finishes.
+10. The editor closes and the video uploads and posts by itself. You land on the feed.
+11. Find the post and play it. The removed parts should be gone and the sound should match the picture.
 12. Download the video from the post's ⋯ menu and play it in your phone's normal video app to confirm it plays outside the site.
 13. Privacy check: sign in as someone from a different family (or a second account) and confirm they cannot see the post or the file.
 

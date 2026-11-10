@@ -619,7 +619,7 @@
 
       /* ----- buttons ----- */
       var closeBtn = h('button', { class: 'btn secondary small', type: 'button', text: 'Cancel', onclick: tryCancel });
-      var exportBtn = h('button', { class: 'btn', type: 'button', text: 'Export and continue', onclick: doExport });
+      var exportBtn = h('button', { class: 'btn', type: 'button', text: 'Export and post', onclick: doExport });
       var resetBtn = h('button', { class: 'btn secondary', type: 'button', text: 'Reset edits', onclick: async function () {
         if (busy) return; if (eng) eng.stop(); paintPlayBtn();
         if (!pristine() && !(await confirmBox('Reset all edits (trim, removed sections and colors) to the original video?', 'Reset edits', 'Keep editing'))) return;
@@ -649,7 +649,7 @@
           h('label', { class: 'check', for: 've-mute' }, muteBox, ' Remove the sound from the exported video'),
           phase, prog, msg));
       var foot = h('div', { class: 've-foot' }, resetBtn, origBtn, cancelExportBtn, exportBtn);
-      root.appendChild(h('div', { class: 've-head' }, h('strong', { text: 'Edit video' }), h('span', { class: 'small muted', text: 'Select → Edit → Preview → Export → Post' }), closeBtn));
+      root.appendChild(h('div', { class: 've-head' }, h('strong', { text: 'Edit video' }), h('span', { class: 'small muted', text: 'Edit → Preview → Export and post' }), closeBtn));
       root.appendChild(body); root.appendChild(foot); root.appendChild(host);
       [playBtn, muteBtn, seek].forEach(function () {});
 

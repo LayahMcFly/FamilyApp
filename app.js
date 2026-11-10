@@ -2233,8 +2233,9 @@
         renderUsage(limitsBox, true);
         info.textContent = kind === 'photo'
           ? 'Photos are shrunk to ' + (L.imageMaxEdge || 1600) + ' pixels on the long side before upload, which saves space.'
-          : 'Up to ' + (L.videoMaxMB || 25) + ' MB' + (kind === 'short' ? ', ' + (L.shortMaxSeconds || 60) + ' seconds or less, and vertical (taller than wide)' : '') + '. When you choose a video, an editor opens on your device (trim, cut sections out, adjust colors). Nothing is uploaded until you tap Post, and only the edited video is uploaded.';
+          : 'Up to ' + (L.videoMaxMB || 25) + ' MB' + (kind === 'short' ? ', ' + (L.shortMaxSeconds || 60) + ' seconds or less, and vertical (taller than wide)' : '') + '. When you choose a video, an editor opens on your device (trim, cut sections out, adjust colors). Nothing is uploaded until you finish editing and tap Export and post, and only the edited video is uploaded and posted.';
         fileInput.addEventListener('change', async function (ev) {
+          var autoPost = false;
           var again = ev && ev.isTrusted === false && origFile, keep = again ? { file: file, orig: origFile, state: editState } : null;
           if (!again) { origFile = null; editState = null; }
           file = null; dropPreview(); clear(prev); showAlert(msg, 'error', '');
@@ -2256,8 +2257,9 @@
               }
               if (res.kind === 'edited') {
                 file = res.file; origFile = origFile || f; if (res.state) editState = res;
-                prev.appendChild(h('p', { class: 'small', text: 'Edited video ready: ' + fmtMB(res.file.size) + ' · ' + Math.round(res.duration) + ' seconds. It is uploaded when you tap Post.' }));
+                prev.appendChild(h('p', { class: 'small', text: 'Edited video ready: ' + fmtMB(res.file.size) + ' · ' + Math.round(res.duration) + ' seconds. It is being posted now.' }));
                 prev.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Edit again', onclick: function () { fileInput.dispatchEvent(new Event('change')); } }));
+                if (res.state && !keep) autoPost = true;                 // fresh export: upload and post right away
               } else {
                 if (f.size > (L.videoMaxMB || 25) * 1048576) throw new Error('That video is ' + fmtMB(f.size) + '. The limit is ' + (L.videoMaxMB || 25) + ' MB.');
                 var meta = await probeVideo(f);
@@ -2267,6 +2269,7 @@
                 }
                 file = f; origFile = f; editState = null;
                 prev.appendChild(h('p', { class: 'small', text: f.name + ' · ' + fmtMB(f.size) + ' · ' + Math.round(meta.duration) + ' seconds (not edited)' }));
+                autoPost = true;
               }
             }
             try {
@@ -2275,6 +2278,7 @@
               if (uu.usedBytes + est > uu.limitBytes) throw new Error('Your family has ' + fmtBytes(Math.max(0, uu.limitBytes - uu.usedBytes)) + ' of photo and video space left, and this file needs about ' + fmtBytes(est) + '. Nothing was uploaded and nothing has been deleted. You can remove posts you no longer need, or ask the family owner.');
             } catch (e2) { if (e2 && e2.message && !e2.type && !e2.apiCode && e2.name === 'Error') throw e2; }   // if the usage check itself fails, the server still checks on posting
             if (kind === 'photo') file = f;
+            if (autoPost && file) setTimeout(function () { if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', { cancelable: true })); }, 50);
           } catch (e) { file = null; origFile = null; editState = null; clear(prev); fileInput.value = ''; showAlert(msg, 'error', e.message || friendly(e)); }
         });
       }

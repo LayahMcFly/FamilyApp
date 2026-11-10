@@ -1080,9 +1080,9 @@ dialog input[type="date"] { border-color: transparent; }
 :root { --fun-a: #ff6bb5; --fun-b: #ffb347; --fun-c: #5ad1ff; }
 @media (min-width: 0px) {
   /* buttons: a glow that fades from one color to another (three colored shadows side by side) */
-  .btn:not(.ghost):not(.danger) { box-shadow: -7px 9px 14px -9px var(--fun-a), 7px 9px 14px -9px var(--accent), 0 12px 16px -10px var(--fun-b); }
-  .btn:not(.ghost):not(.danger):hover { box-shadow: -8px 11px 16px -9px var(--fun-a), 8px 11px 16px -9px var(--accent), 0 14px 18px -10px var(--fun-b); transform: translateY(-1px); }
-  .btn.secondary { box-shadow: -6px 8px 12px -9px color-mix(in srgb, var(--fun-a) 70%, transparent), 6px 8px 12px -9px color-mix(in srgb, var(--fun-c) 70%, transparent); }
+  .btn:not(.ghost):not(.danger) { box-shadow: -5px 5px 8px -6px var(--fun-a), 5px 5px 8px -6px var(--accent), 0 6px 9px -7px var(--fun-b); }
+  .btn:not(.ghost):not(.danger):hover { box-shadow: -5px 6px 9px -6px var(--fun-a), 5px 6px 9px -6px var(--accent), 0 7px 10px -7px var(--fun-b); transform: translateY(-1px); }
+  .btn.secondary { box-shadow: -4px 4px 7px -6px color-mix(in srgb, var(--fun-a) 70%, transparent), 4px 4px 7px -6px color-mix(in srgb, var(--fun-c) 70%, transparent); }
   .btn.danger { box-shadow: -6px 8px 12px -8px #ff9a62, 6px 8px 12px -8px var(--danger); }
   .btn { background-image: none; transition: transform .14s cubic-bezier(.3, 1.6, .5, 1), box-shadow .14s, filter .14s; }
   .btn:not(.secondary):not(.ghost):not(.danger) { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--fun-a))); }
@@ -1222,3 +1222,14 @@ form > :is(.btn, button, .link-btn, .row, .stack) + :is(p, .hint, .muted, .small
 .ve-r-warmth { --rtrack: linear-gradient(90deg, #4aa3ff, #dfe9f5 50%, #ffb347 75%, #ff7a1a); }
 .ve .ve-seek { --rtrack: linear-gradient(90deg, var(--accent) var(--pct, 0%), var(--surface-2) var(--pct, 0%)); }
 .ve-adjrow { row-gap: 6px; margin-bottom: 6px; }
+
+/* v1.24.2 tighter button glow, and room around buttons in dialogs and everywhere else */
+.btn, .link-btn, button.btn { box-shadow-color: initial; }
+:is(.btn, .link-btn, button.secondary, button.danger) + :is(p, .hint, .muted, .small, ul, ol, h2, h3, strong, section, fieldset) { margin-top: 16px; }
+:is(p, .hint, .muted, ul, ol, h2, h3) + :is(button.btn, a.btn, .link-btn):not(.small) { margin-top: 14px; }
+dialog form > * + *, dialog .stack > * + * { margin-top: 14px; }
+dialog p + button, dialog p + .row, dialog .row + p, dialog button + p, dialog button + .row, dialog .row + .row { margin-top: 14px; }
+dialog .row { gap: 12px; }
+dialog h2 + button, dialog h3 + button, dialog h3 + .row { margin-top: 12px; }
+dialog :not(.row):not(.chips) > :is(h1, h2, h3, h4, strong, label, legend, div, select, input, p, fieldset) + :is(button.btn, a.btn) { margin-top: 14px; }
+dialog :not(.row):not(.chips) > :is(button.btn, a.btn) + :is(button.btn, a.btn, div, label, select, input, h3, h4, strong) { margin-top: 14px; }
