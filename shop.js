@@ -81,7 +81,7 @@
     var grid = h('div', { class: 'shop-grid' });
     slots.forEach(function (slot) {
       var p = productByKey(cat, slot.key);
-      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key }, h('strong', { text: p.title }), p.blurb ? h('span', { class: 'small', text: p.blurb }) : null, h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
+      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key }, cardImg(p), h('strong', { text: p.title }), p.blurb ? h('span', { class: 'small', text: p.blurb }) : null, h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
       else grid.appendChild(h('div', { class: 'shop-card off', 'aria-disabled': 'true' }, h('strong', { text: slot.title }), h('span', { class: 'small', text: 'Not available yet' })));
     });
     main.appendChild(grid);
@@ -111,7 +111,7 @@
       if (!mine && !ok.allowed[postId]) { holder.appendChild(h('p', { text: 'The person who posted this photo has not allowed it to be used for gifts. You can ask them to turn it on from the ⋯ menu on the photo.' })); return; }
       holder.appendChild(h('p', { class: 'muted', text: 'Choose a product for this photo.' }));
       var grid = h('div', { class: 'shop-grid' });
-      cat.products.forEach(function (p) { grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key + '/' + postId }, h('strong', { text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) }))); });
+      cat.products.forEach(function (p) { grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key + '/' + postId }, cardImg(p), h('strong', { text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) }))); });
       holder.appendChild(cat.products.length ? grid : h('p', { class: 'hint', text: 'No products are switched on yet.' }));
     } catch (e) { if (token === X.S.nav) { clear(holder); holder.appendChild(X.alertBox('error', msgOf(e))); } }
   }
@@ -122,6 +122,7 @@
     variants.forEach(function (v) { Object.keys(v.options || {}).forEach(function (k) { if (names.indexOf(k) < 0) names.push(k); }); });
     return names.filter(function (n) { var seen = {}; variants.forEach(function (v) { seen[(v.options || {})[n]] = 1; }); return Object.keys(seen).length > 1; });
   }
+  function cardImg(p) { return p.image ? h('img', { class: 'shop-thumb', src: p.image, alt: '', loading: 'lazy' }) : null; }
   function pretty(s) { return String(s || '').replace(/^./, function (c) { return c.toUpperCase(); }); }
 
   // Where the photo sits inside the print area. All numbers are in print-area pixels.
@@ -170,6 +171,7 @@
     if (!prod) { clear(holder); holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That product is not available right now.' }), h('a', { class: 'btn', href: '#/shop', text: 'Back to the shop' }))); return; }
     main.firstChild.querySelector('h1') && (main.firstChild.querySelector('h1').textContent = prod.title);
     clear(holder);
+    if (prod.image) holder.appendChild(h('img', { class: 'shop-hero', src: prod.image, alt: prod.title + ' (sample product picture)' }));
 
     var groups = optionGroups(prod.variants), chosen = {}, variant = prod.variants[0];
     groups.forEach(function (g) { chosen[g] = (variant.options || {})[g]; });

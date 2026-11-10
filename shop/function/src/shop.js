@@ -164,7 +164,16 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   /* ---------- catalog action ---------- */
   async function catalogAction({ user, body }) {
     await requireMember(user, body.familyId);
-    const products = (await enabledProducts()).map(publicProduct);
+    const enabled = await enabledProducts();
+    const products = enabled.map(publicProduct);
+    try {
+      const byId = new Map((await printify.listBlueprints()).map((b) => [Number(b.id), b]));
+      enabled.forEach(({ row }, i) => {
+        const b = byId.get(Number(row.blueprintId));
+        const img = b && Array.isArray(b.images) ? b.images.find((u) => typeof u === 'string' && u.startsWith('https://images.printify.com/')) : '';
+        if (img) products[i].image = img;
+      });
+    } catch (e) { /* pictures are optional */ }
     return {
       products,
       slots: Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, section: s.section || 'gifts', available: products.some((p) => p.key === key) })),

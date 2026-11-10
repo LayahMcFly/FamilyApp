@@ -71,7 +71,7 @@ function world(over = {}) {
     getOrder: async (id) => printify.__order || { id, status: 'pending', metadata: {} },
     cancelOrder: async (id) => { pcalls.push(['cancel', id]); },
     listWebhooks: async () => [], createWebhook: async (t) => { pcalls.push(['hook', t]); return {}; },
-    listBlueprints: async () => [{ id: 7, title: 'Framed Poster', brand: 'Acme', model: 'fp' }],
+    listBlueprints: async () => [{ id: 7, title: 'Framed Poster', brand: 'Acme', model: 'fp', images: ['http://evil.example/x.jpg', 'https://images.printify.com/a.jpg'] }],
     listProviders: async () => [{ id: 3, title: 'Prov', production_time: { average: 4 } }],
     listVariants: async () => ({ variants: [VAR, { id: 102, title: '16x20 / Black', options: {}, placeholders: [{ position: 'front', width: 1600, height: 2000 }] }] })
   };
@@ -124,6 +124,7 @@ test('only the owner can set up products; the server checks IDs against Printify
   c = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' }); assert.equal(c.products.length, 0, 'saved but not enabled');
   await w.ok(w.O, 'shopAdminToggle', { key: 'mug', enabled: true });
   c = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' }); assert.equal(c.products[0].variants[0].priceCents, 1500);
+  assert.equal(c.products[0].image, 'https://images.printify.com/a.jpg', 'only Printify pictures are passed on');
   assert.equal(JSON.stringify(c).includes('blueprint'), false, 'no Printify ids go to shoppers');
   assert.equal((await w.call(w.C, 'shopCatalog', { familyId: 'fam1' })).status, 403, 'other family');
 });
