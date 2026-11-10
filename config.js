@@ -10,13 +10,13 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.5.1",
+  version: "1.6.0",
 
   // One-line promise shown on the sign-in screens and in the footer. Only say what is true today.
   tagline: "A private place for your family. No ads. No subscriptions.",
 
   // Where feedback, bug reports and questions go (GitHub Issues on the project repo).
-  feedbackUrl: "https://github.com/LayahMcFly/FamilyCircle/issues/new/choose",
+  feedbackUrl: "https://github.com/layahmcfly/FamilyCirle/issues/new/choose",
   githubUrl: "https://github.com/layahmcfly",
 
   // <<< REPLACE: copy the "API Endpoint" from Appwrite Console > your project > Settings.
@@ -54,6 +54,9 @@ window.FAMILY_CONFIG = {
     shortMaxSeconds: 60,     // Shorts must be this long or shorter, and vertical
     bodyMax: 2000,           // max characters in a post
     commentMax: 500,         // max characters in a comment
-    pageSize: 10             // posts loaded per "Load more"
+    pageSize: 10,            // posts loaded per "Load more"
+    trendingShare: 0.5,      // a post trends when this share of the OTHER family members liked it
+    trendingMin: 2,          // ...but never fewer than this many likes (or everyone, in a tiny family)
+    trendingDays: 14         // only likes from the last this-many days count
   }
 };

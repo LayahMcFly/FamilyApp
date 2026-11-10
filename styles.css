@@ -586,3 +586,30 @@ dialog form input[type="text"] { margin: 8px 0; }
 .switch-row > span > span { display: block; margin-top: 4px; }
 .card:not(article) .btn.secondary, .card:not(article) .chip { background: var(--bg); }
 .card:not(article) .chip[aria-pressed="true"] { background: var(--text); }
+
+/* v1.6 — activity, trending, comment likes and pins */
+.bell { position: relative; margin-left: auto; margin-right: 8px; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; color: var(--text); border-radius: 50%; }
+.bell svg { width: 24px; height: 24px; }
+.bell-badge { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #ed4956; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.bell-badge[hidden] { display: none; }
+.trending { margin: 4px 0 14px; }
+.trend-title { font-size: 1rem; display: flex; align-items: center; gap: 6px; margin: 0 0 8px; }
+.trend-title svg, .badge.hot svg { width: 16px; height: 16px; color: #ff6a00; }
+.trend-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+.trend-card { flex: 0 0 220px; scroll-snap-align: start; display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); color: var(--text); text-decoration: none; }
+.trend-snip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.badge.hot { display: inline-flex; align-items: center; gap: 3px; }
+.comment-actions { display: flex; gap: 14px; align-items: center; margin-top: 4px; }
+.like-c { display: inline-flex; align-items: center; gap: 4px; }
+.like-c svg { width: 15px; height: 15px; }
+.like-c.on { color: #ed4956; }
+.like-c.on svg { fill: currentColor; }
+.pin-flag { display: flex; align-items: center; gap: 4px; color: var(--muted); margin-bottom: 2px; }
+.pin-flag svg { width: 14px; height: 14px; }
+.activity { display: flex; flex-direction: column; }
+.act-item { display: flex; align-items: center; gap: 12px; padding: 12px 8px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; }
+.act-item.fresh { background: var(--surface-2); }
+.act-ico { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 50%; background: var(--surface-2); flex: none; }
+.act-ico svg { width: 18px; height: 18px; }
+.act-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.topbar-inner .bell ~ * { margin-left: 0; }

@@ -324,3 +324,5 @@ Use one normal window and one private window, with two different email addresses
 | `SETUP-GUIDE.md` | This guide. |
 
 > **Added in v1.4.0 (Saved libraries):** open Databases > family > `bookmarks` > Columns > Create column > String. Key `collectionId`, size `24`, not required. New installs made with the setup script get this column automatically.
+
+> **Added in v1.6.0 (comment likes, pinned comments):** two more columns, both String and not required. In `posts`: key `pinnedCommentIds`, size `120`. In `comments`: key `likedBy`, size `36`, and turn **Array** on. Then redeploy the `family-api` Function with the new package. New installs made with the setup script get both automatically. Notifications and Trending need no setup.

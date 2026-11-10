@@ -343,6 +343,47 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       return { commentId: row.$id };
     },
 
+    /** Like or unlike a comment. The list of likers lives on the comment row (column `likedBy`, a list of user ids). */
+    async toggleCommentLike({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      const commentId = idOf(body.commentId, 'commentId');
+      const c = await getRowOrNull(TABLES.comments, commentId);
+      if (!c || c.familyId !== familyId) throw missing('That comment was not found in this family.');
+      const list = Array.isArray(c.likedBy) ? c.likedBy.filter((x) => typeof x === 'string') : [];
+      const had = list.includes(user.$id);
+      const next = had ? list.filter((x) => x !== user.$id) : [...list, user.$id].slice(-200);
+      try {
+        await updateRow(TABLES.comments, c.$id, { likedBy: next });
+      } catch (e) {
+        if (sdkCode(e) === 400) throw bad('Comment likes need one more setup step: add the likedBy column to the comments table (see the Setup Guide).');
+        throw e;
+      }
+      return { liked: !had, count: next.length };
+    },
+
+    /** Post author only. Up to 3 pinned comments per post, kept as a comma list in `pinnedCommentIds`. */
+    async pinComment({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      const post = await loadPostInFamily(familyId, body.postId);
+      if (post.authorId !== user.$id) throw forbidden('Only the person who made the post can pin comments.');
+      const commentId = idOf(body.commentId, 'commentId');
+      const c = await getRowOrNull(TABLES.comments, commentId);
+      if (!c || c.familyId !== familyId || c.postId !== post.$id) throw missing('That comment was not found on this post.');
+      const cur = String(post.pinnedCommentIds || '').split(',').filter(Boolean);
+      let next;
+      if (body.pinned === false) next = cur.filter((x) => x !== commentId);
+      else if (cur.includes(commentId)) next = cur;
+      else if (cur.length >= 3) throw new ApiError(409, 'quota', 'You can pin up to 3 comments. Unpin one first.');
+      else next = [...cur, commentId];
+      try {
+        await updateRow(TABLES.posts, post.$id, { pinnedCommentIds: next.join(',') });
+      } catch (e) {
+        if (sdkCode(e) === 400) throw bad('Pinning needs one more setup step: add the pinnedCommentIds column to the posts table (see the Setup Guide).');
+        throw e;
+      }
+      return { pinned: next };
+    },
+
     async deleteComment({ user, body }) {
       const { familyId, isOwner } = await requireMember(user, body.familyId);
       const commentId = idOf(body.commentId, 'commentId');

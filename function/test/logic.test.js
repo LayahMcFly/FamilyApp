@@ -444,3 +444,37 @@ test('libraries: save into one, move between them, back to Saved for later; only
   assert.equal((await s.call(s.alice, { action: 'toggleBookmark', familyId: 'famA', postId, collectionId: 'trips1' })).json.saved, true);
   assert.equal([...s.world.tables[TABLES.bookmarks].values()].find((r) => r.userId === 'alice').collectionId, 'trips1');
 });
+
+test('comment likes and pins: members like, only the post author pins, three at most', async () => {
+  const s = await setup();
+  const p = await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'hello' });
+  const postId = p.json.postId;
+  const mk = async (u, text) => (await s.call(u, { action: 'createComment', familyId: 'famA', postId, body: text })).json.commentId;
+  const c1 = await mk(s.bob, 'one'), c2 = await mk(s.bob, 'two'), c3 = await mk(s.bob, 'three'), c4 = await mk(s.bob, 'four');
+  const row = (id) => s.world.tables[TABLES.comments].get(id);
+  // like, count, unlike
+  let r = await s.call(s.alice, { action: 'toggleCommentLike', familyId: 'famA', commentId: c1 });
+  assert.deepEqual([r.status, r.json.liked, r.json.count], [200, true, 1]);
+  r = await s.call(s.bob, { action: 'toggleCommentLike', familyId: 'famA', commentId: c1 });
+  assert.equal(r.json.count, 2);
+  assert.deepEqual(row(c1).likedBy.sort(), ['alice', 'bob']);
+  r = await s.call(s.alice, { action: 'toggleCommentLike', familyId: 'famA', commentId: c1 });
+  assert.deepEqual([r.json.liked, r.json.count], [false, 1]);
+  // outsiders and other families cannot like
+  assert.equal((await s.call(s.dave, { action: 'toggleCommentLike', familyId: 'famA', commentId: c1 })).status, 403);
+  assert.equal((await s.call(s.carol, { action: 'toggleCommentLike', familyId: 'famB', commentId: c1 })).status, 404);
+  // only the post author pins
+  assert.equal((await s.call(s.bob, { action: 'pinComment', familyId: 'famA', postId, commentId: c1 })).status, 403);
+  for (const c of [c1, c2, c3]) assert.equal((await s.call(s.alice, { action: 'pinComment', familyId: 'famA', postId, commentId: c })).status, 200);
+  const four = await s.call(s.alice, { action: 'pinComment', familyId: 'famA', postId, commentId: c4 });
+  assert.equal(four.status, 409);
+  assert.equal(s.world.tables[TABLES.posts].get(postId).pinnedCommentIds, `${c1},${c2},${c3}`);
+  // pinning twice is harmless; unpin frees a slot
+  assert.equal((await s.call(s.alice, { action: 'pinComment', familyId: 'famA', postId, commentId: c1 })).json.pinned.length, 3);
+  assert.deepEqual((await s.call(s.alice, { action: 'pinComment', familyId: 'famA', postId, commentId: c2, pinned: false })).json.pinned, [c1, c3]);
+  assert.equal((await s.call(s.alice, { action: 'pinComment', familyId: 'famA', postId, commentId: c4 })).status, 200);
+  // a comment from another post cannot be pinned here
+  const p2 = await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'other' });
+  const other = (await s.call(s.bob, { action: 'createComment', familyId: 'famA', postId: p2.json.postId, body: 'x' })).json.commentId;
+  assert.equal((await s.call(s.alice, { action: 'pinComment', familyId: 'famA', postId, commentId: other })).status, 404);
+});

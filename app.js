@@ -77,7 +77,10 @@
     edit: ['M4 20h4L19 9l-4-4L4 16z'],
     trash: ['M4 7h16', 'M9 7V4h6v3', 'M6 7l1 13h10l1-13'],
     volume: ['M4 9v6h4l5 4V5L8 9z', 'M16.5 9a4 4 0 0 1 0 6', 'M19 6.5a8 8 0 0 1 0 11'],
-    mute: ['M4 9v6h4l5 4V5L8 9z', 'M17 9.5l5 5', 'M22 9.5l-5 5']
+    mute: ['M4 9v6h4l5 4V5L8 9z', 'M17 9.5l5 5', 'M22 9.5l-5 5'],
+    pin: ['M9 4h6l-1 6 3 3H7l3-3z', 'M12 13v7'],
+    bell: ['M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z', 'M10 21h4'],
+    flame: ['M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .2 1.2.8 2 1.7 2.3C10.2 8.5 10.5 5.5 12 3z']
   };
   function icon(name) {
     var s = document.createElementNS(SVG_NS, 'svg');
@@ -1029,6 +1032,7 @@
     })));
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
       h('div', { class: 'brand' }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
+      h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity' }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
       familySwitcher()));
     clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
@@ -1051,7 +1055,8 @@
       });
       return;
     }
-    var name = (location.hash.replace(/^#\/?/, '') || 'home').split('?')[0];
+    var segs = (location.hash.replace(/^#\/?/, '') || 'home').split('?')[0].split('/');
+    var name = segs[0], param = segs[1] || '';
     if (!VIEWS[name]) name = 'home';
     S.nav++;
     var token = S.nav;
@@ -1062,11 +1067,12 @@
       if (a.getAttribute('data-route') === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
-    document.title = (meta ? meta.label : 'New family') + ' · ' + (CFG.appName || 'Family Circle');
-    Promise.resolve().then(function () { return VIEWS[name](S.main, token); }).catch(function (e) {
+    document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
+    Promise.resolve().then(function () { return VIEWS[name](S.main, token, param); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });
     if (!first) { S.main.focus({ preventScroll: true }); window.scrollTo(0, 0); }
+    refreshBadge(false);
   }
 
   /* =====================================================================
@@ -1265,15 +1271,164 @@
     return load();
   }
 
-  VIEWS.home = function (main, token) {
+
+  /* =====================================================================
+   * TRENDING + ACTIVITY (notifications are worked out from existing rows; nothing extra is stored
+   * except the time I last opened Activity, kept in my account prefs as notifSeen)
+   * ===================================================================== */
+
+  async function memberCount() {
+    var c = S.memberCache;
+    if (c && c.fid === S.familyId && Date.now() - c.at < 5 * 60 * 1000) return c.n;
+    var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
+    var n = res.memberships.filter(function (m) { return m.confirm; }).length;
+    S.memberCache = { fid: S.familyId, at: Date.now(), n: n };
+    return n;
+  }
+
+  // A post is trending when enough OTHER family members liked it: half of the others (at least 2, or everyone if the family is tiny).
+  async function getTrending(force) {
+    var c = S.trend;
+    if (!force && c && c.fid === S.familyId && Date.now() - c.at < 60000) return c;
+    var out = { fid: S.familyId, at: Date.now(), items: [], ids: new Set() };
+    try {
+      var others = Math.max(0, (await memberCount()) - 1);
+      if (others >= 1) {
+        var need = Math.min(others, Math.max(L.trendingMin || 2, Math.ceil(others * (L.trendingShare || 0.5))));
+        var since = Date.now() - (L.trendingDays || 14) * 86400000;
+        var rows = await listAllRows('reactions', [Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt')], 300);
+        var per = {};
+        rows.forEach(function (r) { if (new Date(r.$createdAt).getTime() >= since) (per[r.postId] = per[r.postId] || []).push(r); });
+        var cand = Object.keys(per).filter(function (id) { return per[id].length >= need; }).slice(0, 100);
+        if (cand.length) {
+          var posts = (await listRows('posts', [Query.equal('$id', cand), Query.limit(100)])).rows;
+          await ensureProfiles(posts.map(function (p) { return p.authorId; }));
+          posts.forEach(function (p) {
+            if (p.familyId !== S.familyId) return;
+            var likes = (per[p.$id] || []).filter(function (r) { return r.userId !== p.authorId; })
+              .sort(function (a, b) { return new Date(a.$createdAt) - new Date(b.$createdAt); });
+            if (likes.length < need) return;
+            out.items.push({ post: p, count: likes.length, at: likes[need - 1].$createdAt });
+            out.ids.add(p.$id);
+          });
+          out.items.sort(function (a, b) { return b.count - a.count || new Date(b.at) - new Date(a.at); });
+        }
+      }
+    } catch (e) { /* trending is a bonus; never block the feed */ }
+    S.trend = out;
+    return out;
+  }
+
+  function trendingStrip(t) {
+    if (!t.items.length) return null;
+    return h('section', { class: 'trending', 'aria-label': 'Trending in the family' },
+      h('h2', { class: 'trend-title' }, icon('flame'), ' Trending in the family'),
+      h('div', { class: 'trend-row' }, t.items.slice(0, 5).map(function (it) {
+        var p = S.profiles.get(it.post.authorId);
+        var snippet = it.post.body ? String(it.post.body).slice(0, 70) : ({ photo: 'A photo', video: 'A video', short: 'A Short' }[it.post.kind] || 'A post');
+        return h('a', { class: 'trend-card', href: '#/post/' + it.post.$id },
+          h('strong', { text: p ? p.displayName : 'Family member' }),
+          h('span', { class: 'trend-snip', text: snippet }),
+          h('span', { class: 'small muted', text: it.count + ' family members liked this' }));
+      })));
+  }
+
+  async function getActivity() {
+    var me = S.user.$id, items = [];
+    var posts = (await listRows('posts', [Query.equal('familyId', [S.familyId]), Query.equal('authorId', [me]), Query.orderDesc('$createdAt'), Query.limit(40)])).rows;
+    var mine = {}; posts.forEach(function (p) { mine[p.$id] = p; });
+    var ids = posts.map(function (p) { return p.$id; });
+    var results = await Promise.all([
+      ids.length ? listRows('reactions', [Query.equal('postId', ids), Query.orderDesc('$createdAt'), Query.limit(100)]) : { rows: [] },
+      ids.length ? listRows('comments', [Query.equal('postId', ids), Query.orderDesc('$createdAt'), Query.limit(100)]) : { rows: [] },
+      listRows('comments', [Query.equal('familyId', [S.familyId]), Query.equal('authorId', [me]), Query.orderDesc('$updatedAt'), Query.limit(40)]),
+      getTrending(false)
+    ]);
+    var reacts = results[0].rows, coms = results[1].rows, myComs = results[2].rows, trend = results[3];
+    var who = [];
+    reacts.forEach(function (r) { who.push(r.userId); });
+    coms.forEach(function (c) { who.push(c.authorId); });
+    myComs.forEach(function (c) { (c.likedBy || []).forEach(function (u) { who.push(u); }); });
+    await ensureProfiles(who);
+    function nm(id) { var p = S.profiles.get(id); return p ? p.displayName : 'A family member'; }
+    reacts.forEach(function (r) { if (r.userId !== me) items.push({ type: 'like', postId: r.postId, at: r.$createdAt, text: nm(r.userId) + ' liked your post' }); });
+    coms.forEach(function (c) { if (c.authorId !== me) items.push({ type: 'comment', postId: c.postId, at: c.$createdAt, text: nm(c.authorId) + ' commented: ' + String(c.body).slice(0, 80) }); });
+    myComs.forEach(function (c) {
+      var others = (c.likedBy || []).filter(function (u) { return u !== me; });
+      if (others.length) items.push({ type: 'clike', postId: c.postId, at: c.$updatedAt, text: (others.length === 1 ? nm(others[0]) : nm(others[0]) + ' and ' + (others.length - 1) + ' more') + ' liked your comment' });
+    });
+    trend.items.forEach(function (it) { if (mine[it.post.$id]) items.push({ type: 'trend', postId: it.post.$id, at: it.at, text: 'Your post is trending in the family' }); });
+    items.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
+    return items.slice(0, 60);
+  }
+
+  function setBadge(n) {
+    var b = document.getElementById('bell-badge'); if (!b) return;
+    b.textContent = n > 9 ? '9+' : String(n); b.hidden = !n;
+    var bell = document.getElementById('bell');
+    if (bell) bell.setAttribute('aria-label', n ? 'Activity, ' + n + ' new' : 'Activity');
+  }
+  function seenAt() { var v = S.user && S.user.prefs && S.user.prefs.notifSeen; return v ? new Date(v).getTime() : 0; }
+  async function refreshBadge(force) {
+    if (!S.user || !S.familyId) return;
+    if (!force && S.badgeAt && Date.now() - S.badgeAt < 60000) return;
+    S.badgeAt = Date.now();
+    try {
+      var items = await getActivity(), seen = seenAt();
+      setBadge(items.filter(function (i) { return new Date(i.at).getTime() > seen; }).length);
+    } catch (e) { /* quiet */ }
+  }
+
+  VIEWS.activity = async function (main, token) {
+    main.appendChild(h('h1', { text: 'Activity' }));
+    main.appendChild(h('p', { class: 'muted small', text: 'Likes and comments on your posts, likes on your comments, and when a post of yours is trending. These show while the app is open; the app cannot send alerts when it is closed.' }));
+    var box = h('div', { class: 'activity' }, spinnerLine('Loading…'));
+    main.appendChild(box);
+    var items = await getActivity();
+    if (token !== S.nav) return;
+    var seen = seenAt();
+    clear(box);
+    if (!items.length) box.appendChild(h('div', { class: 'empty' }, h('p', { text: 'Nothing yet. When someone likes or comments on your post, it shows up here.' })));
+    items.forEach(function (it) {
+      var fresh = new Date(it.at).getTime() > seen;
+      box.appendChild(h('a', { class: 'act-item' + (fresh ? ' fresh' : ''), href: '#/post/' + it.postId },
+        h('span', { class: 'act-ico' }, icon(it.type === 'comment' ? 'comment' : it.type === 'trend' ? 'flame' : 'heart')),
+        h('span', { class: 'act-text', text: it.text }),
+        h('span', { class: 'small muted', text: timeAgo(it.at) })));
+    });
+    var now = new Date().toISOString();
+    S.badgeAt = Date.now(); setBadge(0);
+    try { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { notifSeen: now }) }); } catch (e) { /* badge will return; harmless */ }
+  };
+
+  VIEWS.post = async function (main, token, id) {
+    main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/home', text: '← Back to Home' })));
+    var holder = h('div', null, spinnerLine('Loading…'));
+    main.appendChild(holder);
+    var rows = id ? (await listRows('posts', [Query.equal('$id', [id]), Query.limit(1)])).rows : [];
+    if (token !== S.nav) return;
+    clear(holder);
+    var post = rows[0];
+    if (!post || post.familyId !== S.familyId) { holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That post is not available. It may have been deleted.' }))); return; }
+    var meta = await decorate([post]);
+    if (token !== S.nav) return;
+    holder.appendChild(postCard(post, meta[post.$id], null, {}));
+    var btn = holder.querySelector('.act[aria-expanded]');
+    if (btn) btn.click();
+  };
+
+  VIEWS.home = async function (main, token) {
     main.appendChild(h('h1', { class: 'sr-only', text: 'Home' }));
     var people = Array.from(S.profiles.values());
+    var trend = await getTrending(false);
+    if (token !== S.nav) return;
     if (people.length) {
       main.appendChild(h('div', { class: 'stories', role: 'list', 'aria-label': 'Family members' }, people.map(function (p) {
         var first = String(p.displayName || '').split(' ')[0];
         return h('div', { class: 'story', role: 'listitem' }, h('div', { class: 'ring' }, avatarEl(p, 'lg')), h('span', { text: p.userId === S.user.$id ? 'You' : first }));
       })));
     }
+    append(main, trendingStrip(trend));
     return pagedFeed(token, main, function (c) { return fetchPostsPage(null, c); }, {
       emptyTitle: 'No posts yet.', emptyHint: 'Be the first to share something with the family.',
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a post' })
@@ -1367,6 +1522,7 @@
     (isReel ? info : card).appendChild(h('div', { class: 'post-head' }, avatarEl(prof),
       h('div', { class: 'who' }, h('div', { class: 'name', text: name }),
         h('div', { class: 'small muted' }, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), edited ? ' · edited' : '')),
+      S.trend && S.trend.ids.has(post.$id) ? h('span', { class: 'badge hot' }, icon('flame'), ' Trending') : null,
       kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null));
 
     // text (can be swapped for an editor)
@@ -1488,24 +1644,71 @@
     var send = h('button', { class: 'btn small', type: 'submit', text: 'Comment' });
     var wrap = h('div', { class: 'comments' }, list, status);
 
-    function commentItem(c) {
+    function pinnedIds() { return String(post.pinnedCommentIds || '').split(',').filter(Boolean); }
+    function isPinned(c) { return pinnedIds().indexOf(c.$id) !== -1; }
+    var isAuthor = post.authorId === uid;
+    function redraw(rows) {
+      clear(list);
+      var pins = pinnedIds();
+      var sorted = rows.filter(function (c) { return pins.indexOf(c.$id) !== -1; })
+        .concat(rows.filter(function (c) { return pins.indexOf(c.$id) === -1; }));
+      sorted.forEach(function (c) { list.appendChild(commentItem(c, rows)); });
+    }
+    function commentItem(c, rows) {
       var p = S.profiles.get(c.authorId) || null;
-      var del = null;
-      var item = h('div', { class: 'comment' });
+      var del = null, pin = null;
+      var item = h('div', { class: 'comment' + (isPinned(c) ? ' pinned' : '') });
+      var liked = Array.isArray(c.likedBy) ? c.likedBy.slice() : [];
+      var likeBtn = h('button', { class: 'link-btn small like-c', type: 'button' });
+      function paintC() {
+        var on = liked.indexOf(uid) !== -1;
+        clear(likeBtn); likeBtn.appendChild(icon('heart'));
+        if (liked.length) likeBtn.appendChild(h('span', { text: String(liked.length) }));
+        likeBtn.classList.toggle('on', on);
+        likeBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        likeBtn.setAttribute('aria-label', (on ? 'Remove your like from this comment. ' : 'Like this comment. ') + liked.length + ' likes');
+      }
+      likeBtn.addEventListener('click', async function () {
+        if (likeBtn.disabled) return; likeBtn.disabled = true;
+        try {
+          var r = await api('toggleCommentLike', { familyId: S.familyId, commentId: c.$id });
+          liked = liked.filter(function (x) { return x !== uid; });
+          if (r.liked) liked.push(uid);
+          c.likedBy = liked;
+        } catch (e) { toast(friendly(e)); }
+        likeBtn.disabled = false; paintC();
+      });
+      paintC();
+      if (isAuthor) {
+        pin = h('button', { class: 'link-btn small', type: 'button', text: isPinned(c) ? 'Unpin' : 'Pin', 'aria-label': isPinned(c) ? 'Unpin this comment' : 'Pin this comment to the top', onclick: async function () {
+          try {
+            var r = await api('pinComment', { familyId: S.familyId, postId: post.$id, commentId: c.$id, pinned: !isPinned(c) });
+            post.pinnedCommentIds = r.pinned.join(',');
+            if (rows) redraw(rows);
+          } catch (e) { toast(friendly(e)); }
+        } });
+      }
       if (c.authorId === uid || S.isOwner) {
         del = h('button', { class: 'link-btn small', type: 'button', text: 'Delete', 'aria-label': 'Delete this comment', onclick: async function () {
           var ok = await confirmDialog('Delete this comment?', 'This cannot be undone.', 'Delete');
           if (!ok) return;
-          try { await api('deleteComment', { familyId: S.familyId, commentId: c.$id }); if (item.parentNode) item.parentNode.removeChild(item); st.comments = Math.max(0, st.comments - 1); onCount(); }
+          try {
+            await api('deleteComment', { familyId: S.familyId, commentId: c.$id });
+            if (rows) { var i = rows.indexOf(c); if (i !== -1) rows.splice(i, 1); }
+            if (item.parentNode) item.parentNode.removeChild(item); st.comments = Math.max(0, st.comments - 1); onCount();
+          }
           catch (e) { toast(friendly(e)); }
         } });
       }
       item.appendChild(avatarEl(p));
       item.appendChild(h('div', { class: 'bubble' },
+        isPinned(c) ? h('div', { class: 'pin-flag small' }, icon('pin'), ' Pinned by the author') : null,
         h('div', { class: 'small' }, h('strong', { text: p ? p.displayName : 'Family member' }), ' ', h('span', { class: 'muted', text: timeAgo(c.$createdAt) })),
-        h('div', { class: 'comment-body', text: c.body }), del));
+        h('div', { class: 'comment-body', text: c.body }),
+        h('div', { class: 'comment-actions' }, likeBtn, pin, del)));
       return item;
     }
+    var loaded = [];
 
     status.appendChild(spinnerLine('Loading comments…'));
     (async function () {
@@ -1513,7 +1716,7 @@
         var rows = await listAllRows('comments', [Query.equal('postId', [post.$id]), Query.orderAsc('$createdAt')], 200);
         await ensureProfiles(rows.map(function (c) { return c.authorId; }));
         clear(status);
-        rows.forEach(function (c) { list.appendChild(commentItem(c)); });
+        loaded = rows; redraw(loaded);
         if (!rows.length) status.appendChild(h('p', { class: 'muted small', text: 'No comments yet.' }));
         st.comments = rows.length; onCount();
       } catch (e) { clear(status); status.appendChild(alertBox('error', friendly(e))); }
@@ -1526,9 +1729,9 @@
       busy(send, async function () {
         try {
           var made = await api('createComment', { familyId: S.familyId, postId: post.$id, body: text });
-          var row = { $id: made.commentId, authorId: uid, body: text, $createdAt: new Date().toISOString() };
+          var row = { $id: made.commentId, authorId: uid, body: text, likedBy: [], $createdAt: new Date().toISOString() };
           S.profiles.set(uid, S.profile);
-          clear(status); list.appendChild(commentItem(row));
+          clear(status); loaded.push(row); list.appendChild(commentItem(row, loaded));
           ta.value = ''; showAlert(msg, 'error', '');
           st.comments++; onCount();
         } catch (e) { showAlert(msg, 'error', friendly(e)); }
@@ -2021,6 +2224,7 @@
     if (action) await handleAction(action);
     await loadSession();
     window.addEventListener('hashchange', function () { route(false); });
+    setInterval(function () { if (!document.hidden) refreshBadge(true); }, 90000);
     render();
   }
 
