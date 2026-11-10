@@ -1004,8 +1004,8 @@
 
   var NAV = [
     { id: 'home', label: 'Home', icon: 'home' },
-    { id: 'create', label: 'Create', icon: 'plus' },
     { id: 'shorts', label: 'Shorts', icon: 'shorts' },
+    { id: 'create', label: 'Create', icon: 'plus' },
     { id: 'saved', label: 'Saved', icon: 'bookmark' },
     { id: 'profile', label: 'Profile', icon: 'user' }
   ];

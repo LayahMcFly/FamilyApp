@@ -676,3 +676,14 @@ select { width: 100%; }
 /* Shorts shown inside a normal feed card: anchor the sound button and progress bar to the video itself */
 article.card .reel-media { position: relative; }
 article.card .reel-sound { top: 12px; }
+
+/* v1.7.6 — the Create button sits in the middle of the bar and rises above it */
+.nav ul { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 899px) {
+  .nav a[data-route="create"], .nav a[data-route="create"][aria-current="page"] {
+    width: 58px; height: 58px; min-height: 58px; padding: 0; margin: -24px auto 0; align-self: start; border-radius: 50%;
+    color: #fff; background: linear-gradient(135deg, #2563eb, #7c4dbd);
+    box-shadow: 0 0 0 5px var(--bg), 0 8px 18px -6px rgba(37, 99, 235, .65);
+  }
+  .nav a[data-route="create"] svg { width: 28px; height: 28px; stroke-width: 2.4; }
+}
