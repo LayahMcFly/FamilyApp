@@ -10,7 +10,7 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.27.3",
+  version: "1.28.0",
 
   // Automatic captions are made on the phone with this speech model (English only). "Xenova/whisper-tiny.en" is about 40 MB;
   // "Xenova/whisper-base.en" is more accurate but about 3 times bigger and slower.
@@ -40,6 +40,12 @@ window.FAMILY_CONFIG = {
   // There is NO family or team ID in this file: every family creates its own Appwrite Team
   // from the website, and the app discovers each person's families at sign-in.
   functionId: "family-api",
+
+  // Optional Photo Gifts shop (see SHOP-GUIDE.md). These are public IDs, not secrets.
+  // Set shopEnabled to false, or leave the function unset, to hide the shop completely.
+  shopEnabled: true,
+  shopFunctionId: "shop-api",
+  shopBucketId: "shop-designs",
 
   // The IDs below match the Setup Guide. If you create your database, tables and
   // bucket with these exact IDs you do not need to change anything here.

@@ -1,0 +1,9 @@
+{
+  "name": "shop-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": { "test": "node --test test/shop.test.js test/providers.test.js" },
+  "dependencies": { "node-appwrite": "31.1.0" }
+}

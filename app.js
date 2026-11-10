@@ -70,6 +70,7 @@
     plus: ['M12 5v14', 'M5 12h14'],
     shorts: ['M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M10.5 9.5v5l4-2.5z'],
     bookmark: ['M6 4h12v17l-6-4-6 4z'],
+    bag: ['M5 8h14l-1 12H6z', 'M9 8V6.5a3 3 0 0 1 6 0V8'],
     users: ['M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20', 'M10 11a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z', 'M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.3', 'M15.5 4.8a3.2 3.2 0 0 1 0 6.1'],
     settings: ['M4 7h10', 'M18 7h2', 'M4 17h2', 'M10 17h10', 'M16 5v4', 'M8 15v4'],
     heart: ['M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z'],
@@ -344,6 +345,7 @@
     revokeBlobs();
     S.avatarUrls.forEach(function (p) { p.then(function (u) { URL.revokeObjectURL(u); }).catch(function () {}); });
     S.avatarUrls = new Map();
+    S.shop = null;   // carts, designs, orders and the catalog belong to one person in one family
     S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.origs = new Map(); S.saved = new Map(); S.usage = null;
     S.familyId = null; S.role = null; S.isOwner = false; S.ringRole = new Map();
     if (S.main) clear(S.main);
@@ -448,16 +450,16 @@
   async function mediaCacheClear() { try { if (window.caches) await caches.delete(MEDIA_CACHE); } catch (e) {} }
 
   // keep = true keeps a copy on this device so the same photo or video is not downloaded again
-  async function fetchMedia(fileId, keep) {
-    if (keep) { var hit = await mediaCacheGet(fileId); if (hit) return hit; }
-    var url = storage.getFileView({ bucketId: CFG.bucketId, fileId: fileId });
+  async function fetchMedia(fileId, keep, bucketId) {
+    if (keep && !bucketId) { var hit = await mediaCacheGet(fileId); if (hit) return hit; }
+    var url = storage.getFileView({ bucketId: bucketId || CFG.bucketId, fileId: fileId });
     var res = await fetch(url, {
       headers: { 'X-Appwrite-Project': CFG.projectId, 'X-Appwrite-JWT': await getJwt() },
       credentials: 'omit', cache: 'no-store'
     });
     if (!res.ok) { var err = new Error('Could not load the file (error ' + res.status + ').'); err.code = res.status; throw err; }
     var blob = await res.blob();
-    if (keep) mediaCachePut(fileId, blob);
+    if (keep && !bucketId) mediaCachePut(fileId, blob);
     return blob;
   }
   function blobUrl(blob, mime) {
@@ -1293,6 +1295,7 @@
     return sel;
   }
 
+  function shopEnabled() { return !!(window.FCShop && CFG.shopFunctionId && CFG.shopEnabled !== false); }
   function renderShell() {
     S.main = h('main', { id: 'main', class: 'main', tabindex: '-1' });
     var nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, h('ul', null, NAV.map(function (n) {
@@ -1300,6 +1303,7 @@
     })));
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
       h('a', { class: 'brand', href: '#/home', 'aria-label': (CFG.appName || 'Family Circle') + ', go to Home', onclick: function () { if (/^#\/home\/?$/.test(location.hash)) window.scrollTo({ top: 0, behavior: 'smooth' }); } }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
+      shopEnabled() ? h('a', { class: 'bell shop-btn', id: 'shop-btn', href: '#/shop', 'aria-label': 'Shop for photo gifts', title: 'Shop' }, icon('bag'), h('span', { class: 'shop-btn-label', text: 'Shop' })) : null,
       h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity', onclick: function (ev) {
         if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/home'; }
       } }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
@@ -2031,6 +2035,8 @@
       var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
         post.mediaFileId ? h('button', { class: 'btn secondary block', type: 'button', text: post.kind === 'photo' ? 'Download photo' : 'Download video', onclick: function () { dlg.close(); downloadMedia(); } }) : null,
         isMine ? h('button', { class: 'btn secondary block', type: 'button', text: 'Edit caption', onclick: function () { dlg.close(); startEdit(); } }) : null,
+        (post.kind === 'photo' && post.mediaFileId && shopEnabled()) ? h('button', { class: 'btn secondary block', type: 'button', text: 'Make a gift', onclick: function () { dlg.close(); location.hash = '#/shop/gift/' + post.$id; } }) : null,
+        (isMine && post.kind === 'photo' && shopEnabled()) ? h('button', { class: 'btn secondary block', type: 'button', text: 'Allow gifts with this photo…', onclick: function () { dlg.close(); window.FCShop.giftSettingDialog(post); } }) : null,
         (isMine && (post.kind === 'video' || post.kind === 'short')) ? h('button', { class: 'btn secondary block', type: 'button', text: post.captions ? 'Make the captions again' : 'Add automatic captions', onclick: function () { dlg.close(); addCaptionsToPost(); } }) : null,
         (isMine && post.captions) ? h('button', { class: 'btn secondary block', type: 'button', text: 'Remove captions', onclick: function () { dlg.close(); saveCaptions([], 'Captions removed.'); } }) : null,
         (isMine || S.isOwner) ? h('button', { class: 'btn secondary block danger-text', type: 'button', text: isMine ? 'Delete' : 'Remove as family admin', onclick: function () { dlg.close(); removePost(); } }) : null,
@@ -2432,6 +2438,12 @@
       var bar = h('progress', { max: 100, value: 0, hidden: true, 'aria-label': 'Upload progress' });
       var fileInput = null;
       var ccBox = null, ccRow = null, origFile = null, editState = null;
+      var giftBox = null, giftRow = null;
+      if (kind === 'photo' && shopEnabled()) {
+        giftBox = h('input', { type: 'checkbox', id: 'gift-ok' });
+        giftRow = h('div', null, h('label', { class: 'check', for: 'gift-ok' }, giftBox, ' Let family order gifts with this photo'),
+          h('p', { class: 'hint', text: 'Off unless you turn it on. If you do, the photo is shared with Printify to make a gift only when a family member orders one. You can change this later from the ⋯ menu.' }));
+      }
       function openEditor(f) {
         if (!window.VideoEditor) return Promise.resolve({ kind: 'original', file: f });
         return window.VideoEditor.open(f, {
@@ -2535,7 +2547,8 @@
             }
             btn.textContent = 'Posting…';
             if (fid !== S.familyId) throw new Error('You switched families while uploading. Nothing was posted.');
-            await api('createPost', payload);
+            var made = await api('createPost', payload);
+            if (kind === 'photo' && giftBox && giftBox.checked && shopEnabled()) { var mid = made && (made.postId || (made.post && made.post.$id) || (made.row && made.row.$id) || made.id); if (mid) await window.FCShop.setGiftAfterPost(mid, true); }
             S.profiles.set(uid, S.profile); S.usage = null;
             toast('Posted!'); confetti();
             location.hash = kind === 'short' ? '#/shorts' : '#/home';
@@ -2548,7 +2561,7 @@
       } },
         h('label', { for: 'body', text: kind === 'text' ? 'Your note' : 'Caption' }), ta,
         fileInput ? h('div', null, h('label', { for: 'file', text: kind === 'photo' ? 'Photo' : kind === 'short' ? 'Short video' : 'Video' }), fileInput, info, limitsBox, prev) : null,
-        ccRow, bar, msg, h('div', { class: 'stack' }, btn));
+        ccRow, giftRow, bar, msg, h('div', { class: 'stack' }, btn));
       holder.appendChild(tabs); holder.appendChild(form);
     }
     build();
@@ -3138,6 +3151,7 @@
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
     if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
+    if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block', href: '#/orders', text: 'My orders' }));
     // Switching families (or starting another one) lives here, not in the top bar.
     if (mine) main.appendChild(h('section', { class: 'card profile-fam', 'aria-label': 'Family' }, h('h2', { text: 'Family' }), h('p', { class: 'muted small', text: 'You are in ' + famName() + '.' + (S.families.length > 1 || S.canCreateFamily ? ' Switch to another family, or start a new one:' : '') }), familySwitcher()));
 
@@ -3740,6 +3754,9 @@
       ], h('ul', { style: null }, problems.map(function (p) { return h('li', { text: p }); })));
     }
     initAppwrite();
+    if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
+      textDialog: textDialog, confirmDialog: confirmDialog, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
+      functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
     var action = readActionParams();
     if (action) await handleAction(action);
     await loadSession();
