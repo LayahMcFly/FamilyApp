@@ -81,6 +81,8 @@ Delete the Teams with IDs `6aef6ff70025f75bc4ec` and `6aef70c8002b376dccce` (Aut
 
 **Result:** the schema the Function and the app read and write.
 
+**Shortcut:** `SETUP-SCRIPT.md` builds steps 4 and 5 for you with one script. Use it, then skip to step 6.
+
 1. **Databases > Create database.** Database ID `family`.
 2. Create six tables with these Table IDs: `families`, `profiles`, `posts`, `comments`, `reactions`, `bookmarks`.
 3. In each table's **Settings > Permissions**, leave the table permission list **empty** and turn **Row security ON**. Empty table permissions mean the browser cannot create, update or delete any row. Row security lets Appwrite use each row's own permission list for reads.
@@ -177,7 +179,7 @@ The Function adds the `family` label to a user who belongs to at least one famil
 5. **Settings > Scopes** (these define the temporary API key): `users.read`, `users.write`, `teams.read`, `teams.write`, `rows.read`, `rows.write`, `files.read`, `files.write`. Tick nothing else. If an execution log later says a scope is missing, add exactly the scope it names.
 6. **Settings > Timeout:** 15 seconds is plenty. The Function stops long jobs at about 9 seconds and the browser asks it to continue.
 7. **Settings > Executions > Schedule:** choose **Cron** with `17 * * * *` (hourly). On the Free plan the shortest allowed interval is 60 minutes. This run has no user and an empty body, so the Function deletes uploads older than one hour that no post or profile uses.
-8. **Environment variables:** none are required. Optional: `DATABASE_ID` (default `family`), `BUCKET_ID` (default `family-media`), `MAX_OWNED_FAMILIES` (default `3`), `MAX_VIDEO_MB` (default `25`; keep at or below the bucket limit).
+8. **Environment variables:** none are required. Optional: `DATABASE_ID` (default `family`), `BUCKET_ID` (default `family-media`), `MAX_OWNED_FAMILIES` (default `3`), `MAX_VIDEO_MB` (default `25`; keep at or below the bucket limit), `FAMILY_STORAGE_MB` (default `500`; the photo and video space each family gets. Your free plan has 2 GB in total for all families together, so 500 fits about four families).
 
 ### 7. Deploy the Function code
 
@@ -320,3 +322,5 @@ Use one normal window and one private window, with two different email addresses
 | `function/src/main.js`, `function/src/logic.js`, `function/package.json` | The `family-api` Function. Deploy to Appwrite (step 7). |
 | `function/test/logic.test.js` | 16 tests of the Function's rules (`npm test`). |
 | `SETUP-GUIDE.md` | This guide. |
+
+> **Added in v1.4.0 (Saved libraries):** open Databases > family > `bookmarks` > Columns > Create column > String. Key `collectionId`, size `24`, not required. New installs made with the setup script get this column automatically.

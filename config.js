@@ -10,13 +10,13 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.4.0",
+  version: "1.5.1",
 
   // One-line promise shown on the sign-in screens and in the footer. Only say what is true today.
   tagline: "A private place for your family. No ads. No subscriptions.",
 
   // Where feedback, bug reports and questions go (GitHub Issues on the project repo).
-  feedbackUrl: "https://github.com/layahmcfly/FamilyCirle/issues/new/choose",
+  feedbackUrl: "https://github.com/LayahMcFly/FamilyCircle/issues/new/choose",
   githubUrl: "https://github.com/layahmcfly",
 
   // <<< REPLACE: copy the "API Endpoint" from Appwrite Console > your project > Settings.

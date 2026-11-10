@@ -52,7 +52,7 @@ const schema = {
     indexes: [['idx_postId', 'key', ['postId']], ['idx_familyId', 'key', ['familyId']], ['uniq_reactionKey', 'unique', ['reactionKey']]]
   },
   bookmarks: {
-    columns: [S('familyId', 36, true), S('userId', 36, true), S('postId', 36, true), S('bookmarkKey', 80, true)],
+    columns: [S('familyId', 36, true), S('userId', 36, true), S('postId', 36, true), S('bookmarkKey', 80, true), S('collectionId', 24, false)],
     indexes: [['idx_user_family', 'key', ['userId', 'familyId']], ['idx_postId', 'key', ['postId']], ['idx_familyId', 'key', ['familyId']], ['uniq_bookmarkKey', 'unique', ['bookmarkKey']]]
   }
 };

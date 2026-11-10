@@ -464,6 +464,8 @@
       if (b.__paintSound) b.__paintSound();
     });
   }
+  // Autoplay Shorts is a per-device switch in Settings (on by default). Off means: tap to download and play.
+  function autoplayOn() { try { return localStorage.getItem('fc_autoplay') !== 'off'; } catch (e) { return true; } }
   function observeReel(box) {
     if (!('IntersectionObserver' in window)) { box.__activate(); return; }
     if (!S.reelIO) {
@@ -495,6 +497,12 @@
       });
     }
     function wait(text) { clear(box); box.className = 'media placeholder reel-media'; box.appendChild(spinnerLine(text)); }
+    function idle() {                    // autoplay is off: nothing downloads until the person taps
+      clear(box); box.className = 'media placeholder reel-media';
+      box.appendChild(h('div', null,
+        h('button', { class: 'btn', type: 'button', text: 'Play video' + (post.mediaSize ? ' (' + fmtMB(post.mediaSize) + ')' : ''), onclick: function (ev) { ev.stopPropagation(); load(true); } }),
+        h('p', { class: 'hint', text: 'Autoplay is off, so this video downloads only when you tap play. You can change this in Settings.' })));
+    }
     function fail(e) {
       clear(box); box.className = 'media placeholder reel-media';
       box.appendChild(h('div', null, h('p', { text: "Couldn't load this video. " + (e && e.code === 401 ? 'You may not have access.' : 'Please try again.') }),
@@ -527,7 +535,8 @@
     box.addEventListener('click', function () { if (!st.v) return; if (st.v.paused) playNow(); else st.v.pause(); });
     box.__activate = function () {
       st.active = true;
-      if (st.v) playNow(); else load(true);
+      if (st.v) playNow(); else if (autoplayOn()) load(true);
+      if (!autoplayOn()) return;
       var card = box.closest ? box.closest('.reel') : null, nx = card && card.nextElementSibling;
       var m = nx && nx.querySelector ? nx.querySelector('.reel-media') : null;
       if (m && m.__prefetch) m.__prefetch();          // get the next video ready so the swipe feels instant
@@ -538,10 +547,10 @@
       if (st.active) return false;
       if (st.v) { st.v.pause(); st.v.removeAttribute('src'); st.v.load(); }
       if (st.url) URL.revokeObjectURL(st.url);
-      st.url = null; st.v = null; wait('Loading…');
+      st.url = null; st.v = null; if (autoplayOn()) wait('Loading…'); else idle();
       return true;
     };
-    wait('Loading…');
+    if (autoplayOn()) wait('Loading…'); else idle();
     observeReel(box);
     return box;
   }
@@ -1961,6 +1970,16 @@
     paintLook();
 
     // ---- account ----
+    var autoBox = h('input', { type: 'checkbox', id: 'autoplay' });
+    autoBox.checked = autoplayOn();
+    autoBox.addEventListener('change', function () {
+      try { localStorage.setItem('fc_autoplay', autoBox.checked ? 'on' : 'off'); } catch (e) { /* the switch still works until the page reloads */ }
+      toast(autoBox.checked ? 'Shorts will play by themselves.' : 'Shorts will wait for you to tap play.');
+    });
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Shorts' },
+      h('h2', { text: 'Shorts' }),
+      h('label', { class: 'switch-row', for: 'autoplay' }, autoBox, h('span', null, h('strong', { text: 'Autoplay Shorts' }), h('span', { class: 'small muted', text: ' Every Short you scroll to downloads in full. That uses mobile data and counts toward the site\'s monthly download allowance, so turn this off when you are not on Wi-Fi. This setting is saved on this device only.' })))));
+
     var amsg = h('div');
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Account' },
       h('h2', { text: 'Account' }),
