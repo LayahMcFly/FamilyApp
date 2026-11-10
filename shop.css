@@ -81,3 +81,9 @@
 .shop-grid[hidden], .shop-card[hidden], .shop-section[hidden] { display: none; }
 .bulk-bar { align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
 .admin-prod.imported > input[type=checkbox] { margin-top: 4px; flex: none; width: 20px; height: 20px; }
+
+/* The cart icon and the other shop buttons are the same height. */
+.shop-links { align-items: center; }
+.shop-links > a, .shop-links > button { box-sizing: border-box; height: 40px !important; min-height: 40px !important; margin: 0 !important; }
+.shop-links > .cart-icon-btn { width: 40px; min-width: 40px !important; padding: 0 !important; border-radius: 999px; }
+.shop-links > .link-btn { padding: 0 16px; }
