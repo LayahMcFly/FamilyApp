@@ -405,14 +405,55 @@
     S.jwt = r.jwt; S.jwtAt = Date.now();
     return S.jwt;
   }
-  async function fetchMedia(fileId) {
+  /* ---------- photos and videos kept on this device after the first view (browser Cache, private to this site) ---------- */
+  var MEDIA_CACHE = 'fc-media-v1';
+  function keepOn() { try { return localStorage.getItem('fc_keepmedia') !== 'off'; } catch (e) { return true; } }
+  function cacheCapBytes() { return (CFG.mediaCacheMB || 300) * 1048576; }
+  function cacheReq(id) { return new Request(location.origin + '/__fc_media/' + encodeURIComponent(id)); }
+  async function mediaCacheGet(id) {
+    if (!window.caches || !keepOn()) return null;
+    try { var c = await caches.open(MEDIA_CACHE), r = await c.match(cacheReq(id)); return r ? await r.blob() : null; } catch (e) { return null; }
+  }
+  async function mediaCacheHas(id) {
+    if (!window.caches || !keepOn()) return false;
+    try { var c = await caches.open(MEDIA_CACHE); return !!(await c.match(cacheReq(id))); } catch (e) { return false; }
+  }
+  async function mediaCacheInfo() {
+    var out = { count: 0, bytes: 0, items: [] };
+    if (!window.caches) return out;
+    try {
+      var c = await caches.open(MEDIA_CACHE), keys = await c.keys();
+      for (var i = 0; i < keys.length; i++) { var r = await c.match(keys[i]); if (!r) continue; var n = Number(r.headers.get('x-size') || 0); out.count++; out.bytes += n; out.items.push({ req: keys[i], size: n, saved: Number(r.headers.get('x-saved') || 0) }); }
+    } catch (e) { /* the browser may block it */ }
+    return out;
+  }
+  async function mediaCachePut(id, blob) {
+    if (!window.caches || !keepOn() || !blob || blob.size > cacheCapBytes()) return;
+    try {
+      var c = await caches.open(MEDIA_CACHE);
+      await c.put(cacheReq(id), new Response(blob, { headers: { 'content-type': blob.type || 'application/octet-stream', 'x-size': String(blob.size), 'x-saved': String(Date.now()) } }));
+      var info = await mediaCacheInfo();
+      if (info.bytes > cacheCapBytes()) {          // only the oldest local copies are dropped; nothing in the cloud is touched
+        info.items.sort(function (a, b) { return a.saved - b.saved; });
+        for (var i = 0; i < info.items.length && info.bytes > cacheCapBytes(); i++) { if (info.items[i].req.url.indexOf(encodeURIComponent(id)) >= 0) continue; await c.delete(info.items[i].req); info.bytes -= info.items[i].size; }
+      }
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+    } catch (e) { /* out of room on this device: the file simply is not kept */ }
+  }
+  async function mediaCacheClear() { try { if (window.caches) await caches.delete(MEDIA_CACHE); } catch (e) {} }
+
+  // keep = true keeps a copy on this device so the same photo or video is not downloaded again
+  async function fetchMedia(fileId, keep) {
+    if (keep) { var hit = await mediaCacheGet(fileId); if (hit) return hit; }
     var url = storage.getFileView({ bucketId: CFG.bucketId, fileId: fileId });
     var res = await fetch(url, {
       headers: { 'X-Appwrite-Project': CFG.projectId, 'X-Appwrite-JWT': await getJwt() },
       credentials: 'omit', cache: 'no-store'
     });
     if (!res.ok) { var err = new Error('Could not load the file (error ' + res.status + ').'); err.code = res.status; throw err; }
-    return res.blob();
+    var blob = await res.blob();
+    if (keep) mediaCachePut(fileId, blob);
+    return blob;
   }
   function blobUrl(blob, mime) {
     var u = URL.createObjectURL(new Blob([blob], { type: mime }));
@@ -451,7 +492,7 @@
     var box = h('div', { class: 'media placeholder' }, spinnerLine('Loading photo…'));
     function load() {
       clear(box); box.className = 'media placeholder'; box.appendChild(spinnerLine('Loading photo…'));
-      fetchMedia(post.mediaFileId).then(function (blob) {
+      fetchMedia(post.mediaFileId, true).then(function (blob) {
         if (token !== S.nav) return;
         clear(box); box.className = 'media';
         box.appendChild(h('img', { src: blobUrl(blob, mime), alt: 'Photo shared by the family', loading: 'lazy' }));
@@ -541,7 +582,8 @@
   function reelVideo(post, mime) {
     var token = S.nav;
     var box = h('div', { class: 'media placeholder reel-media' });
-    var st = { v: null, url: null, loading: null, active: false, wantPlay: false };
+    var st = { v: null, url: null, loading: null, active: false, wantPlay: false, kept: false };
+    mediaCacheHas(post.mediaFileId).then(function (k) { st.kept = k; if (k && st.active && !st.v) load(true); });
     var fill = h('div', { class: 'fill' });
     var bar = h('div', { class: 'reel-progress' }, fill);
     var snd = h('button', { class: 'reel-sound', type: 'button', onclick: function (ev) { ev.stopPropagation(); S.muted = !S.muted; syncSound(); } });
@@ -582,7 +624,7 @@
       if (st.v) { if (play) playNow(); return; }
       if (st.loading) { st.wantPlay = st.wantPlay || play; return; }
       st.wantPlay = play; wait('Loading…');
-      st.loading = fetchMedia(post.mediaFileId).then(function (blob) {
+      st.loading = fetchMedia(post.mediaFileId, true).then(function (blob) {
         st.loading = null;
         if (token !== S.nav) return;
         st.url = URL.createObjectURL(new Blob([blob], { type: mime }));
@@ -609,7 +651,7 @@
     });
     box.__activate = function () {
       st.active = true;
-      if (st.v) playNow(); else if (autoplayOn()) load(true);
+      if (st.v) playNow(); else if (autoplayOn() || st.kept) load(true);
       if (!autoplayOn()) return;
       var card = box.closest ? box.closest('.reel') : null, nx = card && card.nextElementSibling;
       var m = nx && nx.querySelector ? nx.querySelector('.reel-media') : null;
@@ -684,20 +726,21 @@
       box.appendChild(h('div', null,
         errText ? h('p', { text: errText }) : null,
         h('button', { class: 'btn', type: 'button', onclick: start, text: 'Play video' + (post.mediaSize ? ' (' + fmtMB(post.mediaSize) + ')' : '') }),
-        h('p', { class: 'hint', text: 'Videos download only when you tap play, to save data.' })));
+        h('p', { class: 'hint', text: 'Videos download only when you tap play, to save data. After that, this device keeps a copy so it does not download again.' })));
     }
-    function start() {
+    function start(play) {
       clear(box); box.className = 'media placeholder' + (vertical ? ' vertical' : '');
-      box.appendChild(spinnerLine('Downloading video…'));
-      fetchMedia(post.mediaFileId).then(function (blob) {
+      box.appendChild(spinnerLine(play === false ? 'Opening video…' : 'Downloading video…'));
+      fetchMedia(post.mediaFileId, true).then(function (blob) {
         if (token !== S.nav) return;
         clear(box); box.className = 'media' + (vertical ? ' vertical' : '');
         var v = h('video', { src: blobUrl(blob, mime), controls: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
         box.appendChild(v); applyCaptions(v, box, post);
-        var p = v.play(); if (p && p.catch) p.catch(function () { /* the person can press play */ });
+        if (play !== false) { var p = v.play(); if (p && p.catch) p.catch(function () { /* the person can press play */ }); }
       }).catch(function (e) { if (token === S.nav) showButton("Couldn't load this video. " + (e.code === 401 ? 'You may not have access.' : 'Please try again.')); });
     }
     showButton();
+    mediaCacheHas(post.mediaFileId).then(function (kept) { if (kept && token === S.nav) start(false); });   // already on this device: show it without a new download
     return box;
   }
   // Only one video plays at a time.
@@ -1136,6 +1179,7 @@
 
   async function signOut() {
     try { await account.deleteSession({ sessionId: 'current' }); } catch (e) { /* already signed out */ }
+    await mediaCacheClear();     // photos and videos kept on this device are removed when you sign out
     resetState();
     S.authMode = 'signin';
     location.hash = '';
@@ -1803,7 +1847,7 @@
     async function downloadMedia() {
       try {
         toast('Getting your file…');
-        var blob = await fetchMedia(post.mediaFileId);
+        var blob = await fetchMedia(post.mediaFileId, true);
         var mime = post.mediaMime || blob.type || (post.kind === 'photo' ? 'image/jpeg' : 'video/mp4');
         var ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }[mime] || 'bin';
         var u = URL.createObjectURL(new Blob([blob], { type: mime }));
@@ -1821,7 +1865,7 @@
       } catch (e) { toast(friendly(e)); }
     }
     async function addCaptionsToPost() {
-      try { toast('Getting the video…'); var blob = await fetchMedia(post.mediaFileId); }
+      try { toast('Getting the video…'); var blob = await fetchMedia(post.mediaFileId, true); }
       catch (e) { return toast(friendly(e)); }
       var cues = await makeCaptionCues(blob);
       if (cues) await saveCaptions(cues, 'Captions saved.');
@@ -3216,10 +3260,26 @@
       try { localStorage.setItem('fc_autoplay', autoBox.checked ? 'on' : 'off'); } catch (e) { /* the switch still works until the page reloads */ }
       toast(autoBox.checked ? 'Shorts will play by themselves.' : 'Shorts will wait for you to tap play.');
     });
+    var keepBox = h('input', { type: 'checkbox', id: 'keepmedia' }); keepBox.checked = keepOn();
+    var keepInfo = h('p', { class: 'small muted', text: 'Checking what is saved on this device…' });
+    var clearKept = h('button', { class: 'btn secondary small', type: 'button', text: 'Clear saved photos and videos', onclick: async function () { await mediaCacheClear(); toast('Cleared from this device.'); paintKept(); } });
+    async function paintKept() {
+      var info = await mediaCacheInfo();
+      keepInfo.textContent = info.count ? info.count + (info.count === 1 ? ' photo or video' : ' photos and videos') + ' saved on this device, using ' + fmtBytes(info.bytes) + ' of up to ' + fmtBytes(cacheCapBytes()) + '. Your browser decides if it needs the room back.' : 'Nothing is saved on this device right now. Limit: ' + fmtBytes(cacheCapBytes()) + '.';
+      clearKept.disabled = !info.count;
+    }
+    keepBox.addEventListener('change', async function () {
+      try { localStorage.setItem('fc_keepmedia', keepBox.checked ? 'on' : 'off'); } catch (e) {}
+      if (!keepBox.checked) await mediaCacheClear();
+      toast(keepBox.checked ? 'Videos and photos will be kept on this device.' : 'Nothing will be kept on this device, and the saved copies were removed.'); paintKept();
+    });
+    paintKept();
     main.appendChild(h('section', { class: 'card', 'aria-label': 'On this device' },
       h('h2', { text: 'On this device' }),
-      h('p', { text: 'Family Circle does not save photos or videos on your device for offline use, so there are no downloaded files for it to manage or clear. Your browser may keep ordinary temporary copies of what you view; you can clear those in your browser’s settings.' }),
+      h('p', { text: 'After you watch a video or look at a photo, Family Circle keeps a copy on this device so it does not download again every time. The copy lives in this browser only and is removed when you sign out. Only the oldest copies are removed when the limit below is reached. Nothing in the cloud is ever deleted by this.' }),
       h('p', { class: 'small muted', text: 'This website cannot see or delete files in your phone’s Downloads folder or photo library.' }),
+      h('label', { class: 'switch-row', for: 'keepmedia' }, keepBox, h('span', null, h('strong', { text: 'Keep videos and photos on this device' }), h('span', { class: 'small muted', text: ' Turn this off if your phone is short on space.' }))),
+      keepInfo, clearKept,
       h('label', { class: 'switch-row', for: 'autoplay' }, autoBox, h('span', null, h('strong', { text: 'Autoplay Shorts' }), h('span', { class: 'small muted', text: ' Every Short you scroll to downloads in full. That uses mobile data and counts toward the site’s monthly download allowance, so turn this off when you are not on Wi-Fi. Saved on this device only.' })))));
 
     // 2. My uploads in the cloud
