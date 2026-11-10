@@ -1800,7 +1800,7 @@
   function commentsPanel(post, st, onCount) {
     var uid = S.user.$id;
     var list = h('div'), status = h('div'), msg = h('div');
-    var ta = h('textarea', { rows: 1, class: 'comment-input', maxlength: L.commentMax || 500, 'aria-label': 'Write a comment', placeholder: 'Add a comment…' });
+    var ta = h('textarea', { rows: 1, class: 'comment-input', maxlength: L.commentMax || 500, 'aria-label': 'Write a comment', placeholder: 'Join the conversation…' });
     ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 110) + 'px'; });
     var send = h('button', { class: 'btn small comment-send', type: 'submit', text: 'Post' });
     var wrap = h('div', { class: 'comments' }, list, status);
@@ -1837,11 +1837,15 @@
       var del = null, pin = null;
       var item = h('div', { class: 'comment' + (isPinned(c) ? ' pinned' : '') });
       var liked = Array.isArray(c.likedBy) ? c.likedBy.slice() : [];
-      var likeBtn = h('button', { class: 'link-btn small like-c', type: 'button' });
+      var likeBtn = h('button', { class: 'like-c', type: 'button' });
+      var badge = h('span', { class: 'author-liked', hidden: true, title: 'Liked by the author' });
       function paintC() {
         var on = liked.indexOf(uid) !== -1;
         clear(likeBtn); likeBtn.appendChild(icon('heart'));
-        if (liked.length) likeBtn.appendChild(h('span', { text: String(liked.length) }));
+        if (liked.length) likeBtn.appendChild(h('span', { class: 'n', text: String(liked.length) }));
+        var byAuthor = liked.indexOf(post.authorId) !== -1 && c.authorId !== post.authorId;
+        badge.hidden = !byAuthor; clear(badge);
+        if (byAuthor) { badge.appendChild(avatarEl(S.profiles.get(post.authorId) || null)); badge.appendChild(icon('heart')); }
         likeBtn.classList.toggle('on', on);
         likeBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
         likeBtn.setAttribute('aria-label', (on ? 'Remove your like from this comment. ' : 'Like this comment. ') + liked.length + ' likes');
@@ -1883,9 +1887,11 @@
       item.appendChild(avatarEl(p));
       item.appendChild(h('div', { class: 'bubble' },
         isPinned(c) ? h('div', { class: 'pin-flag small' }, icon('pin'), ' Pinned by the author') : null,
-        h('div', { class: 'small' }, h('strong', { text: p ? p.displayName : 'Family member' }), ' ', h('span', { class: 'muted', text: timeAgo(c.$createdAt) })),
+        h('div', { class: 'chead' }, h('strong', { text: p ? p.displayName : 'Family member' }), h('span', { class: 'muted', text: timeAgo(c.$createdAt) }),
+          c.authorId === post.authorId ? h('span', { class: 'muted', text: '\u2022 Author' }) : null, badge),
         h('div', { class: 'comment-body', text: c.body }),
-        h('div', { class: 'comment-actions' }, likeBtn, replyBtn, pin, del)));
+        h('div', { class: 'comment-actions' }, replyBtn, pin, del)));
+      item.appendChild(likeBtn);
       return item;
     }
     var loaded = [];
@@ -1916,7 +1922,14 @@
           st.comments++; onCount();
         } catch (e) { showAlert(msg, 'error', friendly(e)); }
       }, 'Posting…');
-    } }, replyBar, h('div', { class: 'comment-row' }, ta, send), msg);
+    } }, replyBar, h('div', { class: 'emoji-row', role: 'group', 'aria-label': 'Quick emojis' }, ['\u2764\uFE0F', '\uD83D\uDE4C', '\uD83D\uDD25', '\uD83D\uDC4F', '\uD83D\uDE22', '\uD83D\uDE0D', '\uD83D\uDE2E', '\uD83D\uDE02'].map(function (em) {
+      return h('button', { class: 'emoji', type: 'button', text: em, 'aria-label': 'Add ' + em, onclick: function () {
+        var a = ta.selectionStart == null ? ta.value.length : ta.selectionStart, b = ta.selectionEnd == null ? a : ta.selectionEnd;
+        if (ta.value.length + em.length > (L.commentMax || 500)) return;
+        ta.value = ta.value.slice(0, a) + em + ta.value.slice(b); ta.focus(); ta.setSelectionRange(a + em.length, a + em.length);
+        ta.dispatchEvent(new Event('input'));
+      } });
+    })), h('div', { class: 'comment-row' }, avatarEl(S.profile), ta, send), msg);
     form.className = 'comment-form';
     wrap.appendChild(form);
     return wrap;
