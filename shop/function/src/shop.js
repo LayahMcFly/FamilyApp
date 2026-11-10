@@ -14,7 +14,7 @@ import { Query, Permission, Role } from 'node-appwrite';
 import { ApiError, bad, forbidden, missing, conflict, idOf, intIn, rowId, sha256hex, money, publicError } from './util.js';
 import { verifySquareSignature, SquareError } from './square.js';
 import { PrintifyError, verifyPrintifySignature } from './printify.js';
-import { planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure } from './sync.js';
+import { planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure, SECTION_IDS, cleanSection } from './sync.js';
 import { imageSize } from './images.js';
 
 export const T = {
@@ -25,11 +25,11 @@ export const T = {
 /** The only product slots that can ever be sold. The Printify blueprint/provider/variant IDs for each are saved by the owner
  *  through the admin screen after the server has checked them against Printify's live catalog. No ID is hard-coded here. */
 export const SLOTS = {
-  'framed-print': { title: 'Framed photo print', hint: 'framed', frameNote: true, section: 'gifts' },
-  magnet: { title: 'Photo magnet', hint: 'magnet', section: 'gifts' },
-  mug: { title: 'Photo mug', hint: 'mug', section: 'gifts' },
-  blanket: { title: 'Photo blanket', hint: 'blanket', section: 'gifts' },
-  puzzle: { title: 'Photo puzzle', hint: 'puzzle', section: 'gifts' },
+  'framed-print': { title: 'Framed photo print', hint: 'framed', frameNote: true, section: 'wall-art' },
+  magnet: { title: 'Photo magnet', hint: 'magnet', section: 'home' },
+  mug: { title: 'Photo mug', hint: 'mug', section: 'drinkware' },
+  blanket: { title: 'Photo blanket', hint: 'blanket', section: 'home' },
+  puzzle: { title: 'Photo puzzle', hint: 'puzzle', section: 'home' },
   necklace: { title: 'Photo necklace', hint: 'necklace', section: 'jewelry' },
   bracelet: { title: 'Photo bracelet', hint: 'bracelet', section: 'jewelry' }
 };
@@ -194,7 +194,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       products,
       slots: [
         ...Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, section: s.section || 'gifts', available: products.some((p) => p.key === key) })),
-        ...enabled.filter(({ row }) => isImportedKey(row.$id)).map(({ row }) => ({ key: row.$id, title: titleOf(row, row.$id), section: (metaOf(row) || {}).section === 'jewelry' ? 'jewelry' : 'gifts', available: true }))
+        ...enabled.filter(({ row }) => isImportedKey(row.$id)).map(({ row }) => ({ key: row.$id, title: titleOf(row, row.$id), section: cleanSection((metaOf(row) || {}).section), available: true }))
       ],
       config: { countries, currency, maxQty: LIMITS.maxQty, supportEmail: cfg.supportEmail || '', taxPercent, testMode: cfg.squareEnvironment !== 'production', paymentsReady: squareReady() },
       isAdmin: isAdmin(user)
@@ -763,7 +763,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     requireAdmin(user);
     const rows = (await listRows(T.orders, [Query.orderDesc('$createdAt'), Query.limit(50)])).rows;
     const catalog = await allCatalogRows();
-    const imported = catalog.filter((r) => isImportedKey(r.$id)).map((r) => { const m = metaOf(r) || {}; const vs = parseVariants(r); const prices = vs.map((v) => v.priceCents); return { key: r.$id, title: r.title, enabled: r.enabled === true, supported: m.ok !== false, reason: m.reason || '', notes: m.notes || [], image: m.image || '', section: m.section === 'jewelry' ? 'jewelry' : 'gifts', visible: !!m.visible, missing: !!m.missing, variantCount: vs.length, minCents: prices.length ? Math.min(...prices) : 0, maxCents: prices.length ? Math.max(...prices) : 0, syncedAt: m.syncedAt || '', printifyId: m.pid || '', blueprintId: r.blueprintId, providerId: r.providerId, position: r.position }; });
+    const imported = catalog.filter((r) => isImportedKey(r.$id)).map((r) => { const m = metaOf(r) || {}; const vs = parseVariants(r); const prices = vs.map((v) => v.priceCents); return { key: r.$id, title: r.title, enabled: r.enabled === true, supported: m.ok !== false, reason: m.reason || '', notes: m.notes || [], image: m.image || '', section: cleanSection(m.section), visible: !!m.visible, missing: !!m.missing, variantCount: vs.length, minCents: prices.length ? Math.min(...prices) : 0, maxCents: prices.length ? Math.max(...prices) : 0, syncedAt: m.syncedAt || '', printifyId: m.pid || '', blueprintId: r.blueprintId, providerId: r.providerId, position: r.position }; });
     return { orders: rows.map(adminOrderRow), imported, products: Object.entries(SLOTS).map(([key, s]) => { const r = catalog.find((c) => c.$id === key); return { key, title: s.title, section: s.section || 'gifts', saved: !!r, enabled: !!(r && r.enabled), blueprintId: r ? r.blueprintId : null, providerId: r ? r.providerId : null, variantCount: r ? parseVariants(r).length : 0, verifiedAt: r ? r.verifiedAt : '' }; }) };
   }
   async function adminOrder({ user, body }) {
@@ -822,7 +822,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     if (body.enabled === true && m && m.ok === false) throw conflict('unsupported', `This product cannot be sold through the photo editor yet: ${m.reason}`);
     if (body.enabled === true && m && m.missing) throw conflict('missing', 'This product is no longer in your Printify shop. Sync again after you restore it there.');
     const data = { enabled: body.enabled === true };
-    if (isImportedKey(key) && (body.section === 'gifts' || body.section === 'jewelry')) {
+    if (isImportedKey(key) && SECTION_IDS.includes(body.section)) {
       const u = unpack(row.variants); u.meta = { ...(u.meta || {}), section: body.section, sectionLocal: true };
       data.variants = JSON.stringify({ v: u.variants, m: u.meta });
     }

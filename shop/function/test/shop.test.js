@@ -563,3 +563,22 @@ test('Printify connection check reports shop match and which read permissions wo
   assert.equal(r.scopes.find((x) => x.scope === 'products.read').ok, true); assert.equal(r.scopes.find((x) => x.scope === 'orders.read').ok, false);
   assert.equal((await w.call(w.A, 'shopAdminPrintifyCheck')).status, 403);
 });
+
+test('sync puts each product in a section by its name, and a section you chose yourself is kept', async () => {
+  const { guessSection } = await import('../src/sync.js');
+  assert.equal(guessSection('Oval Necklace', 'Personalized Photo Oval Necklace, Custom Image Pendant'), 'jewelry');
+  assert.equal(guessSection('Mug', 'Spring photo mug'), 'drinkware');
+  assert.equal(guessSection('Framed Poster', 'Framed photo print'), 'wall-art');
+  assert.equal(guessSection('Fleece Blanket', 'Photo blanket'), 'home');
+  assert.equal(guessSection('Unisex Tee', 'Family reunion shirt'), 'apparel');
+  assert.equal(guessSection('Whatever', 'Surprise thing'), 'gifts');
+  const w = world(); await seed(w);
+  fakeShop(w, [mkProduct({ title: 'Photo Oval Necklace' }), mkProduct({ id: PID2, title: 'Photo mug' })]);
+  await syncAll(w);
+  let ov = (await w.ok(w.O, 'shopAdminOverview')).imported;
+  assert.equal(ov.find((x) => x.key === 'pf_' + PID).section, 'jewelry'); assert.equal(ov.find((x) => x.key === 'pf_' + PID2).section, 'drinkware');
+  await w.ok(w.O, 'shopAdminToggle', { key: 'pf_' + PID2, enabled: false, section: 'home' }); await syncAll(w);
+  ov = (await w.ok(w.O, 'shopAdminOverview')).imported;
+  assert.equal(ov.find((x) => x.key === 'pf_' + PID2).section, 'home');
+  assert.equal((await w.call(w.O, 'shopAdminToggle', { key: 'pf_' + PID2, enabled: false, section: 'bogus' })).status, 200);
+});

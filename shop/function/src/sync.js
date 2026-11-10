@@ -30,8 +30,21 @@ export function pickImage(product) {
   return first ? safeImage(first.src) : '';
 }
 
-const JEWELRY = /necklace|bracelet|pendant|earring|jewel|charm|ring\b|anklet/i;
-export function guessSection(...texts) { return JEWELRY.test(texts.join(' ')) ? 'jewelry' : 'gifts'; }
+/** The shop sections, in the order customers see them. A product is placed by words in its title or its Printify blank-product name. */
+export const SECTION_IDS = ['wall-art', 'drinkware', 'home', 'jewelry', 'apparel', 'gifts'];
+const RULES = [
+  ['jewelry', /necklace|bracelet|pendant|earring|jewel|charm|\bring\b|anklet|locket/i],
+  ['drinkware', /\bmugs?\b|\bcups?\b|tumbler|bottle|flask|glassware|drinkware|\bstein\b/i],
+  ['wall-art', /poster|canvas|framed|\bframes?\b|\bprints?\b|\bwall\b|\bart\b|tapestry|plaque|metal print/i],
+  ['apparel', /t-?shirt|\btees?\b|hoodie|sweatshirt|apparel|\btote\b|\bbags?\b|\bhats?\b|\bcaps?\b|\bsocks?\b|leggings|\bshirts?\b/i],
+  ['home', /blanket|pillow|cushion|puzzle|magnet|ornament|coaster|mouse ?pad|towel|candle|\brug\b|sticker|key ?chain|phone case|notebook|journal|clock|\bmat\b|puzzle/i]
+];
+export function guessSection(...texts) {
+  const t = texts.join(' ');
+  for (const [id, re] of RULES) if (re.test(t)) return id;
+  return 'gifts';
+}
+export const cleanSection = (x) => (SECTION_IDS.includes(x) ? x : 'gifts');
 
 /** Printify gives each variant a list of option value ids. Turn them into { Size: "11oz", Color: "White" } for the shop chips. */
 function optionMap(product, variant) {

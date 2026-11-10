@@ -73,18 +73,31 @@
     main.appendChild(h('p', { class: 'muted', text: 'Turn a family photo into a gift. You choose the photo and the crop, and you see a layout preview before you pay. Shopping is optional and there are no ads or subscriptions.' }));
     main.appendChild(shopLinks());
     if (cat.config.testMode) main.appendChild(X.alertBox('warn', 'Test mode: payments here are practice payments and no real order is made.'));
-    var SECTIONS = [{ id: 'gifts', title: 'Photo gifts' }, { id: 'jewelry', title: 'Jewelry' }];
+    var finder = h('input', { type: 'search', class: 'shop-search', placeholder: 'Search the shop', 'aria-label': 'Search the shop' });
+    var none = h('p', { class: 'hint', hidden: true, text: 'Nothing matches that. Try another word, like mug or necklace.' });
+    main.appendChild(h('div', { class: 'shop-search-row' }, finder));
+    main.appendChild(none);
+    var blocks = [];
     SECTIONS.forEach(function (sec) {
     var slots = cat.slots.filter(function (x) { return (x.section || 'gifts') === sec.id; });
     if (!slots.length) return;
-    main.appendChild(h('h2', { class: 'shop-section', text: sec.title }));
-    var grid = h('div', { class: 'shop-grid' });
+    var head2 = h('h2', { class: 'shop-section', text: sec.title }); main.appendChild(head2);
+    var grid = h('div', { class: 'shop-grid' }); blocks.push({ head: head2, grid: grid });
     slots.forEach(function (slot) {
       var p = productByKey(cat, slot.key);
-      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
+      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key, 'data-q': (p.title + ' ' + (p.blurb || '') + ' ' + sec.title).toLowerCase() }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
       else grid.appendChild(h('div', { class: 'shop-card off', 'aria-disabled': 'true' }, h('strong', { text: slot.title }), h('span', { class: 'small', text: 'Not available yet' })));
     });
     main.appendChild(grid);
+    });
+    finder.addEventListener('input', function () {
+      var words = finder.value.toLowerCase().split(/\s+/).filter(Boolean), shown = 0;
+      blocks.forEach(function (b) {
+        var any = 0;
+        Array.prototype.forEach.call(b.grid.children, function (c) { var q = c.getAttribute('data-q'); var hit = q ? words.every(function (w) { return q.indexOf(w) !== -1; }) : !words.length; c.hidden = !hit; if (hit) any++; });
+        b.head.hidden = b.grid.hidden = !any; shown += any;
+      });
+      none.hidden = !words.length || shown > 0;
     });
     if (!cat.products.length) main.appendChild(h('p', { class: 'hint', text: 'No products are switched on yet.' }));
     main.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'How it works' }),
@@ -122,6 +135,8 @@
     variants.forEach(function (v) { Object.keys(v.options || {}).forEach(function (k) { if (names.indexOf(k) < 0) names.push(k); }); });
     return names.filter(function (n) { var seen = {}; variants.forEach(function (v) { seen[(v.options || {})[n]] = 1; }); return Object.keys(seen).length > 1; });
   }
+  var SECTIONS = [{ id: 'wall-art', title: 'Wall art and prints' }, { id: 'drinkware', title: 'Mugs and drinkware' }, { id: 'home', title: 'Home and keepsakes' }, { id: 'jewelry', title: 'Jewelry' }, { id: 'apparel', title: 'Clothing and bags' }, { id: 'gifts', title: 'More photo gifts' }];
+  function sectionTitle(id) { var f = SECTIONS.filter(function (x) { return x.id === id; })[0]; return f ? f.title : 'More photo gifts'; }
   function cardImg(p) { return p.image ? h('img', { class: 'shop-thumb', src: p.image, alt: '', loading: 'lazy' }) : null; }
   function pretty(s) { return String(s || '').replace(/^./, function (c) { return c.toUpperCase(); }); }
 
@@ -586,7 +601,7 @@
       imp.forEach(function (p) {
         var info = [p.enabled ? 'ON' : 'hidden', p.variantCount + ' variant' + (p.variantCount === 1 ? '' : 's'), p.variantCount ? (p.minCents === p.maxCents ? money(p.minCents) : money(p.minCents) + ' to ' + money(p.maxCents)) : '', 'Printify: ' + (p.visible ? 'published' : 'draft')].filter(Boolean).join(' · ');
         var sel = h('select', { 'aria-label': 'Section for ' + p.title, onchange: async function () { try { await shopApi('shopAdminToggle', { key: p.key, enabled: p.enabled, section: sel.value }); toast('Moved.'); await reload(); } catch (e) { toast(msgOf(e)); } } },
-          h('option', { value: 'gifts', text: 'Photo gifts' }), h('option', { value: 'jewelry', text: 'Jewelry' }));
+          SECTIONS.map(function (x) { return h('option', { value: x.id, text: x.title }); }));
         sel.value = p.section;
         var line = h('div', { class: 'admin-prod imported' },
           p.image ? h('img', { class: 'shop-thumb small', src: p.image, alt: '' }) : null,
@@ -603,8 +618,8 @@
       // products chosen by hand from Printify's blank-product catalog (older method)
       var pc = h('div', { class: 'card inner' }, h('h2', { text: 'Products from Printify’s blank-product catalog' }), h('p', { class: 'hint', text: 'Only needed if you want a product you have not made in Printify. Products from your own Printify store are above.' }));
       var lastSection = '';
-      ov.products.slice().sort(function (x, y) { return (x.section === 'jewelry') - (y.section === 'jewelry'); }).forEach(function (p) {
-        if (p.section !== lastSection) { lastSection = p.section; pc.appendChild(h('h3', { class: 'shop-section', text: p.section === 'jewelry' ? 'Jewelry' : 'Photo gifts' })); }
+      ov.products.slice().sort(function (x, y) { return SECTIONS.map(function (z) { return z.id; }).indexOf(x.section) - SECTIONS.map(function (z) { return z.id; }).indexOf(y.section); }).forEach(function (p) {
+        if (p.section !== lastSection) { lastSection = p.section; pc.appendChild(h('h3', { class: 'shop-section', text: sectionTitle(p.section) })); }
         var row = h('div', { class: 'admin-prod' }, h('strong', { text: p.title }), h('span', { class: 'small muted', text: p.saved ? (p.enabled ? 'ON' : 'saved, OFF') + ' · ' + p.variantCount + ' variants · blueprint ' + p.blueprintId + ' / provider ' + p.providerId : 'not set up' }));
         var btns = h('div', { class: 'row' });
         btns.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: p.saved ? 'Change' : 'Set up', onclick: function () { productWizard(p); } }));
