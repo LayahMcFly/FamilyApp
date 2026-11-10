@@ -54,7 +54,7 @@
   }
   function shopLinks(extra) {
     return h('div', { class: 'shop-links' },
-      h('a', { class: 'btn secondary small', href: '#/shop/cart', text: 'Cart' + (extra && extra.cart ? ' (' + extra.cart + ')' : '') }),
+      h('a', { class: 'btn secondary small cart-icon-btn', href: '#/shop/cart', 'aria-label': 'Cart' + (extra && extra.cart ? ', ' + extra.cart + ' items' : ''), title: 'Cart' }, icon('cart'), extra && extra.cart ? h('span', { class: 'cart-count', text: String(extra.cart) }) : null),
       h('a', { class: 'btn secondary small', href: '#/orders', text: 'My orders' }));
   }
   function setupNeeded(main, e) {

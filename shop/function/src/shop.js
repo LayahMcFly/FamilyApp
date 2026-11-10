@@ -28,7 +28,8 @@ export const SLOTS = {
   magnet: { title: 'Photo magnet', hint: 'magnet' },
   mug: { title: 'Photo mug', hint: 'mug' },
   blanket: { title: 'Photo blanket', hint: 'blanket' },
-  puzzle: { title: 'Photo puzzle', hint: 'puzzle' }
+  puzzle: { title: 'Photo puzzle', hint: 'puzzle' },
+  necklace: { title: 'Photo necklace', hint: 'necklace' }
 };
 
 export const LIMITS = { maxDesignsOpen: 20, maxQty: 10, maxLines: 10, minPrint: 600, maxDesignBytes: 5 * 1024 * 1024, specMax: 3500 };
