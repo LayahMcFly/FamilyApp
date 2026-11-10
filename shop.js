@@ -81,7 +81,7 @@
     var grid = h('div', { class: 'shop-grid' });
     slots.forEach(function (slot) {
       var p = productByKey(cat, slot.key);
-      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key }, cardImg(p), h('strong', { text: p.title }), p.blurb ? h('span', { class: 'small', text: p.blurb }) : null, h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
+      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
       else grid.appendChild(h('div', { class: 'shop-card off', 'aria-disabled': 'true' }, h('strong', { text: slot.title }), h('span', { class: 'small', text: 'Not available yet' })));
     });
     main.appendChild(grid);
@@ -111,7 +111,7 @@
       if (!mine && !ok.allowed[postId]) { holder.appendChild(h('p', { text: 'The person who posted this photo has not allowed it to be used for gifts. You can ask them to turn it on from the ⋯ menu on the photo.' })); return; }
       holder.appendChild(h('p', { class: 'muted', text: 'Choose a product for this photo.' }));
       var grid = h('div', { class: 'shop-grid' });
-      cat.products.forEach(function (p) { grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key + '/' + postId }, cardImg(p), h('strong', { text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) }))); });
+      cat.products.forEach(function (p) { grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key + '/' + postId }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) }))); });
       holder.appendChild(cat.products.length ? grid : h('p', { class: 'hint', text: 'No products are switched on yet.' }));
     } catch (e) { if (token === X.S.nav) { clear(holder); holder.appendChild(X.alertBox('error', msgOf(e))); } }
   }
@@ -374,7 +374,7 @@
       } catch (e) { clear(pickEl); X.showAlert(pickEl, 'error', msgOf(e)); }
     }
 
-    holder.appendChild(h('p', { class: 'muted', text: prod.blurb || '' }));
+    if (prod.blurb) holder.appendChild(h('details', { class: 'shop-about' }, h('summary', { text: 'About this product' }), h('p', { class: 'muted', text: prod.blurb })));
     holder.appendChild(optsEl); holder.appendChild(priceEl);
     drawOptions();
     holder.appendChild(pickEl); holder.appendChild(stage); holder.appendChild(controls);
