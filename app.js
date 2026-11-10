@@ -80,6 +80,7 @@
     mute: ['M4 9v6h4l5 4V5L8 9z', 'M17 9.5l5 5', 'M22 9.5l-5 5'],
     pin: ['M9 4h6l-1 6 3 3H7l3-3z', 'M12 13v7'],
     bell: ['M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z', 'M10 21h4'],
+    tree: ['M12 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z', 'M5 17a2 2 0 1 1 0 4 2 2 0 0 1 0-4z', 'M19 17a2 2 0 1 1 0 4 2 2 0 0 1 0-4z', 'M12 7v4', 'M5 17v-2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2'],
     user: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'],
     eye: ['M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
     gear: ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'],
@@ -1006,7 +1007,7 @@
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'shorts', label: 'Shorts', icon: 'shorts' },
     { id: 'create', label: 'Create', icon: 'plus' },
-    { id: 'saved', label: 'Saved', icon: 'bookmark' },
+    { id: 'tree', label: 'Family Tree', icon: 'tree', href: '#/settings/family/tree' },
     { id: 'profile', label: 'Profile', icon: 'user' }
   ];
   var VIEWS = {};
@@ -1030,13 +1031,14 @@
   function renderShell() {
     S.main = h('main', { id: 'main', class: 'main', tabindex: '-1' });
     var nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, h('ul', null, NAV.map(function (n) {
-      return h('li', null, h('a', { href: '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
+      return h('li', null, h('a', { href: n.href || '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
     })));
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
       h('div', { class: 'brand' }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
       h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity', onclick: function (ev) {
         if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/home'; }
       } }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
+      h('a', { class: 'bell saved-btn', id: 'saved-btn', href: '#/saved', 'aria-label': 'Saved posts', title: 'Saved' }, icon('bookmark')),
       familySwitcher()));
     clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
@@ -1068,8 +1070,11 @@
     clear(S.main);
     S.main.classList.toggle('reels-main', name === 'shorts');
     document.body.classList.remove('sheet-open');
+    var navName = name === 'settings' ? (param === 'family' && param2 === 'tree' ? 'tree' : 'profile') : name;
+    var savedBtn = document.getElementById('saved-btn');
+    if (savedBtn) { if (name === 'saved') savedBtn.setAttribute('aria-current', 'page'); else savedBtn.removeAttribute('aria-current'); }
     Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
-      if (a.getAttribute('data-route') === (name === 'settings' ? 'profile' : name)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      if (a.getAttribute('data-route') === navName) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
     document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');

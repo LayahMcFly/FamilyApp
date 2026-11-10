@@ -691,3 +691,11 @@ article.card .reel-sound { top: 12px; }
 /* On Shorts the raised Create button must stay visible over the video; an open comment sheet still covers the bar */
 body:has(.reels-main) .nav { z-index: 45; }
 body.sheet-open .nav { z-index: 30 !important; }
+
+/* v1.7.8 — Saved moved next to the bell in the top bar */
+.bell { margin-right: 0; }
+.bell.saved-btn { margin-right: 8px; }
+.bell[aria-current="page"] svg { fill: currentColor; }
+.topbar-inner .brand { flex: none; white-space: nowrap; }
+.topbar-inner .fam-select, .topbar-inner .fam-name { min-width: 0; flex: 1 1 0; max-width: 170px; }
+.bell { width: 38px; }
