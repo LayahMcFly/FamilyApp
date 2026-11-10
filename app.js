@@ -1096,8 +1096,7 @@
       h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity', onclick: function (ev) {
         if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/home'; }
       } }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
-      h('a', { class: 'bell saved-btn', id: 'saved-btn', href: '#/saved', 'aria-label': 'Saved posts', title: 'Saved' }, icon('bookmark')),
-      familySwitcher()));
+      h('a', { class: 'bell saved-btn', id: 'saved-btn', href: '#/saved', 'aria-label': 'Saved posts', title: 'Saved' }, icon('bookmark'))));
     clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
   }
@@ -2766,6 +2765,8 @@
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
     if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
+    // Switching families (or starting another one) lives here, not in the top bar.
+    if (mine) main.appendChild(h('section', { class: 'card profile-fam', 'aria-label': 'Family' }, h('h2', { text: 'Family' }), h('p', { class: 'muted small', text: 'You are in ' + famName() + '.' + (S.families.length > 1 || S.canCreateFamily ? ' Switch to another family, or start a new one:' : '') }), familySwitcher()));
 
     // About me
     var about = aboutOf(prof);

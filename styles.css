@@ -1038,3 +1038,8 @@ dialog input[type="date"] { border-color: transparent; }
   .nav { transition: opacity .18s ease; }
   body.sheet-open .nav { opacity: 0; pointer-events: none; }
 }
+
+/* v1.21.2: the family name is a centered title in the wordmark's script font; family switching lives in Profile */
+.family-title { text-align: center; font-family: "Dancing Script", "Snell Roundhand", "Segoe Script", "Brush Script MT", cursive; font-style: normal; font-weight: 700; font-size: 2.1rem; line-height: 1.15; margin: 8px 12px 6px; }
+.topbar-inner .brand { flex: 1 1 auto; }
+.profile-fam .fam-select, .profile-fam .fam-name { display: block; width: 100%; max-width: none; min-width: 0; margin: 6px 0 0; flex: none; }
