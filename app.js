@@ -1067,6 +1067,7 @@
     revokeBlobs();
     clear(S.main);
     S.main.classList.toggle('reels-main', name === 'shorts');
+    document.body.classList.remove('sheet-open');
     Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
       if (a.getAttribute('data-route') === (name === 'settings' ? 'profile' : name)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
@@ -1605,7 +1606,8 @@
     }
 
     function toggleComments() {
-      if (commentsEl) { card.removeChild(commentsEl); commentsEl = null; paintCmt(); return; }
+      if (commentsEl) { card.removeChild(commentsEl); commentsEl = null; document.body.classList.remove('sheet-open'); paintCmt(); return; }
+      if (isReel) document.body.classList.add('sheet-open');
       commentsEl = commentsPanel(post, st, paintCmt);
       if (isReel) {
         commentsEl = h('div', { class: 'sheet', role: 'dialog', 'aria-label': 'Comments' },

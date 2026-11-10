@@ -687,3 +687,7 @@ article.card .reel-sound { top: 12px; }
   }
   .nav a[data-route="create"] svg { width: 28px; height: 28px; stroke-width: 2.4; }
 }
+
+/* On Shorts the raised Create button must stay visible over the video; an open comment sheet still covers the bar */
+body:has(.reels-main) .nav { z-index: 45; }
+body.sheet-open .nav { z-index: 30 !important; }
