@@ -1007,7 +1007,7 @@
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'shorts', label: 'Shorts', icon: 'shorts' },
     { id: 'create', label: 'Create', icon: 'plus' },
-    { id: 'tree', label: 'Family Tree', icon: 'tree', href: '#/settings/family/tree' },
+    { id: 'tree', label: 'Family Tree', icon: 'tree' },
     { id: 'profile', label: 'Profile', icon: 'user' }
   ];
   var VIEWS = {};
@@ -1070,7 +1070,7 @@
     clear(S.main);
     S.main.classList.toggle('reels-main', name === 'shorts');
     document.body.classList.remove('sheet-open');
-    var navName = name === 'settings' ? (param === 'family' && param2 === 'tree' ? 'tree' : 'profile') : name;
+    var navName = name === 'settings' ? 'profile' : name;
     var savedBtn = document.getElementById('saved-btn');
     if (savedBtn) { if (name === 'saved') savedBtn.setAttribute('aria-current', 'page'); else savedBtn.removeAttribute('aria-current'); }
     Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
@@ -1970,18 +1970,21 @@
 
   // The Family screen now lives in Settings. Old links and bookmarks still land in the right place.
   VIEWS.family = function (main, token, tab, personId) {
-    location.replace('#/settings/family' + (tab === 'tree' ? '/tree' + (personId ? '/' + personId : '') : ''));
+    location.replace(tab === 'tree' ? '#/tree' + (personId ? '/' + personId : '') : '#/settings/family');
   };
 
-  // Settings > Family and members: two tabs, Members and Family Tree.
+  // The Family Tree has its own page (bottom bar). Old links into Settings land here.
+  VIEWS.tree = async function (main, token, personId) {
+    main.appendChild(h('h1', { text: 'Family Tree' }));
+    return familyTree(main, token, personId);
+  };
+
+  // Settings > Family and members: the member list and everything about managing it.
   async function settingsFamilyHub(main, token, tab, personId) {
-    var onTree = tab === 'tree';
-    main.appendChild(h('nav', { class: 'tabs fam-tabs', 'aria-label': 'Family sections' },
-      h('a', { class: 'tab', href: '#/settings/family', 'aria-current': onTree ? null : 'page', text: 'Members' }),
-      h('a', { class: 'tab', href: '#/settings/family/tree', 'aria-current': onTree ? 'page' : null, text: 'Family Tree' })));
-    if (onTree) return familyTree(main, token, personId);
+    if (tab === 'tree') { location.replace('#/tree' + (personId ? '/' + personId : '')); return; }
     await familyMembers(main, token);
     if (token !== S.nav) return;
+    main.appendChild(h('p', { class: 'muted small' }, 'The family tree has its own button in the bottom bar. ', h('a', { href: '#/tree', text: 'Open the Family Tree' }), '.'));
     return settingsFamily(main, token);
   }
 
@@ -2393,7 +2396,7 @@
     if (!tree) box.appendChild(h('p', { class: 'muted', text: 'The family tree is not set up yet.' }));
     else if (person) {
       box.appendChild(h('p', null, own ? 'You appear in the tree as ' : firstName(prof) + ' appears in the tree as ', h('strong', { text: person.name }), person.confirmed ? '.' : '. This link is waiting for confirmation.'));
-      box.appendChild(h('a', { class: 'btn secondary', href: '#/settings/family/tree/' + person.$id, text: 'View in family tree' }));
+      box.appendChild(h('a', { class: 'btn secondary', href: '#/tree/' + person.$id, text: 'View in family tree' }));
       if (mine && !person.confirmed) box.appendChild(confirmCard(person, function () { route(false); }));
     } else {
       box.appendChild(h('p', { class: 'muted', text: 'Not connected to this family’s tree yet.' }));
@@ -2401,7 +2404,7 @@
         if (canEditTree()) {
           box.appendChild(h('button', { class: 'btn secondary', type: 'button', text: 'Add to the family tree', onclick: function (ev) {
             busy(ev.currentTarget, async function () {
-              try { var r = await api('treeAddPerson', { familyId: S.familyId, name: prof.displayName, userId: uid }); S.tree = null; location.hash = '#/settings/family/tree/' + r.personId; }
+              try { var r = await api('treeAddPerson', { familyId: S.familyId, name: prof.displayName, userId: uid }); S.tree = null; location.hash = '#/tree/' + r.personId; }
               catch (e) { toast(errText(e)); }
             });
           } }));
@@ -2499,7 +2502,7 @@
 
   /* ---------- SETTINGS (opened from the gear on my profile) ---------- */
   var SETTING_SECTIONS = [
-    { id: 'family', label: 'Family and members', note: 'Members, family tree, invites, leave' },
+    { id: 'family', label: 'Family and members', note: 'Members, invites, tree admins, leave' },
     { id: 'account', label: 'Account and security', note: 'Email, password' },
     { id: 'appearance', label: 'Appearance', note: 'Light or dark, style, accent color' },
     { id: 'storage', label: 'Storage and downloads', note: 'My uploads, family space, data use' },
