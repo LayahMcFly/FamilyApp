@@ -713,7 +713,17 @@
         v.muted = S.muted;
         v.addEventListener('loadedmetadata', function () { box.classList.toggle('wide', v.videoWidth > v.videoHeight); });   // landscape videos are shown whole, not cropped
         v.addEventListener('timeupdate', function () { if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%'; });
-        box.appendChild(v); box.appendChild(snd); box.appendChild(bar); box.__paintSound(); applyCaptions(v, box, post);
+        // Wide videos: a blurred, zoomed copy of the picture fills the empty space above and below (drawn small, so it costs almost nothing).
+        var bg = h('canvas', { class: 'reel-bg', width: 48, height: 86, 'aria-hidden': 'true' }), bgx = bg.getContext('2d'), bgRaf = 0;
+        function paintBg() {
+          if (!v.videoWidth || !box.classList.contains('wide')) return;
+          var cw = bg.width, ch = bg.height, k = Math.max(cw / v.videoWidth, ch / v.videoHeight), dw = v.videoWidth * k, dh = v.videoHeight * k;
+          try { bgx.drawImage(v, (cw - dw) / 2, (ch - dh) / 2, dw, dh); } catch (e) { /* not ready yet */ }
+        }
+        function bgLoop() { paintBg(); bgRaf = v.paused || v.ended ? 0 : requestAnimationFrame(bgLoop); }
+        v.addEventListener('play', function () { cancelAnimationFrame(bgRaf); bgLoop(); });
+        ['loadeddata', 'seeked', 'pause', 'loadedmetadata'].forEach(function (n) { v.addEventListener(n, paintBg); });
+        box.appendChild(bg); box.appendChild(v); box.appendChild(snd); box.appendChild(bar); box.__paintSound(); applyCaptions(v, box, post);
         st.v = v; trackLoaded();
         if (st.wantPlay && st.active) playNow();
       }).catch(function (e) { st.loading = null; if (token === S.nav) fail(e); });

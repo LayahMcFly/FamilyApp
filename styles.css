@@ -1296,3 +1296,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 }
 /* The family tree box keeps a sensible height on very tall or very short windows. */
 .tree-chart { height: clamp(380px, calc(100dvh - 380px), 760px); }
+
+/* Shorts that are wider than tall: the sharp video sits whole in the middle, a blurred zoomed copy fills the rest. */
+.reel .media .reel-bg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; display: none; filter: blur(14px) brightness(.7) saturate(1.2); transform: scale(1.3); pointer-events: none; }
+.reel .media.wide .reel-bg { display: block; }
+.reel .media.reel-media.wide video { background: transparent; z-index: 1; }
