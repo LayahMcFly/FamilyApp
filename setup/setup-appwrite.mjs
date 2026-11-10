@@ -52,7 +52,7 @@ const schema = {
     indexes: [['idx_postId', 'key', ['postId']], ['idx_familyId', 'key', ['familyId']], ['uniq_reactionKey', 'unique', ['reactionKey']]]
   },
   people: {
-    columns: [S('familyId', 36, true), S('name', 80, true), S('userId', 36, false), { type: 'boolean', key: 'confirmed', required: false }, { type: 'string', key: 'parentIds', size: 36, required: false, array: true }, { type: 'string', key: 'partnerIds', size: 36, required: false, array: true }, S('createdBy', 36, false), S('birthday', 10, false), S('gender', 20, false), S('inviteMembershipId', 36, false), S('parentKinds', 600, false)],
+    columns: [S('familyId', 36, true), S('name', 80, true), S('userId', 36, false), { type: 'boolean', key: 'confirmed', required: false }, { type: 'string', key: 'parentIds', size: 36, required: false, array: true }, { type: 'string', key: 'partnerIds', size: 36, required: false, array: true }, S('createdBy', 36, false), S('birthday', 10, false), S('gender', 20, false), S('inviteMembershipId', 36, false), S('relKinds', 2000, false)],
     indexes: [['idx_familyId', 'key', ['familyId']]]
   },
   suggestions: {

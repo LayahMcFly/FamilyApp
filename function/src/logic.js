@@ -37,13 +37,8 @@ export const LIMITS = {
   aboutItemMax: 40,
   personNameMax: 80,
   maxPeople: 300,
-  maxParents: 6,
-  maxPartners: 8,
   suggestionMax: 500
 };
-
-// How a parent is related to a child. "birth" is the default and is never stored.
-export const PARENT_KINDS = ['birth', 'adoptive', 'step', 'foster', 'guardian'];
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
 const KINDS = ['text', 'photo', 'video', 'short'];
@@ -204,6 +199,29 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     if (v === undefined || v === null || v === '') return '';
     return textOf(v, 'Gender', { min: 1, max: 20 });
   }
+  // Kinds of family links. A parent link is "biological" unless said otherwise; a partner link is "partner" unless said otherwise.
+  // Stored as JSON text in people.relKinds, e.g. {"p:<parentRowId>":"adoptive","s:<partnerRowId>":"divorced"}.
+  const PARENT_KINDS = ['biological', 'adoptive', 'step', 'foster', 'guardian'];
+  const PARTNER_KINDS = ['partner', 'married', 'divorced', 'separated'];
+  function parseRelKinds(text) {
+    if (!text || typeof text !== 'string') return {};
+    try { const o = JSON.parse(text); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; }
+  }
+  /** Keep only well-formed entries that point at a parent/partner the person really has. Anything else is refused (client input) or dropped (stale stored data). */
+  function cleanRelKinds(raw, parentIds, partnerIds, strict) {
+    const out = {};
+    for (const [k, v] of Object.entries(raw || {})) {
+      const m = /^([ps]):([A-Za-z0-9][A-Za-z0-9._-]{0,35})$/.exec(k);
+      const kinds = m && (m[1] === 'p' ? PARENT_KINDS : PARTNER_KINDS);
+      const linked = m && (m[1] === 'p' ? parentIds : partnerIds).includes(m[2]);
+      if (!m || !kinds.includes(v) || !linked) {
+        if (strict) throw bad('That kind of family link is not valid, or the person is not linked.');
+        continue;
+      }
+      if (v !== 'biological' && v !== 'partner') out[k] = v;   // the defaults are not stored
+    }
+    return out;
+  }
   async function writePerson(createOrUpdate, data, extras) {
     const clean = {};
     for (const [k, val] of Object.entries(extras)) if (val !== undefined) clean[k] = val;
@@ -222,9 +240,9 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     if (all.some((x) => x.userId === uid && x.$id !== selfId)) throw bad('That member is already linked to someone in the tree.');
     return uid;
   }
-  function checkIds(raw, all, selfId, max = 8) {
+  function checkIds(raw, all, selfId) {
     if (raw === undefined || raw === null) return [];
-    if (!Array.isArray(raw) || raw.length > max) throw bad(`That list of relatives is not valid (at most ${max}).`);
+    if (!Array.isArray(raw) || raw.length > 8) throw bad('That list of relatives is not valid.');
     const out = [];
     for (const id of raw) {
       idOf(id, 'person');
@@ -246,35 +264,6 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       for (const pp of (byId.get(id) || {}).parentIds || []) stack.push(pp);
     }
   }
-  // parentKinds is stored as a small JSON text such as {"<parentId>":"adoptive"}. Only parents of this person may appear,
-  // and only values from PARENT_KINDS. "birth" is the default, so it is left out to keep the text short.
-  function cleanParentKinds(raw, parentIds) {
-    if (raw === undefined || raw === null || raw === '') return '';
-    const obj = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch { throw bad('Parent kinds are not valid.'); } })() : raw;
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw bad('Parent kinds are not valid.');
-    const out = {};
-    for (const [id, kind] of Object.entries(obj)) {
-      if (!parentIds.includes(id)) throw bad('A parent kind was given for someone who is not listed as a parent.');
-      if (typeof kind !== 'string' || !PARENT_KINDS.includes(kind)) throw bad('That kind of parent is not valid.');
-      if (kind !== 'birth') out[id] = kind;
-    }
-    return Object.keys(out).length ? JSON.stringify(out) : '';
-  }
-  function readKinds(raw) {
-    try { const o = JSON.parse(raw || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; }
-  }
-  // Keeps only the kinds that still belong to a listed parent (used when parents change or someone is removed).
-  function pruneKinds(raw, parentIds) {
-    const o = readKinds(raw), out = {};
-    for (const id of parentIds) if (o[id]) out[id] = o[id];
-    return Object.keys(out).length ? JSON.stringify(out) : '';
-  }
-  function assertNotPartnerOfParent(parentIds, partnerIds) {
-    if (parentIds.some((id) => partnerIds.includes(id))) throw bad('A parent cannot also be listed as a partner of the same person.');
-  }
-  function kindsColumnMissing() {
-    return bad('Adoptive, step and foster links need one more setup step: add the parentKinds column to the people table (see the Setup Guide).');
-  }
   async function addPartner(all, otherId, selfId) {
     const o = all.find((x) => x.$id === otherId);
     const cur = (o && o.partnerIds) || [];
@@ -283,7 +272,25 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   async function dropPartner(all, otherId, selfId) {
     const o = all.find((x) => x.$id === otherId);
     const cur = (o && o.partnerIds) || [];
-    if (o && cur.includes(selfId)) await updateRow(TABLES.people, otherId, { partnerIds: cur.filter((x) => x !== selfId) });
+    if (o && cur.includes(selfId)) {
+      const data = { partnerIds: cur.filter((x) => x !== selfId) };
+      const kinds = parseRelKinds(o.relKinds);
+      if (kinds['s:' + selfId]) { delete kinds['s:' + selfId]; data.relKinds = JSON.stringify(kinds); }   // the old "divorced" label goes with the link
+      await updateRow(TABLES.people, otherId, data);
+    }
+  }
+  // Partner status (married, divorced...) is one fact about two people, so it is kept the same on both records.
+  async function mirrorPartnerKinds(all, person, finalPartners, cleaned) {
+    for (const pid of finalPartners) {
+      const o = all.find((x) => x.$id === pid);
+      if (!o) continue;
+      const want = cleaned['s:' + pid] || null;
+      const theirs = parseRelKinds(o.relKinds);
+      const cur = theirs['s:' + person.$id] || null;
+      if (want === cur) continue;
+      if (want) theirs['s:' + person.$id] = want; else delete theirs['s:' + person.$id];
+      await writePerson((d) => updateRow(TABLES.people, o.$id, d), {}, { relKinds: JSON.stringify(theirs) });
+    }
   }
 
   /* ---------- file ownership + normalisation ---------- */
@@ -467,10 +474,8 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       if (all.length >= LIMITS.maxPeople - 1) throw new ApiError(409, 'quota', `A family tree can hold up to ${LIMITS.maxPeople} people.`);
       const name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
       const linkId = await checkLink(ctx.familyId, body.userId, null, all);
-      let parentIds = checkIds(body.parentIds, all, null, LIMITS.maxParents);
-      let partnerIds = checkIds(body.partnerIds, all, null, LIMITS.maxPartners);
-      assertNotPartnerOfParent(parentIds, partnerIds);
-      let parentKinds = cleanParentKinds(body.parentKinds, parentIds);
+      let parentIds = checkIds(body.parentIds, all, null);
+      let partnerIds = checkIds(body.partnerIds, all, null);
       const extras = { birthday: cleanBirthday(body.birthday) || undefined, gender: cleanGender(body.gender) || undefined };
       if (body.inviteMembershipId) extras.inviteMembershipId = idOf(body.inviteMembershipId, 'inviteMembershipId');
 
@@ -499,16 +504,8 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
           else relationLinked = false;
         } else relationLinked = false;
       }
-      const baseData = { familyId: ctx.familyId, name, userId: linkId, confirmed: false, parentIds, partnerIds, createdBy: user.$id };
-      let row;
-      try {
-        // parentKinds is NOT optional like birthday: if the column is missing we say so instead of quietly losing "adoptive".
-        row = await writePerson((d) => createRow(TABLES.people, ID.unique(), d, teamRead(ctx.familyId)),
-          parentKinds ? { ...baseData, parentKinds } : baseData, extras);
-      } catch (e) {
-        if (parentKinds && sdkCode(e) === 400) throw kindsColumnMissing();
-        throw e;
-      }
+      const row = await writePerson((d) => createRow(TABLES.people, ID.unique(), d, teamRead(ctx.familyId)),
+        { familyId: ctx.familyId, name, userId: linkId, confirmed: false, parentIds, partnerIds, createdBy: user.$id }, extras);
       for (const pid of partnerIds) await addPartner(all, pid, row.$id);
       if (afterCreate) await afterCreate(row.$id);
       return { personId: row.$id, linked: relationLinked };
@@ -531,6 +528,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       const p = all.find((x) => x.$id === body.personId);
       if (!p) throw missing('That person is not in this family tree.');
       const isSelf = p.userId === user.$id;
+      const beforePartners = Array.isArray(p.partnerIds) ? [...p.partnerIds] : [];
       if (!isSelf) await requireTreeAdmin(user, ctx);
       // Once a person has accepted (their entry is linked and confirmed), their own details are theirs alone.
       const locked = !!(p.userId && p.confirmed === true && !isSelf);
@@ -549,28 +547,31 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         if (linkId !== (p.userId || '')) { data.userId = linkId; data.confirmed = false; }
       }
       if (body.parentIds !== undefined) {
-        data.parentIds = checkIds(body.parentIds, all, p.$id, LIMITS.maxParents);
+        data.parentIds = checkIds(body.parentIds, all, p.$id);
         assertNoCycle(all, p.$id, data.parentIds);
       }
       let partners = null;
-      if (body.partnerIds !== undefined) partners = checkIds(body.partnerIds, all, p.$id, LIMITS.maxPartners);
+      if (body.partnerIds !== undefined) partners = checkIds(body.partnerIds, all, p.$id);
       if (partners) data.partnerIds = partners;
-      if (body.parentIds !== undefined || body.partnerIds !== undefined) assertNotPartnerOfParent(data.parentIds !== undefined ? data.parentIds : (p.parentIds || []), partners || (p.partnerIds || []));
-      // The kinds always follow the final list of parents.
-      const finalParents = data.parentIds !== undefined ? data.parentIds : (p.parentIds || []);
-      let kindsWrite = false;
-      if (body.parentKinds !== undefined) { data.parentKinds = cleanParentKinds(body.parentKinds, finalParents); kindsWrite = !!data.parentKinds || !!p.parentKinds; }
-      else if (data.parentIds !== undefined && p.parentKinds) { data.parentKinds = pruneKinds(p.parentKinds, finalParents); kindsWrite = true; }
-      if (!kindsWrite) delete data.parentKinds;
-      const before = Array.isArray(p.partnerIds) ? [...p.partnerIds] : [];   // read before the write, so it cannot change underneath us
-      if (Object.keys(data).length || Object.keys(extras).length) {
-        try { await writePerson((d) => updateRow(TABLES.people, p.$id, d), data, extras); }
-        catch (e) { if (data.parentKinds && sdkCode(e) === 400) throw kindsColumnMissing(); throw e; }
+      const finalParents = data.parentIds || (Array.isArray(p.parentIds) ? p.parentIds : []);
+      const finalPartners = partners || (Array.isArray(p.partnerIds) ? p.partnerIds : []);
+      let cleanedKinds = null;
+      {
+        if (body.relKinds !== undefined) {
+          if (body.relKinds === null || typeof body.relKinds !== 'object' || Array.isArray(body.relKinds)) throw bad('The link kinds are not valid.');
+          cleanedKinds = cleanRelKinds(body.relKinds, finalParents, finalPartners, true);
+          extras.relKinds = JSON.stringify(cleanedKinds);
+        } else if (p.relKinds && (data.parentIds || partners)) {
+          extras.relKinds = JSON.stringify(cleanRelKinds(parseRelKinds(p.relKinds), finalParents, finalPartners, false));
+        }
       }
+      if (Object.keys(data).length || Object.keys(extras).length) await writePerson((d) => updateRow(TABLES.people, p.$id, d), data, extras);
       if (partners) {
+        const before = beforePartners;
         for (const pid of partners.filter((x) => !before.includes(x))) await addPartner(all, pid, p.$id);
         for (const pid of before.filter((x) => !partners.includes(x))) await dropPartner(all, pid, p.$id);
       }
+      if (cleanedKinds) await mirrorPartnerKinds(all, p, finalPartners, cleanedKinds);
       return { ok: true };
     },
 
@@ -585,9 +586,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         const par = (o.parentIds || []).filter((x) => x !== p.$id);
         const prt = (o.partnerIds || []).filter((x) => x !== p.$id);
         if (par.length !== (o.parentIds || []).length || prt.length !== (o.partnerIds || []).length) {
-          const upd = { parentIds: par, partnerIds: prt };
-          if (o.parentKinds) upd.parentKinds = pruneKinds(o.parentKinds, par);
-          await updateRow(TABLES.people, o.$id, upd);
+          await updateRow(TABLES.people, o.$id, { parentIds: par, partnerIds: prt });
         }
       }
       await deleteRow(TABLES.people, p.$id);

@@ -16,7 +16,7 @@ window.FAMILY_CONFIG = {
   tagline: "A private place for your family. No ads. No subscriptions.",
 
   // Where feedback, bug reports and questions go (GitHub Issues on the project repo).
-  feedbackUrl: "https://github.com/LayahMcFly/FamilyCircle/issues/new/choose",
+  feedbackUrl: "https://github.com/layahmcfly/FamilyCirle/issues/new/choose",
   githubUrl: "https://github.com/layahmcfly",
 
   // <<< REPLACE: copy the "API Endpoint" from Appwrite Console > your project > Settings.
