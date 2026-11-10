@@ -935,3 +935,12 @@ article.card.tile { flex: 0 0 min(78vw, 300px); display: flex; flex-direction: c
 .view-replies::before { content: ""; display: inline-block; width: 24px; height: 1px; background: var(--muted); vertical-align: middle; margin-right: 10px; opacity: .6; }
 .sheet .sheet-head { justify-content: center; position: relative; }
 .sheet .sheet-head .btn { position: absolute; right: 0; }
+
+/* v1.17.1 — the Create button follows my circle color */
+@media (max-width: 899px) {
+  .nav a[data-route="create"], .nav a[data-route="create"][aria-current="page"] { background: linear-gradient(135deg, #ff3b6b, #ff8a1f, #ffd60a, #3ddc84, #22b8ff, #7c4dff, #e040fb); box-shadow: 0 0 0 5px var(--bg), 0 8px 18px -6px rgba(124, 77, 255, .55); }
+  .nav a[data-route="create"] svg { filter: drop-shadow(0 1px 2px #0006); }
+  :root[data-ring="married"] .nav a[data-route="create"], :root[data-ring="married"] .nav a[data-route="create"][aria-current="page"] { background: linear-gradient(135deg, #f7d774, #c98a14 45%, #fff0b0 70%, #b87a10); color: #3a2400; box-shadow: 0 0 0 5px var(--bg), 0 8px 18px -6px rgba(201, 138, 20, .6); }
+  :root[data-ring="grand"] .nav a[data-route="create"], :root[data-ring="grand"] .nav a[data-route="create"][aria-current="page"] { background: linear-gradient(135deg, #8fa7d8, #f4f8ff 45%, #6f8fd0 75%, #a28bdc); color: #1d2a55; box-shadow: 0 0 0 5px var(--bg), 0 0 0 7px #7f98d1, 0 8px 18px -6px rgba(111, 143, 208, .6); }
+  :root[data-ring="married"] .nav a[data-route="create"] svg, :root[data-ring="grand"] .nav a[data-route="create"] svg { filter: none; }
+}
