@@ -436,12 +436,18 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       },
       checkout_options: {
         redirect_url: `${cfg.siteUrl}#/orders/${orderId}/done`,
-        ask_for_shipping_address: false,                 // the address was collected in the app, so shipping could be priced BEFORE payment
+        // Square refused a shipping fee together with ask_for_shipping_address:false (HTTP 400 INVALID_VALUE), and every Square example with a fee sets it to true.
+        // So with a fee, Square's page shows the address fields, already filled in from the address collected here (shipping was priced from that address BEFORE payment).
+        ask_for_shipping_address: shippingCents > 0,
         allow_tipping: false, enable_coupon: false, enable_loyalty: false,
         ...(shippingCents > 0 ? { shipping_fee: { name: 'Standard shipping', charge: { amount: shippingCents, currency: CUR } } } : {}),
         ...(cfg.supportEmail ? { merchant_support_email: cfg.supportEmail } : {})
       },
-      pre_populated_data: { buyer_email: user.email }
+      pre_populated_data: {
+        buyer_email: user.email,
+        ...(shippingCents > 0 ? { buyer_address: { first_name: address.first_name, last_name: address.last_name, address_line_1: address.address1, ...(address.address2 ? { address_line_2: address.address2 } : {}), locality: address.city, administrative_district_level_1: address.region, postal_code: address.zip, country: address.country } } : {}),
+        ...(address.phone && /^\+?[0-9][0-9 ()-]{6,22}$/.test(address.phone) ? { buyer_phone_number: address.phone.startsWith('+') ? address.phone.replace(/[ ()-]/g, '') : '+1' + address.phone.replace(/\D/g, '').replace(/^1/, '') } : {})
+      }
     };
     let link;
     try { link = await square.createPaymentLink(request); } catch (e) { return failCheckout(orderId, lines, 'create the Square payment link', e, user); }

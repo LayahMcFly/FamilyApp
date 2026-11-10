@@ -168,7 +168,8 @@ test('checkout: server prices, consent needed, duplicate request returns the sam
   assert.equal(s.checkout_options.shipping_fee.charge.amount, 499);
   assert.equal(s.order.location_id, 'LOC1'); assert.equal(s.order.reference_id, r1.orderId); assert.equal(s.idempotency_key, r1.orderId);
   assert.equal(s.checkout_options.redirect_url, `https://x.test/FamilyCircle/#/orders/${r1.orderId}/done`);
-  assert.equal(s.checkout_options.ask_for_shipping_address, false);
+  assert.equal(s.checkout_options.ask_for_shipping_address, true, 'Square only accepts a shipping fee together with the address fields');
+  assert.equal(s.pre_populated_data.buyer_address.address_line_1, '1 Main St'); assert.equal(s.pre_populated_data.buyer_address.administrative_district_level_1, 'GA');
   const again = await w.call(w.A, 'shopCheckout', { ...b, requestId: 'req-87654321' });
   assert.equal(again.status, 409, 'design is already in an order');
   assert.equal((await w.call(w.B, 'shopQuote', { ...b })).status, 403, 'someone else cannot use my design');
