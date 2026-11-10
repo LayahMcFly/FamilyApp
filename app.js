@@ -1403,7 +1403,10 @@
         h('span', { class: 'small muted', text: timeAgo(it.at) })));
     });
     var demo = h('div'), demoBtn = h('button', { class: 'btn secondary small', type: 'button', text: 'See an example of what shows up here' });
+    demoBtn.setAttribute('aria-expanded', 'false');
     demoBtn.addEventListener('click', function () {
+      if (demoBtn.getAttribute('aria-expanded') === 'true') { clear(demo); demoBtn.setAttribute('aria-expanded', 'false'); demoBtn.textContent = 'See an example of what shows up here'; return; }
+      demoBtn.setAttribute('aria-expanded', 'true'); demoBtn.textContent = 'Hide the example';
       var rows = [['heart', 'Grandma Rose liked your post', '2 min ago'], ['comment', 'Uncle Dev commented: Those look delicious!', '10 min ago'], ['heart', 'Uncle Dev and 1 more liked your comment', '1 h ago'], ['flame', 'Your post is trending in the family', '3 h ago']];
       clear(demo);
       demo.appendChild(h('p', { class: 'small muted', text: 'Example only. These are not real. Real ones appear when other family members like or comment.' }));
@@ -1983,25 +1986,53 @@
       var p = S.profiles.get(m.userId) || null;
       var isOwnerRow = m.roles.indexOf('owner') >= 0;
       var isTA = !!(p && p.treeAdmin === true);
-      var taBtn = null;
-      if (S.isOwner && !isOwnerRow && p) {
-        taBtn = h('button', { class: 'link-btn small', type: 'button', text: isTA ? 'Remove tree admin' : 'Make tree admin', 'aria-label': (isTA ? 'Remove tree admin from ' : 'Make tree admin: ') + p.displayName, onclick: function (ev) {
-          busy(ev.currentTarget, async function () {
-            try {
-              var r = await api('setTreeAdmin', { familyId: S.familyId, userId: m.userId, admin: !isTA });
-              p.treeAdmin = r.admin; toast(r.admin ? p.displayName + ' can now manage the family tree.' : 'Tree admin removed.'); route(false);
-            } catch (e) { toast(errText(e)); }
-          });
-        } });
-      }
       listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: m.userName || '?' }),
         h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + m.userId }, h('strong', { text: p.displayName })) : h('strong', { text: m.userName || 'Family member' }),
           m.userId === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null,
           isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null,
-          isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null), taBtn));
+          isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null)));
     });
-    if (S.isOwner) renderAdminTools(main, token);
-    else main.appendChild(h('p', { class: 'muted small', text: 'To add a relative, ask a family owner to invite their email address.' }));
+    main.appendChild(h('p', { class: 'muted small' }, S.isOwner ? 'Inviting people, removing members, tree admins, and leaving or deleting this family are in ' : 'To add a relative, ask a family owner to invite their email address. Leaving this family is in ',
+      h('a', { href: '#/settings/family', text: 'Settings \u2192 Family and members' }), '.'));
+  }
+
+  // Settings > Family and members: everything about managing who belongs to the active family.
+  async function settingsFamily(main, token) {
+    main.appendChild(h('p', { class: 'muted small', text: 'For ' + famName() + '. Each family you belong to has its own settings.' }));
+    var holder = h('div', null, spinnerLine('Loading\u2026'));
+    main.appendChild(holder);
+    var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
+    if (token !== S.nav) return;
+    await loadProfiles();
+    if (token !== S.nav) return;
+    var joined = res.memberships.filter(function (m) { return m.confirm; });
+    var me = joined.filter(function (m) { return m.userId === S.user.$id; })[0];
+    if (!me) { S.validatedAt = 0; return route(false); }
+    clear(holder);
+    if (S.isOwner) {
+      renderAdminTools(main, token);
+      var ta = h('section', { class: 'card', 'aria-label': 'Family tree admins' }, h('h2', { text: 'Family tree admins' }),
+        h('p', { class: 'muted small', text: 'Tree admins can change the family tree, the same as owners. They do not get any other owner powers.' }));
+      var others = joined.filter(function (m) { return m.roles.indexOf('owner') < 0; });
+      if (!others.length) ta.appendChild(h('p', { class: 'muted small', text: 'No other members yet.' }));
+      others.forEach(function (m) {
+        var p = S.profiles.get(m.userId) || null;
+        if (!p) return;
+        var isTA = p.treeAdmin === true;
+        ta.appendChild(h('div', { class: 'member' }, avatarEl(p), h('div', { class: 'grow' }, h('strong', { text: p.displayName }), isTA ? h('span', { class: 'badge', text: ' Tree admin' }) : null),
+          h('button', { class: 'btn secondary small', type: 'button', text: isTA ? 'Remove' : 'Make tree admin', 'aria-label': (isTA ? 'Remove tree admin from ' : 'Make tree admin: ') + p.displayName, onclick: function (ev) {
+            busy(ev.currentTarget, async function () {
+              try {
+                var r = await api('setTreeAdmin', { familyId: S.familyId, userId: m.userId, admin: !isTA });
+                p.treeAdmin = r.admin; toast(r.admin ? p.displayName + ' can now manage the family tree.' : 'Tree admin removed.'); route(false);
+              } catch (e) { toast(errText(e)); }
+            });
+          } })));
+      });
+      main.appendChild(ta);
+    } else {
+      main.appendChild(h('div', { class: 'card' }, h('p', { text: 'Only family owners can invite or remove people. To add a relative, ask an owner to invite their email address.' })));
+    }
     renderLeaveAndDelete(main, me, joined);
   }
 
@@ -2456,6 +2487,7 @@
   /* ---------- SETTINGS (opened from the gear on my profile) ---------- */
   var SETTING_SECTIONS = [
     { id: 'account', label: 'Account and security', note: 'Email, password' },
+    { id: 'family', label: 'Family and members', note: 'Invite, remove, tree admins, leave' },
     { id: 'appearance', label: 'Appearance', note: 'Light or dark, style, accent color' },
     { id: 'storage', label: 'Storage and downloads', note: 'My uploads, family space, data use' },
     { id: 'privacy', label: 'Privacy and data', note: 'Who can see what' }
@@ -2474,6 +2506,7 @@
     main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/settings', text: '← Settings' })));
     main.appendChild(h('h1', { text: sec.label }));
     if (sec.id === 'account') settingsAccount(main);
+    else if (sec.id === 'family') await settingsFamily(main, token);
     else if (sec.id === 'appearance') settingsAppearance(main);
     else if (sec.id === 'storage') await settingsStorage(main, token);
     else settingsPrivacy(main);
@@ -2535,7 +2568,7 @@
       h('p', { class: 'small muted', text: 'Anyone who can see a photo could still take a screenshot or share it, so share thoughtfully.' })));
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Your data' },
       h('h2', { text: 'Your data' }),
-      h('p', { text: 'You can delete your own posts, comments and uploads at any time (see Storage and downloads). Leaving a family, or deleting one you own, is under Family → Members.' }),
+      h('p', { text: 'You can delete your own posts, comments and uploads at any time (see Storage and downloads). Leaving a family, or deleting one you own, is under Settings → Family and members.' }),
       h('p', { class: 'small muted', text: 'Exporting a copy of your data is not available yet.' })));
   }
 
