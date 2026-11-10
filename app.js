@@ -484,6 +484,60 @@
     }
     S.reelIO.observe(box);
   }
+  function captionProgress() {
+    var line = h('p', { text: 'Starting…' }), bar = h('progress', { max: 100 }); bar.hidden = true;
+    var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'Making captions' }, h('div', { class: 'stack' },
+      h('strong', { text: 'Making captions' }), line, bar,
+      h('p', { class: 'small muted', text: 'This happens on your phone. The sound of the video is not sent anywhere. Keep this page open.' })));
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); });
+    document.body.appendChild(dlg); dlg.showModal();
+    return {
+      say: function (t, pct) { line.textContent = t; if (pct == null) bar.hidden = true; else { bar.hidden = false; bar.value = pct; } },
+      close: function () { try { dlg.close(); } catch (e) {} if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    };
+  }
+  // Returns the cue list, or null if it could not be made (the reason is shown to the person).
+  async function makeCaptionCues(blob) {
+    if (!window.Captions) { toast('Captions are not available right now.'); return null; }
+    var pg = captionProgress();
+    try {
+      var r = await window.Captions.transcribe(blob, { onStatus: pg.say });
+      if (r.cut) toast('This video is long, so only the first part is captioned.');
+      return r.cues;
+    } catch (e) {
+      var offline = e && /fetch|network|load failed|Failed to/i.test(String(e.message || e));
+      toast(offline ? 'Could not download the speech model. Check your connection and try again.' : (e && e.message ? e.message : 'Captions could not be made on this device.'));
+      return null;
+    } finally { pg.close(); }
+  }
+
+  /* ---------- automatic captions: a "CC" button over the video, using the lines saved with the post ---------- */
+  function ccOn() { try { return localStorage.getItem('fc_cc') !== 'off'; } catch (e) { return true; } }
+  function applyCaptions(v, box, post) {
+    Array.prototype.forEach.call(v.querySelectorAll('track'), function (t) { if (t.__url) URL.revokeObjectURL(t.__url); v.removeChild(t); });
+    var old = box.querySelector('.cc-btn'); if (old) box.removeChild(old);
+    var cues = window.Captions ? window.Captions.parse(post.captions) : [];
+    post.__cc = { v: v, box: box };
+    if (!cues.length) return;
+    var tr = document.createElement('track');
+    tr.kind = 'captions'; tr.srclang = 'en'; tr.label = 'English (automatic)';
+    tr.__url = URL.createObjectURL(new Blob([window.Captions.toVtt(cues)], { type: 'text/vtt' }));
+    tr.src = tr.__url; v.appendChild(tr);
+    function paint(on) {
+      tr.track.mode = on ? 'showing' : 'hidden';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.setAttribute('aria-label', on ? 'Captions are on. Turn captions off' : 'Captions are off. Turn captions on');
+      btn.classList.toggle('on', on);
+    }
+    var btn = h('button', { class: 'cc-btn', type: 'button', text: 'CC', onclick: function (ev) {
+      ev.stopPropagation();
+      var on = tr.track.mode !== 'showing';
+      try { localStorage.setItem('fc_cc', on ? 'on' : 'off'); } catch (e) {}
+      paint(on);
+    } });
+    box.appendChild(btn); paint(ccOn());
+  }
+
   function reelVideo(post, mime) {
     var token = S.nav;
     var box = h('div', { class: 'media placeholder reel-media' });
@@ -536,7 +590,7 @@
         var v = h('video', { src: st.url, loop: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
         v.muted = S.muted;
         v.addEventListener('timeupdate', function () { if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%'; });
-        box.appendChild(v); box.appendChild(snd); box.appendChild(bar); box.__paintSound();
+        box.appendChild(v); box.appendChild(snd); box.appendChild(bar); box.__paintSound(); applyCaptions(v, box, post);
         st.v = v; trackLoaded();
         if (st.wantPlay && st.active) playNow();
       }).catch(function (e) { st.loading = null; if (token === S.nav) fail(e); });
@@ -639,7 +693,7 @@
         if (token !== S.nav) return;
         clear(box); box.className = 'media' + (vertical ? ' vertical' : '');
         var v = h('video', { src: blobUrl(blob, mime), controls: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
-        box.appendChild(v);
+        box.appendChild(v); applyCaptions(v, box, post);
         var p = v.play(); if (p && p.catch) p.catch(function () { /* the person can press play */ });
       }).catch(function (e) { if (token === S.nav) showButton("Couldn't load this video. " + (e.code === 401 ? 'You may not have access.' : 'Please try again.')); });
     }
@@ -1758,10 +1812,26 @@
         setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
       } catch (e) { toast(friendly(e)); }
     }
+    async function saveCaptions(cues, doneText) {
+      try {
+        var r = await api('setCaptions', { familyId: S.familyId, postId: post.$id, captions: cues });
+        post.captions = r.captions || '';
+        if (post.__cc) applyCaptions(post.__cc.v, post.__cc.box, post);
+        toast(doneText + (post.captions && !post.__cc ? ' They show the next time the video loads.' : ''));
+      } catch (e) { toast(friendly(e)); }
+    }
+    async function addCaptionsToPost() {
+      try { toast('Getting the video…'); var blob = await fetchMedia(post.mediaFileId); }
+      catch (e) { return toast(friendly(e)); }
+      var cues = await makeCaptionCues(blob);
+      if (cues) await saveCaptions(cues, 'Captions saved.');
+    }
     function openMore() {
       var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
         post.mediaFileId ? h('button', { class: 'btn secondary block', type: 'button', text: post.kind === 'photo' ? 'Download photo' : 'Download video', onclick: function () { dlg.close(); downloadMedia(); } }) : null,
         isMine ? h('button', { class: 'btn secondary block', type: 'button', text: 'Edit caption', onclick: function () { dlg.close(); startEdit(); } }) : null,
+        (isMine && (post.kind === 'video' || post.kind === 'short')) ? h('button', { class: 'btn secondary block', type: 'button', text: post.captions ? 'Make the captions again' : 'Add automatic captions', onclick: function () { dlg.close(); addCaptionsToPost(); } }) : null,
+        (isMine && post.captions) ? h('button', { class: 'btn secondary block', type: 'button', text: 'Remove captions', onclick: function () { dlg.close(); saveCaptions([], 'Captions removed.'); } }) : null,
         (isMine || S.isOwner) ? h('button', { class: 'btn secondary block danger-text', type: 'button', text: isMine ? 'Delete' : 'Remove as family admin', onclick: function () { dlg.close(); removePost(); } }) : null,
         h('button', { class: 'btn ghost block', type: 'button', text: 'Cancel', onclick: function () { dlg.close(); } })));
       dlg.addEventListener('close', function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
@@ -2143,6 +2213,12 @@
       var msg = h('div'), info = h('div', { class: 'hint' }), prev = h('div', { class: 'preview' }), limitsBox = h('div', { class: 'limits' });
       var bar = h('progress', { max: 100, value: 0, hidden: true, 'aria-label': 'Upload progress' });
       var fileInput = null;
+      var ccBox = null, ccRow = null;
+      if (kind === 'video' || kind === 'short') {
+        ccBox = h('input', { type: 'checkbox', id: 'cc-make' });
+        ccRow = h('div', null, h('label', { class: 'check', for: 'cc-make' }, ccBox, ' Add automatic captions'),
+          h('p', { class: 'hint', text: 'English only. Made on your phone before posting, so it adds a minute or so. The first time, it downloads a small speech model (about 40 MB). Not perfect, so watch the captions once.' }));
+      }
 
       if (kind !== 'text') {
         var accept = kind === 'photo' ? 'image/jpeg,image/png,image/webp,image/heic,image/heif' : 'video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm';
@@ -2204,6 +2280,11 @@
             } else if (kind === 'video' || kind === 'short') {
               var mime = videoMime(file);
               var ext = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }[mime];
+              if (ccBox && ccBox.checked) {
+                btn.textContent = 'Making captions…';
+                var cc = await makeCaptionCues(file);
+                if (cc) payload.captions = cc; else toast('Posting without captions. You can add them later from the ⋯ menu.');
+              }
               btn.textContent = 'Uploading…';
               uploaded = await uploadFile(new File([file], 'video.' + ext, { type: mime }), onProg);
               payload.mediaFileId = uploaded.$id;
@@ -2223,7 +2304,7 @@
       } },
         h('label', { for: 'body', text: kind === 'text' ? 'Your note' : 'Caption' }), ta,
         fileInput ? h('div', null, h('label', { for: 'file', text: kind === 'photo' ? 'Photo' : kind === 'short' ? 'Short video' : 'Video' }), fileInput, info, limitsBox, prev) : null,
-        bar, msg, h('div', { class: 'stack' }, btn));
+        ccRow, bar, msg, h('div', { class: 'stack' }, btn));
       holder.appendChild(tabs); holder.appendChild(form);
     }
     build();

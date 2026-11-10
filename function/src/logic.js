@@ -47,6 +47,34 @@ export const PARENT_KINDS = ['birth', 'adoptive', 'step', 'foster', 'guardian'];
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
 const KINDS = ['text', 'photo', 'video', 'short'];
+
+/* Automatic captions are made on the viewer's phone and saved as a short list of [start, end, text].
+   The server re-checks the list so nobody can store anything else in that column. */
+export const CAPTION_LIMITS = { maxCues: 400, maxText: 200, maxSeconds: 7200, maxChars: 16000 };
+export function cleanCaptions(raw) {
+  if (raw === null || raw === undefined || (Array.isArray(raw) && raw.length === 0)) return '';
+  if (!Array.isArray(raw)) throw bad('Captions must be a list.');
+  if (raw.length > CAPTION_LIMITS.maxCues) throw bad('Captions can have at most ' + CAPTION_LIMITS.maxCues + ' lines.');
+  const out = [];
+  let prev = 0;
+  for (const c of raw) {
+    if (!Array.isArray(c) || c.length !== 3) throw bad('A caption line is not in the right format.');
+    const start = Number(c[0]), end = Number(c[1]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end > CAPTION_LIMITS.maxSeconds || start < prev) {
+      throw bad('Caption times must be in order.');
+    }
+    if (typeof c[2] !== 'string') throw bad('A caption line is not in the right format.');
+    const text = c[2].replace(/[\u0000-\u001f\u007f<>&]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    if (text.length > CAPTION_LIMITS.maxText) throw bad('A caption line is too long.');
+    out.push([Math.round(start * 10) / 10, Math.round(end * 10) / 10, text]);
+    prev = start;
+  }
+  if (!out.length) return '';
+  const json = JSON.stringify(out);
+  if (json.length > CAPTION_LIMITS.maxChars) throw bad('These captions are too long to save.');
+  return json;
+}
 const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export class ApiError extends Error {
@@ -724,9 +752,20 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         data.mediaFileId = f.fileId;
         data.mediaMime = f.mime.slice(0, 32);
         data.mediaSize = f.size;
+        if (kind !== 'photo' && body.captions !== undefined && body.captions !== null) {
+          const cj = cleanCaptions(body.captions);
+          if (cj) data.captions = cj;
+        }
       }
-      const row = await createRow(TABLES.posts, ID.unique(), data, teamRead(familyId));
-      return { postId: row.$id };
+      let row, captionsSaved = !!data.captions;
+      try {
+        row = await createRow(TABLES.posts, ID.unique(), data, teamRead(familyId));
+      } catch (e) {
+        if (sdkCode(e) !== 400 || !data.captions) throw e;
+        delete data.captions; captionsSaved = false;   // the captions column has not been added yet: post without them
+        row = await createRow(TABLES.posts, ID.unique(), data, teamRead(familyId));
+      }
+      return { postId: row.$id, captionsSaved };
     },
 
     async editPost({ user, body }) {
@@ -744,6 +783,22 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         await updateRow(TABLES.posts, post.$id, { body: text }); // the editedAt column has not been added yet
       }
       return { ok: true, edited: true };
+    },
+
+    /** The author adds, replaces or removes automatic captions on one of their videos. */
+    async setCaptions({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      const post = await loadPostInFamily(familyId, body.postId);
+      if (post.authorId !== user.$id) throw forbidden('Only the author can change captions.');
+      if (post.kind !== 'video' && post.kind !== 'short') throw bad('Only videos can have captions.');
+      const cj = cleanCaptions(body.captions);
+      try {
+        await updateRow(TABLES.posts, post.$id, { captions: cj });
+      } catch (e) {
+        if (sdkCode(e) === 400) throw bad('Captions are not set up yet. Add the captions column first (see the guide).');
+        throw e;
+      }
+      return { ok: true, captions: cj };
     },
 
     async deletePost({ user, body, deadline }) {

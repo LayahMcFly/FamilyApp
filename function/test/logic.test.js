@@ -697,3 +697,31 @@ test('about you: a brand-new member with saved details keeps them over the invit
   await s2.call(s2.bob, { action: 'claimInvite', familyId: 'famA' });
   assert.equal(s2.world.tables.people.get(r2.json.personId).name, 'Bobby');
 });
+
+test('captions: saved with a video, cleaned, author-only, and never stored for photos', async () => {
+  const s = await setup();
+  s.addFile('fv', { owner: 'bob', familyId: 'famA', mime: 'video/mp4', size: 1024 });
+  const cues = [[0, 2.04, 'Hello <b>there</b> & welcome'], [2.1, 4, '  '], [4, 6.5, 'Happy birthday!']];
+  const made = await s.call(s.bob, { action: 'createPost', familyId: 'famA', kind: 'video', mediaFileId: 'fv', captions: cues });
+  assert.equal(made.status, 200); assert.equal(made.json.captionsSaved, true);
+  const row = s.world.tables.posts.get(made.json.postId);
+  assert.deepEqual(JSON.parse(row.captions), [[0, 2, 'Hello b there /b welcome'], [4, 6.5, 'Happy birthday!']]);   // markup characters removed, blank line dropped
+  // only the author changes them, and only on videos
+  const other = await s.call(s.alice, { action: 'setCaptions', familyId: 'famA', postId: made.json.postId, captions: [[0, 1, 'x']] });
+  assert.equal(other.status, 403);
+  assert.equal((await s.call(s.bob, { action: 'setCaptions', familyId: 'famA', postId: made.json.postId, captions: [[0, 1, 'New']] })).status, 200);
+  assert.deepEqual(JSON.parse(s.world.tables.posts.get(made.json.postId).captions), [[0, 1, 'New']]);
+  assert.equal((await s.call(s.bob, { action: 'setCaptions', familyId: 'famA', postId: made.json.postId, captions: [] })).json.captions, '');
+  const text = await s.call(s.bob, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'hi' });
+  assert.equal((await s.call(s.bob, { action: 'setCaptions', familyId: 'famA', postId: text.json.postId, captions: [[0, 1, 'x']] })).status, 400);
+  // bad input is refused
+  for (const bad of ['text', [[1, 0.5, 'a']], [[0, 1]], [[2, 3, 'a'], [1, 2, 'b']], [[0, 1, 5]], [[0, 99999, 'a']], Array.from({ length: 401 }, (_, i) => [i, i + 1, 'a'])]) {
+    assert.equal((await s.call(s.bob, { action: 'setCaptions', familyId: 'famA', postId: made.json.postId, captions: bad })).status, 400, JSON.stringify(bad).slice(0, 40));
+  }
+  const long = Array.from({ length: 300 }, (_, i) => [i, i + 1, 'x'.repeat(150)]);
+  assert.equal((await s.call(s.bob, { action: 'setCaptions', familyId: 'famA', postId: made.json.postId, captions: long })).status, 400);   // over the size the column holds
+  // photos ignore captions
+  s.addFile('fp', { owner: 'bob', familyId: 'famA' });
+  const ph = await s.call(s.bob, { action: 'createPost', familyId: 'famA', kind: 'photo', mediaFileId: 'fp', captions: [[0, 1, 'x']] });
+  assert.equal(s.world.tables.posts.get(ph.json.postId).captions, undefined);
+});

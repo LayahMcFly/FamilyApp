@@ -1104,3 +1104,13 @@ dialog input[type="date"] { border-color: transparent; }
 .confetti i { position: absolute; width: 9px; height: 14px; border-radius: 2px; opacity: 0; animation: confetti-pop 1.5s cubic-bezier(.15, .7, .4, 1) forwards; }
 @keyframes confetti-pop { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(var(--dx), calc(var(--dy) + 220px)) rotate(var(--rot)); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .btn, .chip, .tab, .act { transition: none; } .nav a:active svg, .story:active .ring { animation: none; } .confetti { display: none; } }
+
+/* v1.23.0 automatic captions */
+.media { position: relative; }
+.cc-btn { position: absolute; top: 10px; right: 10px; z-index: 6; min-width: 44px; height: 32px; padding: 0 10px; border: 2px solid #fff9; border-radius: 8px; background: #0007; color: #fff; font: 700 14px/1 system-ui, sans-serif; letter-spacing: .04em; cursor: pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.cc-btn.on { background: #fff; color: #111; border-color: #fff; }
+.reel-media .cc-btn { top: 108px; right: 12px; }
+article.card .reel-media .cc-btn { top: auto; bottom: 56px; right: 12px; }
+video::cue { background: rgba(0,0,0,.72); color: #fff; font: 600 1.05em system-ui, sans-serif; }
+label.check { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+label.check input { width: 22px; height: 22px; flex: none; }

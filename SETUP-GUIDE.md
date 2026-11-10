@@ -335,6 +335,8 @@ Use one normal window and one private window, with two different email addresses
 > 3. Redeploy the `family-api` Function with the new package.
 > New installs made with the setup script get all of this automatically.
 
+> **Added in v1.23.0 (automatic captions):** in `posts` add a String column `captions`, size `16000`, not required, then redeploy the `family-api` Function. In the Console Terminal: `appwrite tablesdb create-string-column --database-id family --table-id posts --key captions --size 16000 --required false`. Until then, posting with captions still works but the captions are skipped.
+
 > **Added in v1.7.2 (the "edited" label):** in `posts` add a String column `editedAt`, size `32`, not required, then redeploy the `family-api` Function. Until then the label uses a rougher guess.
 
 ## v1.18.0 — relatives with a relationship, birthday and gender

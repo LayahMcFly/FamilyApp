@@ -23,6 +23,16 @@ Source: https://d3js.org (npm package `d3`). The single `d3.min.js` file is a bu
 
 The ISC terms for all the ISC parts are the text in `vendor/LICENSE-d3.txt`.
 
+## Automatic captions (`vendor/transformers/`)
+
+| Part | Licence | Where |
+|---|---|---|
+| Transformers.js 3.7.6 (`transformers.min.js`) | Apache-2.0 | `vendor/transformers/LICENSE-transformers.txt` |
+| ONNX Runtime Web (`ort-wasm-simd-threaded.jsep.*`, bundled with Transformers.js) | MIT, Microsoft | https://github.com/microsoft/onnxruntime/blob/main/LICENSE |
+| Whisper tiny English speech model (`Xenova/whisper-tiny.en`, downloaded by the browser, not stored in this repo) | MIT, OpenAI | https://huggingface.co/Xenova/whisper-tiny.en |
+
+The three files in `vendor/transformers/` are unmodified copies from the npm package `@huggingface/transformers`. The model is fetched from huggingface.co the first time someone makes captions and then kept in that browser's cache.
+
 ## What your own code adds
 
 `tree-chart.js` is your own code. It calls the library but does not change it. The files in `vendor/` are the unmodified files from the npm packages.
