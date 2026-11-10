@@ -1287,12 +1287,12 @@ button, a, summary, label, select, [role="button"], [role="tab"], .btn, .link-bt
 }
 input, textarea { -webkit-user-select: text; user-select: text; }
 
-/* Wide screens (and a phone browser set to "Desktop site"): Shorts sit in a phone-shaped 9:16 stage in the middle instead of stretching the full window height. */
+/* Wide screens (and a phone browser set to "Desktop site"): Shorts fill the space beside the menu as a 9:16 stage, as large as fits on screen, centered. */
 @media (min-width: 900px) {
-  body:has(.reels-main) { background: #000; }
-  .main.reels-main { left: calc(244px + (100vw - 244px - 460px) / 2); right: auto; width: 460px; top: max(0px, calc((100dvh - 860px) / 2)); bottom: max(0px, calc((100dvh - 860px) / 2)); }
-  .reel { height: min(100dvh, 860px); }
-  .reels-top { left: calc(244px + (100vw - 244px - 460px) / 2); right: auto; width: 460px; top: max(0px, calc((100dvh - 860px) / 2)); box-sizing: border-box; }
+  body:has(.reels-main) { background: #000; --rw: min(calc(100vw - 222px), calc(100dvh * 9 / 16), 760px); --rh: calc(var(--rw) * 16 / 9); }
+  .main.reels-main { left: calc(222px + (100vw - 222px - var(--rw)) / 2); right: auto; width: var(--rw); top: calc((100dvh - var(--rh)) / 2); bottom: auto; height: var(--rh); }
+  .reel { height: var(--rh); max-width: none; }
+  .reels-top { left: calc(222px + (100vw - 222px - var(--rw)) / 2); right: auto; width: var(--rw); top: calc((100dvh - var(--rh)) / 2); box-sizing: border-box; }
 }
 /* The family tree box keeps a sensible height on very tall or very short windows. */
 .tree-chart { height: clamp(380px, calc(100dvh - 380px), 760px); }
