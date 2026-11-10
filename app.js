@@ -1753,12 +1753,21 @@
       st.busy = false; paintSave();
     }
 
-    var backEl = null;
+    var backEl = null, closingSheet = false;
     function toggleComments() {
       if (isTile) { location.hash = '#/post/' + post.$id; return; }
       if (commentsEl) {
-        card.removeChild(commentsEl); if (backEl && backEl.parentNode) backEl.parentNode.removeChild(backEl);
-        commentsEl = null; backEl = null; document.body.classList.remove('sheet-open'); paintCmt(); return;
+        if (closingSheet) return;
+        closingSheet = true;
+        var sh = commentsEl, bk = backEl;
+        sh.classList.add('closing'); if (bk) bk.classList.add('closing');   // slide back down, then remove
+        var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        setTimeout(function () {
+          if (sh.parentNode) sh.parentNode.removeChild(sh); if (bk && bk.parentNode) bk.parentNode.removeChild(bk);
+          if (commentsEl === sh) { commentsEl = null; backEl = null; }
+          closingSheet = false; document.body.classList.remove('sheet-open'); paintCmt();
+        }, reduce ? 0 : 230);
+        return;
       }
       document.body.classList.add('sheet-open');
       // Comments open as a sheet from the bottom on every kind of post, like Instagram: dimmed page behind, list in the middle, emoji row and box at the bottom.

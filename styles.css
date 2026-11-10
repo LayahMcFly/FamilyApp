@@ -961,3 +961,14 @@ dialog input[type="date"] { border-color: transparent; }
   :root[data-ring="married"] .nav a[data-route="create"], :root[data-ring="married"] .nav a[data-route="create"][aria-current="page"] { background: linear-gradient(135deg, #f7d774, #c98a14 45%, #fff0b0 70%, #b87a10); color: #3a2400; box-shadow: 0 0 0 5px var(--bg), 0 8px 18px -6px rgba(201, 138, 20, .6); }
   :root[data-ring="grand"] .nav a[data-route="create"], :root[data-ring="grand"] .nav a[data-route="create"][aria-current="page"] { background: linear-gradient(135deg, #8fa7d8, #f4f8ff 45%, #6f8fd0 75%, #a28bdc); color: #1d2a55; box-shadow: 0 0 0 5px var(--bg), 0 0 0 7px #7f98d1, 0 8px 18px -6px rgba(111, 143, 208, .6); }
 }
+
+/* v1.18.3 — the comments sheet slides up from the bottom, and slides back down when closed */
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+.sheet { animation: sheet-up .3s cubic-bezier(.2, .8, .2, 1); }
+.sheet.closing { animation: sheet-down .23s ease-in forwards; }
+.sheet-backdrop { animation: fade-in .3s ease; }
+.sheet-backdrop.closing { animation: fade-out .23s ease forwards; }
+@media (prefers-reduced-motion: reduce) { .sheet, .sheet.closing, .sheet-backdrop, .sheet-backdrop.closing { animation: none; } }
