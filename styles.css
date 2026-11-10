@@ -672,3 +672,7 @@ select { width: 100%; }
 .main > .btn.block { margin-inline: 12px; width: calc(100% - 24px); }
 .profile-top { margin-inline: 4px; }
 .edited[hidden]{display:none}
+
+/* Shorts shown inside a normal feed card: anchor the sound button and progress bar to the video itself */
+article.card .reel-media { position: relative; }
+article.card .reel-sound { top: 12px; }
