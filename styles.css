@@ -842,3 +842,10 @@ article.card .reel-sound svg { width: 20px; height: 20px; }
 @keyframes ring-turn { to { --ang: 360deg; } }
 .ring, .post-head .avatar { animation: ring-turn 6s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ring, .post-head .avatar { animation: none; } }
+
+/* v1.12.2 — sheets drag down to close; the page never pull-to-refreshes behind them */
+html:has(.reels-main), body:has(.reels-main), body.sheet-open { overscroll-behavior-y: none; }
+.main.reels-main, .sheet, dialog.sheet-dialog { overscroll-behavior: contain; }
+.sheet { touch-action: pan-y; will-change: transform; }
+.sheet-head { touch-action: none; cursor: grab; padding: 6px 0 10px; }
+.reel .sheet::before { margin: -2px auto 4px; }

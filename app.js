@@ -1529,6 +1529,36 @@
     if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
     return String(n);
   }
+  // Swipe a bottom sheet down to close it (grab the top bar, or pull down while its list is scrolled to the top).
+  function sheetDrag(sheet, close) {
+    var y0 = null, dy = 0, t0 = 0, mode = null;
+    function setY(v) { sheet.style.transform = v ? 'translateY(' + v + 'px)' : ''; }
+    function start(y, fromHead) { y0 = y; dy = 0; t0 = Date.now(); mode = fromHead ? 'head' : 'body'; sheet.style.transition = 'none'; }
+    function move(y, ev) {
+      if (y0 === null) return;
+      var d = y - y0;
+      if (mode === 'body' && (sheet.scrollTop > 0 || d <= 0)) { if (d <= 0) return; if (sheet.scrollTop > 0) { y0 = y; return; } }
+      dy = Math.max(0, d); setY(dy); if (ev && ev.cancelable) ev.preventDefault();
+    }
+    function end() {
+      if (y0 === null) return; y0 = null;
+      var fast = dy / Math.max(1, Date.now() - t0) > 0.6;
+      sheet.style.transition = 'transform .2s ease';
+      if (dy > 110 || (fast && dy > 40)) { setY(sheet.offsetHeight + 40); setTimeout(close, 180); } else setY(0);
+    }
+    var head = sheet.querySelector('.sheet-head');
+    sheet.addEventListener('touchstart', function (ev) {
+      var t = ev.touches[0]; start(t.clientY, !!(head && head.contains(ev.target)));
+    }, { passive: true });
+    sheet.addEventListener('touchmove', function (ev) { move(ev.touches[0].clientY, ev); }, { passive: false });
+    sheet.addEventListener('touchend', end); sheet.addEventListener('touchcancel', end);
+    // mouse / pen: drag the top bar
+    if (head) {
+      head.addEventListener('pointerdown', function (ev) { if (ev.pointerType === 'touch' || ev.target.closest('button')) return; head.setPointerCapture(ev.pointerId); start(ev.clientY, true); });
+      head.addEventListener('pointermove', function (ev) { if (ev.pointerType !== 'touch') move(ev.clientY, ev); });
+      head.addEventListener('pointerup', function (ev) { if (ev.pointerType !== 'touch') end(); });
+    }
+  }
   // The big heart that pops up where you double-tapped.
   function heartBurst(box, x, y) {
     var b = h('div', { class: 'heart-burst', 'aria-hidden': 'true' }, icon('heart'));
@@ -1673,6 +1703,7 @@
           h('div', { class: 'sheet-head' }, h('strong', { text: 'Comments' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Close', onclick: toggleComments })), commentsEl);
       }
       card.appendChild(commentsEl); paintCmt();
+      if (isReel) sheetDrag(commentsEl, function () { if (commentsEl) toggleComments(); });
     }
 
     function startEdit() {
