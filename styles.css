@@ -991,3 +991,12 @@ dialog input[type="date"] { border-color: transparent; }
   .reel .media video { border-radius: 0; }
   .sheet { left: 244px; right: 0; }
 }
+
+/* v1.19.1 — the Create button's colors slowly flow, and it breathes a little */
+@keyframes plus-flow { 0% { background-position: 0% 0%; } 50% { background-position: 100% 100%; } 100% { background-position: 0% 0%; } }
+@keyframes plus-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@media (max-width: 899px) {
+  .nav a[data-route="create"], .nav a[data-route="create"][aria-current="page"] { background-size: 220% 220%; animation: plus-flow 5s ease-in-out infinite, plus-breathe 3.2s ease-in-out infinite; }
+  .nav a[data-route="create"]:active { animation-play-state: paused; transform: scale(.94); }
+}
+@media (prefers-reduced-motion: reduce) { .nav a[data-route="create"], .nav a[data-route="create"][aria-current="page"] { animation: none; background-size: 100% 100%; } }
