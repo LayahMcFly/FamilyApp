@@ -4,7 +4,7 @@ Make and edit your products in Printify. Family Circle reads them from your own 
 
 ## Two different Printify lists
 
-- **Catalog** (blank products Printify offers, such as "Oval Necklace" or "Mug"). The old "Set up" wizard uses this. It is still there under "Products from Printify's blank-product catalog" for products you have not made in Printify.
+- **Catalog** (blank products Printify offers, such as "Oval Necklace" or "Mug"). The old "Set up" wizard used this. It has been removed from the owner screen.
 - **Your shop's products** (the ones you created, such as "Personalized Photo Oval Necklace"). The new **Sync from Printify** button reads these through `GET /v1/shops/{shop_id}/products.json`.
 
 ## What is synced and what stays local

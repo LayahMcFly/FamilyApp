@@ -636,18 +636,6 @@
         sc.appendChild(line); sc.appendChild(btns2);
       });
       holder.appendChild(sc);
-      // products chosen by hand from Printify's blank-product catalog (older method)
-      var pc = h('div', { class: 'card inner' }, h('h2', { text: 'Products from Printify’s blank-product catalog' }), h('p', { class: 'hint', text: 'Only needed if you want a product you have not made in Printify. Products from your own Printify store are above.' }));
-      var lastSection = '';
-      ov.products.slice().sort(function (x, y) { return SECTIONS.map(function (z) { return z.id; }).indexOf(x.section) - SECTIONS.map(function (z) { return z.id; }).indexOf(y.section); }).forEach(function (p) {
-        if (p.section !== lastSection) { lastSection = p.section; pc.appendChild(h('h3', { class: 'shop-section', text: sectionTitle(p.section) })); }
-        var row = h('div', { class: 'admin-prod' }, h('strong', { text: p.title }), h('span', { class: 'small muted', text: p.saved ? (p.enabled ? 'ON' : 'saved, OFF') + ' · ' + p.variantCount + ' variants · blueprint ' + p.blueprintId + ' / provider ' + p.providerId : 'not set up' }));
-        var btns = h('div', { class: 'row' });
-        btns.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: p.saved ? 'Change' : 'Set up', onclick: function () { productWizard(p); } }));
-        if (p.saved) btns.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: p.enabled ? 'Turn off' : 'Turn on', onclick: async function () { try { await shopApi('shopAdminToggle', { key: p.key, enabled: !p.enabled }); await reload(); } catch (e) { toast(msgOf(e)); } } }));
-        pc.appendChild(row); pc.appendChild(btns);
-      });
-      holder.appendChild(pc);
       // orders
       var oc = h('div', { class: 'card inner' }, h('h2', { text: 'Orders' }));
       if (!ov.orders.length) oc.appendChild(h('p', { class: 'muted', text: 'No orders yet.' }));
