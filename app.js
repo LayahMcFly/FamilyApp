@@ -1827,16 +1827,32 @@
     function isPinned(c) { return pinnedIds().indexOf(c.$id) !== -1; }
     var isAuthor = post.authorId === uid;
     var open = {};
+    // Where the server has not saved who a reply belongs to, a comment that starts with "@Name" is shown as a reply to that person's latest earlier comment.
+    function guessParents(rows) {
+      var ids = {}; rows.forEach(function (c) { ids[c.$id] = c; });
+      rows.forEach(function (c, i) {
+        c.__parent = null;
+        if (c.parentId && ids[c.parentId]) return;
+        var m = /^@(\S+)/.exec(c.body || ''); if (!m) return;
+        var tag = m[1].toLowerCase();
+        for (var j = i - 1; j >= 0; j--) {
+          var o = rows[j], pr = S.profiles.get(o.authorId);
+          if (pr && String(pr.displayName || '').split(' ')[0].toLowerCase() === tag && !(o.parentId && ids[o.parentId]) && !o.__parent) { c.__parent = o.$id; return; }
+        }
+      });
+    }
+    function parentOf(c) { return c.parentId || c.__parent || null; }
     function redraw(rows) {
       clear(list);
+      guessParents(rows);
       var pins = pinnedIds(), ids = {};
       rows.forEach(function (c) { ids[c.$id] = true; });
-      var tops = rows.filter(function (c) { return !c.parentId || !ids[c.parentId]; });   // replies whose comment was deleted show as normal comments
+      var tops = rows.filter(function (c) { return !parentOf(c) || !ids[parentOf(c)]; });   // replies whose comment was deleted show as normal comments
       var sorted = tops.filter(function (c) { return pins.indexOf(c.$id) !== -1; })
         .concat(tops.filter(function (c) { return pins.indexOf(c.$id) === -1; }));
       sorted.forEach(function (c) {
         list.appendChild(commentItem(c, rows));
-        var kids = rows.filter(function (r) { return r.parentId === c.$id; });
+        var kids = rows.filter(function (r) { return parentOf(r) === c.$id; });
         if (!kids.length) return;
         if (!open[c.$id]) {
           list.appendChild(h('button', { class: 'view-replies', type: 'button', text: 'View ' + kids.length + (kids.length === 1 ? ' reply' : ' replies'), onclick: function () { open[c.$id] = true; redraw(rows); } }));
@@ -1909,7 +1925,7 @@
         } });
       }
       var replyBtn = h('button', { class: 'link-btn small', type: 'button', text: 'Reply', 'aria-label': 'Reply to ' + (p ? p.displayName : 'this comment'), onclick: function () { setReply(c); } });
-      if (c.parentId && rows && rows.some(function (r) { return r.$id === c.parentId; })) item.classList.add('reply');
+      if (parentOf(c) && rows && rows.some(function (r) { return r.$id === parentOf(c); })) item.classList.add('reply');
       item.appendChild(avatarEl(p));
       item.appendChild(h('div', { class: 'bubble' },
         isPinned(c) ? h('div', { class: 'pin-flag small' }, icon('pin'), ' Pinned by the author') : null,
@@ -1943,7 +1959,8 @@
           var made = await api('createComment', { familyId: S.familyId, postId: post.$id, body: text, parentId: replyTo ? replyTo.$id : undefined });
           var row = { $id: made.commentId, authorId: uid, body: text, likedBy: [], parentId: made.parentId || undefined, $createdAt: new Date().toISOString() };
           S.profiles.set(uid, S.profile);
-          clear(status); loaded.push(row); if (row.parentId) open[row.parentId] = true; redraw(loaded);
+          if (!row.parentId && replyTo) row.__parent = parentOf(replyTo) || replyTo.$id;
+          clear(status); loaded.push(row); guessParents(loaded); if (parentOf(row)) open[parentOf(row)] = true; redraw(loaded);
           setReply(null); ta.value = ''; ta.style.height = 'auto'; showAlert(msg, 'error', '');
           st.comments++; onCount();
         } catch (e) { showAlert(msg, 'error', friendly(e)); }
