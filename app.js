@@ -86,6 +86,11 @@
     gear: ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'],
     back: ['M15 5l-7 7 7 7'],
     more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
+    repost: ['M17 2l4 4-4 4', 'M3 11V9a3 3 0 0 1 3-3h15', 'M7 22l-4-4 4-4', 'M21 13v2a3 3 0 0 1-3 3H3'],
+    send: ['M22 3 9.5 14.5', 'M22 3l-7 18-5.5-6.5L3 9z'],
+    play: ['M7 4.5v15l13-7.5z'],
+    pause: ['M8 5v14', 'M16 5v14'],
+    fullscreen: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'],
     flame: ['M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .2 1.2.8 2 1.7 2.3C10.2 8.5 10.5 5.5 12 3z']
   };
   function icon(name) {
@@ -554,6 +559,78 @@
 
   /* ---------- automatic captions: a "CC" button over the video, using the lines saved with the post ---------- */
   function ccOn() { try { return localStorage.getItem('fc_cc') !== 'off'; } catch (e) { return true; } }
+
+  /* ---------- OUR OWN VIDEO PLAYER (replaces the browser's plain controls) ---------- */
+  function clock(t) { t = Math.max(0, Math.floor(t || 0)); var m = Math.floor(t / 60), s = t % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
+  function customPlayer(v, box) {
+    v.controls = false; v.removeAttribute('controls');
+    box.classList.add('player');
+    var old = box.querySelector('.pl-ui'); if (old) box.removeChild(old);
+    var big = h('button', { class: 'pl-big', type: 'button', 'aria-label': 'Play video', onclick: function (ev) { ev.stopPropagation(); toggle(); } }, icon('play'));
+    var playBtn = h('button', { class: 'pl-btn', type: 'button', 'aria-label': 'Play', onclick: function (ev) { ev.stopPropagation(); toggle(); } });
+    var seek = h('input', { class: 'pl-seek', type: 'range', min: 0, max: 1000, value: 0, step: 1, 'aria-label': 'Seek' });
+    var time = h('span', { class: 'pl-time', text: '0:00 / 0:00' });
+    var muteBtn = h('button', { class: 'pl-btn', type: 'button', onclick: function (ev) { ev.stopPropagation(); v.muted = !v.muted; paintMute(); } });
+    var speed = h('button', { class: 'pl-btn pl-speed', type: 'button', 'aria-label': 'Playback speed 1x', text: '1x', onclick: function (ev) {
+      ev.stopPropagation(); var list = [1, 1.5, 2, 0.5], i = (list.indexOf(v.playbackRate) + 1) % list.length; v.playbackRate = list[i];
+      speed.textContent = list[i] + 'x'; speed.setAttribute('aria-label', 'Playback speed ' + list[i] + 'x');
+    } });
+    var fsBtn = h('button', { class: 'pl-btn', type: 'button', 'aria-label': 'Full screen', onclick: function (ev) {
+      ev.stopPropagation();
+      if (document.fullscreenElement) { document.exitFullscreen(); return; }
+      if (box.requestFullscreen) box.requestFullscreen().catch(function () {});
+      else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();      // iPhone plays full screen in its own player
+    } }, icon('fullscreen'));
+    var bar = h('div', { class: 'pl-bar' }, playBtn, seek, time, speed, muteBtn, fsBtn);
+    var ui = h('div', { class: 'pl-ui' }, big, bar);
+    box.appendChild(ui);
+    var hideT = null, dragging = false;
+    function toggle() { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause(); wake(); }
+    function paintPlay() {
+      var paused = v.paused || v.ended;
+      clear(playBtn); playBtn.appendChild(icon(paused ? 'play' : 'pause')); playBtn.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+      big.setAttribute('aria-label', paused ? 'Play video' : 'Pause video');
+      box.classList.toggle('is-paused', paused);
+    }
+    function paintMute() {
+      clear(muteBtn); muteBtn.appendChild(icon(v.muted ? 'mute' : 'volume')); muteBtn.setAttribute('aria-label', v.muted ? 'Sound is off. Turn sound on' : 'Sound is on. Turn sound off');
+    }
+    function paintTime() {
+      var d = isFinite(v.duration) ? v.duration : 0;
+      if (!dragging) { var pct = d ? v.currentTime / d : 0; seek.value = Math.round(pct * 1000); seek.style.setProperty('--pct', (pct * 100).toFixed(1) + '%'); }
+      time.textContent = clock(v.currentTime) + ' / ' + clock(d);
+      seek.setAttribute('aria-valuetext', clock(v.currentTime) + ' of ' + clock(d));
+    }
+    function wake() {
+      box.classList.add('show-ui'); clearTimeout(hideT);
+      if (!v.paused) hideT = setTimeout(function () { if (!box.contains(document.activeElement) || document.activeElement === v) box.classList.remove('show-ui'); }, 2800);
+    }
+    seek.addEventListener('input', function () {
+      dragging = true; var d = isFinite(v.duration) ? v.duration : 0; v.currentTime = d * seek.value / 1000;
+      seek.style.setProperty('--pct', (seek.value / 10) + '%'); time.textContent = clock(v.currentTime) + ' / ' + clock(d); wake();
+    });
+    seek.addEventListener('change', function () { dragging = false; });
+    seek.addEventListener('click', function (ev) { ev.stopPropagation(); });
+    v.addEventListener('play', function () { paintPlay(); wake(); });
+    v.addEventListener('pause', function () { paintPlay(); wake(); });
+    v.addEventListener('ended', paintPlay);
+    v.addEventListener('timeupdate', paintTime);
+    v.addEventListener('loadedmetadata', paintTime);
+    v.addEventListener('durationchange', paintTime);
+    v.addEventListener('volumechange', paintMute);
+    box.addEventListener('click', function (ev) {
+      if (ev.target.closest('.pl-bar, .cc-btn')) return;
+      if (box.classList.contains('show-ui') && !v.paused) { toggle(); } else if (v.paused) toggle(); else wake();
+    });
+    box.addEventListener('mousemove', wake);
+    box.addEventListener('keydown', function (ev) {
+      if (ev.target.closest && ev.target.closest('input')) return;
+      if (ev.key === ' ' && ev.target === box) { ev.preventDefault(); toggle(); }
+    });
+    box.addEventListener('focusin', wake);
+    paintPlay(); paintMute(); paintTime(); box.classList.add('show-ui');
+  }
+
   function applyCaptions(v, box, post) {
     Array.prototype.forEach.call(v.querySelectorAll('track'), function (t) { if (t.__url) URL.revokeObjectURL(t.__url); v.removeChild(t); });
     var old = box.querySelector('.cc-btn'); if (old) box.removeChild(old);
@@ -734,8 +811,8 @@
       fetchMedia(post.mediaFileId, true).then(function (blob) {
         if (token !== S.nav) return;
         clear(box); box.className = 'media' + (vertical ? ' vertical' : '');
-        var v = h('video', { src: blobUrl(blob, mime), controls: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
-        box.appendChild(v); applyCaptions(v, box, post);
+        var v = h('video', { src: blobUrl(blob, mime), playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
+        box.appendChild(v); customPlayer(v, box); applyCaptions(v, box, post);
         if (play !== false) { var p = v.play(); if (p && p.catch) p.catch(function () { /* the person can press play */ }); }
       }).catch(function (e) { if (token === S.nav) showButton("Couldn't load this video. " + (e.code === 401 ? 'You may not have access.' : 'Please try again.')); });
     }
@@ -1914,12 +1991,15 @@
     // actions
     var like = actionBtn('heart', 'Like', function () { toggleLike(); });
     var cmt = actionBtn('comment', 'Comments', function () { toggleComments(); });
+    var rep = actionBtn('repost', 'Repost: remember this day?', function () { repostDialog(post); });
+    var shr = actionBtn('send', 'Share link, family only', function () { shareDialog(post); });
+    rep.setCount(null, 'Repost: remind the family of this day'); shr.setCount(null, 'Share link, family members only');
     var save = actionBtn('bookmark', 'Save', function () { toggleSave(); });
     save.className = 'act save';
     function paintLike() { like.setCount(st.likes, (st.liked ? 'Remove your like. ' : 'Like. ') + st.likes + ' likes', !!st.liked); }
     function paintCmt() { cmt.setCount(st.comments, 'Comments. ' + st.comments + ' so far', undefined); cmt.setAttribute('aria-expanded', commentsEl ? 'true' : 'false'); }
     function paintSave() { save.setCount(null, S.saved.has(post.$id) ? 'Saved in ' + libName(libOf(post.$id)) + '. Change library or remove' : 'Save for later', S.saved.has(post.$id)); }
-    var actions = h('div', { class: 'actions' }, like, cmt, save);
+    var actions = h('div', { class: 'actions' }, like, cmt, rep, shr, save);
     async function downloadMedia() {
       try {
         toast('Getting your file…');
@@ -1949,8 +2029,6 @@
     function openMore() {
       var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
         post.mediaFileId ? h('button', { class: 'btn secondary block', type: 'button', text: post.kind === 'photo' ? 'Download photo' : 'Download video', onclick: function () { dlg.close(); downloadMedia(); } }) : null,
-        h('button', { class: 'btn secondary block', type: 'button', text: 'Remember this day? (repost)', onclick: function () { dlg.close(); repostDialog(post); } }),
-        h('button', { class: 'btn secondary block', type: 'button', text: 'Share link (family only)', onclick: function () { dlg.close(); shareDialog(post); } }),
         isMine ? h('button', { class: 'btn secondary block', type: 'button', text: 'Edit caption', onclick: function () { dlg.close(); startEdit(); } }) : null,
         (isMine && (post.kind === 'video' || post.kind === 'short')) ? h('button', { class: 'btn secondary block', type: 'button', text: post.captions ? 'Make the captions again' : 'Add automatic captions', onclick: function () { dlg.close(); addCaptionsToPost(); } }) : null,
         (isMine && post.captions) ? h('button', { class: 'btn secondary block', type: 'button', text: 'Remove captions', onclick: function () { dlg.close(); saveCaptions([], 'Captions removed.'); } }) : null,
