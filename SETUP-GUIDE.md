@@ -335,7 +335,7 @@ Use one normal window and one private window, with two different email addresses
 > 3. Redeploy the `family-api` Function with the new package.
 > New installs made with the setup script get all of this automatically.
 
-> **Added in v1.23.0 (automatic captions):** in `posts` add a String column `captions`, size `16000`, not required, then redeploy the `family-api` Function. In the Console Terminal: `appwrite tablesdb create-string-column --database-id family --table-id posts --key captions --size 16000 --required false`. Until then, posting with captions still works but the captions are skipped.
+> **Added in v1.23.0 (automatic captions):** in `posts` add a **Text** column `captions` (not a String column, because `posts` is near Appwrite's row-size limit and Text is stored off the row), not required, then redeploy the `family-api` Function. In the Console Terminal: `appwrite tablesdb create-text-column --database-id family --table-id posts --key captions --required false`. Until then, posting with captions still works but the captions are skipped.
 
 > **Added in v1.26.0 (reposts and family-only links):** in `posts` add a String column `repostOfId`, size `36`, not required, then redeploy the `family-api` Function. In the Console Terminal: `appwrite tablesdb create-string-column --database-id family --table-id posts --key repostOfId --size 36 --required false`. Until it exists, "Remember this day? (repost)" shows a message asking you to add it; everything else keeps working.
 

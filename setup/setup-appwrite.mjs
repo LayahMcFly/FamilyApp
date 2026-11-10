@@ -38,7 +38,7 @@ const schema = {
     columns: [
       S('familyId', 36, true), S('authorId', 36, true),
       { type: 'enum', key: 'kind', elements: ['text', 'photo', 'video', 'short'], required: true },
-      S('body', 2000, false), S('mediaFileId', 36, false), S('mediaMime', 32, false), S('pinnedCommentIds', 120, false), S('editedAt', 32, false), S('captions', 16000, false), S('repostOfId', 36, false),
+      S('body', 2000, false), S('mediaFileId', 36, false), S('mediaMime', 32, false), S('pinnedCommentIds', 120, false), S('editedAt', 32, false), { type: 'text', key: 'captions', required: false }, S('repostOfId', 36, false),
       { type: 'integer', key: 'mediaSize', min: 0, max: 52428800, required: false }
     ],
     indexes: [['idx_familyId', 'key', ['familyId']], ['idx_family_kind', 'key', ['familyId', 'kind']], ['idx_mediaFileId', 'key', ['mediaFileId']]]
@@ -102,6 +102,7 @@ for (const [tableId, def] of Object.entries(schema)) {
   await step('table', () => db.createTable({ databaseId, tableId, name: tableId, permissions: [], rowSecurity: true }));
   for (const c of def.columns) {
     await step('column ' + c.key, () => {
+      if (c.type === 'text') return db.createTextColumn({ databaseId, tableId, key: c.key, required: c.required });
       if (c.type === 'string') return db.createStringColumn({ databaseId, tableId, key: c.key, size: c.size, required: c.required, array: !!c.array });
       if (c.type === 'boolean') return db.createBooleanColumn({ databaseId, tableId, key: c.key, required: c.required });
       if (c.type === 'enum') return db.createEnumColumn({ databaseId, tableId, key: c.key, elements: c.elements, required: c.required });
