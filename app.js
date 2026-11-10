@@ -1588,7 +1588,8 @@
   // Swipe a bottom sheet down to close it (grab the top bar, or pull down while its list is scrolled to the top).
   function sheetDrag(sheet, close) {
     var y0 = null, dy = 0, t0 = 0, mode = null;
-    function setY(v) { sheet.style.transform = v ? 'translateY(' + v + 'px)' : ''; }
+    function setY(v) { sheet.style.transform = v ? 'translateY(' + v + 'px)' : ''; if (v && v < 400) fadeBack(Math.max(0.2, 1 - v / 400)); }
+    function fadeBack(o) { var bk = sheet.previousElementSibling; if (bk && bk.classList.contains('sheet-backdrop')) { bk.style.transition = 'opacity .2s'; bk.style.opacity = String(o); } }
     function start(y, fromHead) { y0 = y; dy = 0; t0 = Date.now(); mode = fromHead ? 'head' : 'body'; sheet.style.transition = 'none'; }
     function move(y, ev) {
       if (y0 === null) return;
@@ -1601,7 +1602,10 @@
       if (y0 === null) return; y0 = null;
       var fast = dy / Math.max(1, Date.now() - t0) > 0.6;
       sheet.style.transition = 'transform .2s ease';
-      if (dy > 110 || (fast && dy > 40)) { setY(sheet.offsetHeight + 40); setTimeout(close, 180); } else setY(0);
+      if (dy > 110 || (fast && dy > 40)) {
+        sheet.classList.add('dragged');   // already sliding away under the finger: do not replay the close animation
+        setY(sheet.offsetHeight + 40); fadeBack(0); setTimeout(close, 200);
+      } else { setY(0); fadeBack(1); }
     }
     var head = sheet.querySelector('.sheet-head');
     sheet.addEventListener('touchstart', function (ev) {
@@ -1765,7 +1769,7 @@
         if (closingSheet) return;
         closingSheet = true;
         var sh = commentsEl, bk = backEl;
-        sh.classList.add('closing'); if (bk) bk.classList.add('closing');   // slide back down, then remove
+        if (!sh.classList.contains('dragged')) { sh.classList.add('closing'); if (bk) bk.classList.add('closing'); }   // slide back down, then remove
         var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
         setTimeout(function () {
           if (sh.parentNode) sh.parentNode.removeChild(sh); if (bk && bk.parentNode) bk.parentNode.removeChild(bk);

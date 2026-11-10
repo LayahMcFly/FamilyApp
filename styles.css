@@ -1003,3 +1003,9 @@ dialog input[type="date"] { border-color: transparent; }
 
 /* v1.19.2 — comments shown right under a post on its own page */
 .inline-comments { margin: 6px 14px 0; padding-top: 8px; border-top: 1px solid var(--border); }
+
+/* v1.19.3 — no replayed animation after a swipe; lighter dim behind the sheet */
+.sheet.dragged, .sheet.dragged.closing { animation: none !important; }
+.sheet-backdrop { background: rgba(0, 0, 0, .32); }
+.reel + .sheet-backdrop, .reel .sheet-backdrop { background: rgba(0, 0, 0, .45); }
+.sheet .sheet-head { min-height: 48px; }
