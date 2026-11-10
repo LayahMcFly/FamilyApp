@@ -127,7 +127,7 @@
 
   // Where the photo sits inside the print area. All numbers are in print-area pixels.
   function geometry(sw, sh, W, H, spec) {
-    var bandH = spec.caption ? Math.round(H * 0.12) : 0, rh = H - bandH;
+    var bandH = spec.caption ? Math.round(H * 0.17) : 0, rh = H - bandH;
     var base = spec.fit === 'contain' ? Math.min(W / sw, rh / sh) : Math.max(W / sw, rh / sh);
     var z = Math.min(4, Math.max(1, spec.zoom || 1)), scale = base * z, dw = sw * scale, dh = sh * scale;
     var maxX = Math.max(0, (dw - W) / 2), maxY = Math.max(0, (dh - rh) / 2);
@@ -138,9 +138,11 @@
   }
   function drawText(c, text, W, H, bandH) {
     c.fillStyle = '#ffffff'; c.fillRect(0, H - bandH, W, bandH);
-    var size = Math.round(bandH * 0.5); c.fillStyle = '#222'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    for (; size > 8; size -= 2) { c.font = '600 ' + size + 'px Georgia, serif'; if (c.measureText(text).width <= W * 0.9) break; }
-    c.fillText(text, W / 2, H - bandH / 2);
+    // The words live inside the blue safe line: 5% in from the left, right and bottom edges.
+    var top = H - bandH, bottom = H * 0.95, mid = (top + bottom) / 2, maxW = W * 0.86;
+    var size = Math.round((bottom - top) * 0.55); c.fillStyle = '#222'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (; size > 8; size -= 2) { c.font = '600 ' + size + 'px "Helvetica Neue", Arial, sans-serif'; if (c.measureText(text).width <= maxW) break; }
+    c.fillText(text, W / 2, mid);
   }
   // Draws the finished print image (no guides) at k times the print-area size.
   function paintPrint(c, bmp, W, H, spec, k) {
