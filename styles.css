@@ -1275,3 +1275,7 @@ dialog :not(.row):not(.chips) > :is(button.btn, a.btn) + :is(button.btn, a.btn, 
 @media (prefers-reduced-motion: reduce) { .pl-big, .pl-bar { transition: none; } }
 .reel .media.reel-media.wide video { object-fit: contain; background: #000; }
 .brand { color: inherit; text-decoration: none; cursor: pointer; }
+
+/* Holding a Short pauses it. Never select text or highlight the video while a finger is down. */
+.reel-media, .reel-media * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.reel-media video { -webkit-touch-callout: none; pointer-events: auto; }

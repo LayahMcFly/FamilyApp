@@ -718,8 +718,20 @@
         if (st.wantPlay && st.active) playNow();
       }).catch(function (e) { st.loading = null; if (token === S.nav) fail(e); });
     }
-    var lastTap = 0, tapTimer = null;
+    // Press and hold the video to pause it; let go and it carries on. Holding never selects or highlights anything.
+    var holdTimer = null, held = false, heldWasPlaying = false;
+    function endHold() { clearTimeout(holdTimer); if (held) { held = false; if (heldWasPlaying && st.v && st.active) playNow(); heldWasPlaying = false; } }
+    box.addEventListener('pointerdown', function (ev) {
+      if (ev.target.closest && ev.target.closest('button, a, input, .pl-ui')) return;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(function () { if (!st.v) return; held = true; heldWasPlaying = !st.v.paused; st.v.pause(); clearTimeout(tapTimer); }, 220);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { box.addEventListener(n, endHold); });
+    box.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+    var lastTap = 0, tapTimer = null, holdSwallow = 0;
+    box.addEventListener('pointerup', function () { if (held) holdSwallow = Date.now(); }, true);
     box.addEventListener('click', function (ev) {
+      if (Date.now() - holdSwallow < 400) { holdSwallow = 0; return; }      // the tap that ends a hold is not a tap
       var now = Date.now();
       if (box.__dbl && now - lastTap < 300) {            // double tap: send a heart, never pause
         clearTimeout(tapTimer); lastTap = 0;
