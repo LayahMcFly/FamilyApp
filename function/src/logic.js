@@ -514,15 +514,75 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       return { personId: row.$id, linked: relationLinked };
     },
 
-    /** Someone who just accepted an invitation: the tree entry made for them becomes theirs (confirmed). */
+    /** "About you": my own name, birthday and gender. Creates my tree entry the first time, so a member never needs an admin for this. */
+    async saveMyPerson({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      const all = await treePeople(ctx.familyId);
+      const extras = {};
+      if (body.birthday !== undefined) extras.birthday = cleanBirthday(body.birthday);
+      if (body.gender !== undefined) extras.gender = cleanGender(body.gender);
+      const mine = all.find((x) => x.userId === user.$id);
+      if (mine) {
+        const data = {};
+        if (body.name !== undefined) data.name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
+        if (Object.keys(data).length || Object.keys(extras).length) await writePerson((d) => updateRow(TABLES.people, mine.$id, d), data, extras);
+        return { personId: mine.$id, created: false };
+      }
+      if (all.length >= LIMITS.maxPeople - 1) throw new ApiError(409, 'quota', `A family tree can hold up to ${LIMITS.maxPeople} people.`);
+      const prof = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${ctx.familyId}_${user.$id}`])]);
+      const name = body.name !== undefined ? textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax }) : ((prof && prof.displayName) || 'Me');
+      const row = await writePerson((d) => createRow(TABLES.people, ID.unique(), d, teamRead(ctx.familyId)),
+        { familyId: ctx.familyId, name, userId: user.$id, confirmed: true, parentIds: [], partnerIds: [], createdBy: user.$id }, extras);
+      return { personId: row.$id, created: true };
+    },
+
+    /**
+     * Someone who just accepted an invitation. The entry the inviter made for them becomes theirs (confirmed).
+     * Details the new member saved on their own account win over what the inviter typed.
+     * If they already set themselves up in this family, the inviter's entry is merged into theirs (links kept, no duplicate).
+     */
     async claimInvite({ user, body }) {
       const ctx = await requireMember(user, body.familyId);
       const all = await treePeople(ctx.familyId);
-      if (all.some((x) => x.userId === user.$id)) return { claimed: false };
-      const p = all.find((x) => x.inviteMembershipId && x.inviteMembershipId === ctx.membership.$id && !x.userId);
-      if (!p) return { claimed: false };
-      await updateRow(TABLES.people, p.$id, { userId: user.$id, confirmed: true });
-      return { claimed: true, personId: p.$id };
+      const inv = all.find((x) => x.inviteMembershipId && x.inviteMembershipId === ctx.membership.$id && !x.userId);
+      if (!inv) return { claimed: false };
+      const mine = all.find((x) => x.userId === user.$id);
+      const me = body.me && typeof body.me === 'object' ? body.me : {};
+      const own = {};
+      const ownExtras = {};
+      try { if (me.name) own.name = textOf(me.name, 'Name', { min: 1, max: LIMITS.personNameMax }); } catch { /* ignore a bad saved value */ }
+      try { if (me.birthday) ownExtras.birthday = cleanBirthday(me.birthday); } catch { /* ignore */ }
+      try { if (me.gender) ownExtras.gender = cleanGender(me.gender); } catch { /* ignore */ }
+      if (!mine) {
+        await writePerson((d) => updateRow(TABLES.people, inv.$id, d), { ...own, userId: user.$id, confirmed: true }, ownExtras);
+        return { claimed: true, personId: inv.$id };
+      }
+      // merge the invitation entry into my own entry
+      const uniq = (l) => [...new Set(l)];
+      const invParents = (inv.parentIds || []).filter((x) => x !== mine.$id);
+      const invPartners = (inv.partnerIds || []).filter((x) => x !== mine.$id);
+      const parents = uniq([...(mine.parentIds || []), ...invParents]).slice(0, LIMITS.maxParents);
+      const partners = uniq([...(mine.partnerIds || []), ...invPartners]).filter((x) => !parents.includes(x)).slice(0, LIMITS.maxPartners);
+      const kinds = { ...readKinds(inv.parentKinds), ...readKinds(mine.parentKinds) };
+      const mergedKinds = pruneKinds(JSON.stringify(kinds), parents);
+      const mineData = { parentIds: parents, partnerIds: partners };
+      if (mergedKinds || mine.parentKinds) mineData.parentKinds = mergedKinds;
+      try { await updateRow(TABLES.people, mine.$id, mineData); }
+      catch (e) { if (sdkCode(e) === 400 && 'parentKinds' in mineData) { delete mineData.parentKinds; await updateRow(TABLES.people, mine.$id, mineData); } else throw e; }
+      for (const o of all) {
+        if (o.$id === inv.$id || o.$id === mine.$id) continue;
+        const hasP = (o.parentIds || []).includes(inv.$id), hasS = (o.partnerIds || []).includes(inv.$id);
+        if (!hasP && !hasS) continue;
+        const data = {};
+        if (hasP) data.parentIds = uniq((o.parentIds || []).map((x) => (x === inv.$id ? mine.$id : x)));
+        if (hasS) data.partnerIds = uniq((o.partnerIds || []).map((x) => (x === inv.$id ? mine.$id : x)));
+        const ok = readKinds(o.parentKinds);
+        if (ok[inv.$id]) { ok[mine.$id] = ok[inv.$id]; delete ok[inv.$id]; data.parentKinds = JSON.stringify(ok); }
+        try { await updateRow(TABLES.people, o.$id, data); }
+        catch (e) { if (sdkCode(e) === 400 && 'parentKinds' in data) { delete data.parentKinds; await updateRow(TABLES.people, o.$id, data); } else throw e; }
+      }
+      await deleteRow(TABLES.people, inv.$id);
+      return { claimed: true, merged: true, personId: mine.$id };
     },
 
     async treeEditPerson({ user, body }) {

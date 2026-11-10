@@ -650,3 +650,50 @@ test('inviting a relative: relationship, details, claim on accept, and the invit
   const sib = await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Sis', relation: 'sibling' });
   assert.equal(sib.status, 403);   // Bob is not a tree admin
 });
+
+test('about you: a member sets their own details; an invite for someone already set up merges, not duplicates', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' });
+  // a plain member (not an admin) creates and edits their own entry
+  const mine = await s.call(s.bob, { action: 'saveMyPerson', familyId: 'famA', name: 'Robert', birthday: '1990-02-03', gender: 'Male' });
+  assert.equal(mine.status, 200); assert.equal(mine.json.created, true);
+  const row = s.world.tables.people.get(mine.json.personId);
+  assert.deepEqual([row.userId, row.confirmed, row.name, row.birthday], ['bob', true, 'Robert', '1990-02-03']);
+  assert.deepEqual(row.$permissions, ['read("team:famA")']);
+  const again = await s.call(s.bob, { action: 'saveMyPerson', familyId: 'famA', name: 'Rob' });
+  assert.equal(again.json.created, false); assert.equal(s.world.tables.people.get(mine.json.personId).name, 'Rob');
+  assert.equal((await s.call(s.bob, { action: 'saveMyPerson', familyId: 'famA', birthday: 'June' })).status, 400);
+  assert.equal((await s.call(s.carol, { action: 'saveMyPerson', familyId: 'famA', name: 'X' })).status, 403);   // not a member of this family
+  assert.equal([...s.world.tables.people.values()].filter((p) => p.userId === 'bob').length, 1);
+  // Alice invites Bob as her child, filling in details of her own guess
+  const r = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Bobby', relation: 'child', birthday: '2015-01-01', gender: 'Female', inviteMembershipId: 'm_famA_bob' });
+  const inviteId = r.json.personId;
+  const grand = (await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Little', parentIds: [inviteId] })).json.personId;
+  const claim = await s.call(s.bob, { action: 'claimInvite', familyId: 'famA' });
+  assert.equal(claim.json.claimed, true); assert.equal(claim.json.merged, true);
+  assert.equal(s.world.tables.people.has(inviteId), false);                       // no duplicate
+  const bobRow = s.world.tables.people.get(mine.json.personId);
+  assert.equal(bobRow.name, 'Rob');                                               // his own details were kept
+  assert.equal(bobRow.birthday, '1990-02-03');
+  assert.equal(bobRow.parentIds.length, 1);                                       // Alice's "child of" link came across
+  assert.deepEqual(s.world.tables.people.get(grand).parentIds, [bobRow.$id]);     // others now point at him
+});
+
+test('about you: a brand-new member with saved details keeps them over the inviter\'s guess', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' });
+  const r = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Bobby', relation: 'child', birthday: '2015-01-01', gender: 'Female', inviteMembershipId: 'm_famA_bob' });
+  const claim = await s.call(s.bob, { action: 'claimInvite', familyId: 'famA', me: { name: 'Robert', birthday: '1990-02-03', gender: 'Male' } });
+  assert.equal(claim.json.claimed, true);
+  const row = s.world.tables.people.get(r.json.personId);
+  assert.deepEqual([row.name, row.birthday, row.gender, row.userId, row.confirmed], ['Robert', '1990-02-03', 'Male', 'bob', true]);
+  // with nothing saved, the inviter's details stand
+  const s2 = await setup();
+  await s2.call(s2.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  await s2.call(s2.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' });
+  const r2 = await s2.call(s2.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Bobby', birthday: '2015-01-01', inviteMembershipId: 'm_famA_bob' });
+  await s2.call(s2.bob, { action: 'claimInvite', familyId: 'famA' });
+  assert.equal(s2.world.tables.people.get(r2.json.personId).name, 'Bobby');
+});

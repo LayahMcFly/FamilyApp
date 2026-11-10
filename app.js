@@ -719,8 +719,8 @@
     try {
       var tr = await loadTree(false);   // the tree decides ring colors
       // If someone invited me and made a tree entry for me, it becomes mine now that I have joined.
-      if (tr.people.some(function (x) { return x.inviteMembershipId && !x.userId; }) && !tr.people.some(function (x) { return x.userId === S.user.$id; })) {
-        var cl = await api('claimInvite', { familyId: id });
+      if (tr.people.some(function (x) { return x.inviteMembershipId && !x.userId; })) {
+        var cl = await api('claimInvite', { familyId: id, me: (S.user.prefs && S.user.prefs.aboutMe) || undefined });
         if (cl && cl.claimed) await loadTree(true);
       }
     } catch (e) { S.ringRole = S.ringRole || new Map(); }
@@ -2400,8 +2400,8 @@
     var name = field('inviteName', 'Their name', 'text', { maxlength: 60, autocomplete: 'off', required: true });
     function sel(id, label, opts) { var el = h('select', { id: id, name: id }, opts.map(function (o) { return h('option', { value: o[0], text: o[1] }); })); return { el: el, wrap: h('div', null, h('label', { for: id, text: label }), el) }; }
     var rel = sel('inviteRelation', 'They are my…', [['', 'Choose one'], ['parent', 'Parent'], ['child', 'Child'], ['sibling', 'Sibling'], ['partner', 'Partner or spouse'], ['grandparent', 'Grandparent'], ['other', 'Other relative (link later)']]);
-    var gen = sel('inviteGender', 'Gender (optional)', [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']]);
-    var bday = field('inviteBirthday', 'Birthday (optional)', 'date', {});
+    var gen = sel('inviteGender', 'Their gender (optional)', [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']]);
+    var bday = field('inviteBirthday', 'Their birthday (optional)', 'date', {});
     var age = field('inviteAge', 'Or their age (if you do not know the birthday)', 'number', { placeholder: 'For example 8' });
     var msg = h('div');
     var btn = h('button', { class: 'btn', type: 'submit', text: 'Send invitation' });
@@ -2428,7 +2428,7 @@
             if (rel.el.value && pr.linked === false) note = ' They were added to the family tree without a link, because that relationship could not be linked yet. You can link them in Settings \u2192 Family tree.';
             else note = ' They were added to the family tree.';
           } catch (te) { note = ' The invitation was sent, but adding them to the family tree did not work: ' + friendly(te); }
-          showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email while signed in with that address.' + note + ' Once they accept, only they can change their name, gender and birthday.');
+          showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email while signed in with that address.' + note + ' If they already filled in their own details, theirs are used instead. Once they accept, only they can change their name, gender and birthday.');
           email.input.value = ''; name.input.value = ''; rel.el.value = ''; gen.el.value = ''; bday.input.value = ''; age.input.value = '';
           loadMemberships();
         } catch (err) { showAlert(msg, 'error', friendly(err)); }
@@ -2436,7 +2436,7 @@
     } }, email.wrap, name.wrap, rel.wrap, gen.wrap, bday.wrap, age.wrap, msg, h('div', { class: 'stack' }, btn));
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Invite a relative' },
       h('h2', { text: 'Invite a relative' }),
-      h('p', { class: 'muted small', text: 'Only family owners can do this. Ask them to create an account and verify their email first, then send the invitation to that same address.' }), form));
+      h('p', { class: 'muted small', text: 'Only family owners can do this. Ask them to create an account and verify their email first, then send the invitation to that same address. The name, relationship, gender and birthday you fill in below are only a starting point for someone new. If they have already filled in About you, their own details are used.' }), form));
 
     // ---- invitations and members ----
     main.appendChild(memberBox);
@@ -2895,6 +2895,7 @@
 
   /* ---------- SETTINGS (opened from the gear on my profile) ---------- */
   var SETTING_SECTIONS = [
+    { id: 'me', label: 'About you', note: 'Your name, birthday and gender' },
     { id: 'family', label: 'Family and members', note: 'Members, invites, tree admins, leave' },
     { id: 'tree', label: 'Family tree', note: 'Who\u2019s who: add people, links, suggestions' },
     { id: 'account', label: 'Account and security', note: 'Email, password' },
@@ -2902,6 +2903,51 @@
     { id: 'storage', label: 'Storage and downloads', note: 'My uploads, family space, data use' },
     { id: 'privacy', label: 'Privacy and data', note: 'Who can see what' }
   ];
+  // Settings > About you: my own name, birthday and gender. Saved on my account too, so any family I join can use it.
+  async function settingsAboutMe(main, token) {
+    var box = h('section', { class: 'card', 'aria-label': 'About you' }, spinnerLine('Loading…'));
+    main.appendChild(box);
+    var tree;
+    try { tree = await loadTree(true); } catch (e) { clear(box).appendChild(alertBox('error', friendly(e))); return; }
+    if (token !== S.nav) return;
+    var mine = personFor(tree, S.user.$id), saved = (S.user.prefs && S.user.prefs.aboutMe) || {};
+    var prof = S.profile || {};
+    var name = h('input', { type: 'text', id: 'me-name', maxlength: 80, autocomplete: 'name' }); name.value = (mine && mine.name) || saved.name || prof.displayName || '';
+    var gen = h('select', { id: 'me-gender' }, [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+    gen.value = (mine && mine.gender) || saved.gender || '';
+    var bd0 = (mine && mine.birthday) || saved.birthday || '';
+    var bday = h('input', { type: 'date', id: 'me-bday' }); bday.value = String(bd0).length === 10 ? bd0 : '';
+    var age = h('input', { type: 'number', id: 'me-age', min: 0, max: 120, placeholder: 'For example 34' });
+    if (String(bd0).length === 4) age.value = new Date().getFullYear() - Number(bd0);
+    var msg = h('div'), save = h('button', { class: 'btn', type: 'submit', text: 'Save' });
+    clear(box).appendChild(h('h2', { text: 'About you' }));
+    box.appendChild(h('p', { class: 'muted small', text: 'This is how you appear in ' + famName() + '’s family tree. Relatives who add you later will use these details, so they do not have to guess. Everything here is optional except your name.' }));
+    box.appendChild(h('form', { novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault();
+      var n = name.value.trim(); if (!n) return showAlert(msg, 'error', 'Please enter your name.');
+      var b = bday.value || '';
+      if (!b && age.value) {
+        var a = Math.floor(Number(age.value));
+        if (!(a >= 0 && a <= 120)) return showAlert(msg, 'error', 'Please enter an age between 0 and 120.');
+        b = String(new Date().getFullYear() - a);
+      }
+      busy(save, async function () {
+        try {
+          await api('saveMyPerson', { familyId: S.familyId, name: n, birthday: b, gender: gen.value });
+          S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { aboutMe: { name: n, birthday: b, gender: gen.value } }) });
+          S.tree = null; await loadTree(true);
+          showAlert(msg, 'ok', 'Saved.');
+        } catch (e) { showAlert(msg, 'error', errText(e)); }
+      }, 'Saving…');
+    } },
+      h('div', null, h('label', { for: 'me-name', text: 'Your name' }), name),
+      h('div', null, h('label', { for: 'me-gender', text: 'Gender (optional)' }), gen),
+      h('div', null, h('label', { for: 'me-bday', text: 'Birthday (optional)' }), bday),
+      h('div', null, h('label', { for: 'me-age', text: 'Or your age (if you would rather not share the birthday)' }), age),
+      msg, h('div', { class: 'stack' }, save)));
+    if (!mine) box.appendChild(h('p', { class: 'hint', text: 'You are not in the family tree yet. Saving adds you.' }));
+  }
+
   VIEWS.settings = async function (main, token, section, p2, p3) {
     var sec = SETTING_SECTIONS.filter(function (s) { return s.id === section; })[0];
     if (!sec) {
@@ -2915,7 +2961,8 @@
     }
     main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/settings', text: 'Settings' })));
     main.appendChild(h('h1', { text: sec.label }));
-    if (sec.id === 'account') settingsAccount(main);
+    if (sec.id === 'me') await settingsAboutMe(main, token);
+    else if (sec.id === 'account') settingsAccount(main);
     else if (sec.id === 'family') await settingsFamilyHub(main, token, p2, p3);
     else if (sec.id === 'tree') { main.appendChild(h('p', { class: 'muted small' }, 'Adjust who is who here. To just look at the tree, use the ', h('a', { class: 'inline-btn', href: '#/tree', text: 'Family Tree' }), ' button in the bottom bar.')); main.appendChild(h('ul', { class: 'ring-key', 'aria-label': 'What the circle colors mean' },
         h('li', null, h('i', { class: 'k-rainbow' }), 'Rainbow: everyone'), h('li', null, h('i', { class: 'k-married' }), 'Gold: has a partner in the tree'), h('li', null, h('i', { class: 'k-grand' }), 'Double ring: grandparent'))); await familyTree(main, token, p2); }
