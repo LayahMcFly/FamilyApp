@@ -882,10 +882,11 @@
   function avatarEl(profile, extraClass) {
     var role = profile && S.ringRole ? S.ringRole.get(profile.userId) : '';   // 'grand' or 'married' (from the family tree); everyone else keeps the rainbow
     var noPic = !(profile && profile.avatarFileId);
-    var el = h('div', { class: 'avatar ' + (extraClass || '') + (role ? ' ring-' + role : '') + (noPic ? ' initial' : ''), 'aria-hidden': 'true' }, noPic ? firstLetter(profile ? profile.displayName : '?') : initials(profile ? profile.displayName : '?'));
-    if (noPic) paintInitialAvatar(el, profile);
+    // Until a picture is showing (still loading, or it could not be loaded) the avatar always shows the first letter in the script font.
+    var el = h('div', { class: 'avatar ' + (extraClass || '') + (role ? ' ring-' + role : '') + ' initial', 'aria-hidden': 'true' }, firstLetter(profile ? profile.displayName : '?'));
+    paintInitialAvatar(el, profile);
     if (profile && profile.avatarFileId) {
-      avatarUrl(profile.avatarFileId).then(function (u) { clear(el); el.appendChild(h('img', { src: u, alt: '' })); }).catch(function () { /* keep initials */ });
+      avatarUrl(profile.avatarFileId).then(function (u) { clear(el); el.classList.remove('initial'); el.appendChild(h('img', { src: u, alt: '' })); }).catch(function () { /* keep the letter */ });
     }
     return el;
   }
