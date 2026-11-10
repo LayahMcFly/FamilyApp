@@ -345,3 +345,10 @@ Add three optional columns to the `people` table (Console Terminal), wait until 
     appwrite tablesdb create-string-column --database-id family --table-id people --key inviteMembershipId --size 36 --required false
 
 Until the columns exist, invitations and the tree still work; birthday, gender and the "this entry becomes theirs when they accept" link are simply not saved.
+
+## v1.20.0 — the tree is drawn by family-chart; adoptive, step, foster and guardian parents; several partners
+Add one optional column to the `people` table, then upload the new `family-api` package as a new deployment and upload the new site files. Full steps, limits and costs are in `FAMILY-TREE-GUIDE.md`.
+
+    appwrite tablesdb create-string-column --database-id family --table-id people --key parentKinds --size 600 --required false
+
+Until the column exists the tree still works and plain birth-parent links still save. Saving an adoptive, step, foster or guardian link shows an error that tells you to add the column. New installs made with the setup script get the column automatically.

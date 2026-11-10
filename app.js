@@ -2200,76 +2200,10 @@
     location.replace(tab === 'tree' ? '#/tree' + (personId ? '/' + personId : '') : '#/settings/family');
   };
 
-  /* ---------- FAMILY TREE PAGE (bottom bar): a view-only tree you can drag around ---------- */
-  var TC = { w: 132, h: 64, pg: 16, ug: 36, gy: 84, pad: 24 };
-
-  // Works out where every person goes. Partners sit side by side; children sit under their parents.
-  function treeLayout(peopleIn) {
-    var people = peopleIn.slice().sort(function (a, b) { return new Date(a.$createdAt) - new Date(b.$createdAt); });
-    var byId = {}; people.forEach(function (p) { byId[p.$id] = p; });
-    var gen = {}; people.forEach(function (p) { gen[p.$id] = 0; });
-    for (var it = 0; it < people.length + 5; it++) {
-      var changed = false;
-      people.forEach(function (p) {
-        (p.parentIds || []).forEach(function (q) { if (byId[q] && gen[p.$id] < gen[q] + 1) { gen[p.$id] = gen[q] + 1; changed = true; } });
-        (p.partnerIds || []).forEach(function (q) { if (byId[q] && gen[p.$id] < gen[q]) { gen[p.$id] = gen[q]; changed = true; } });
-      });
-      if (!changed) break;
-    }
-    var uf = {};
-    function find(x) { while (uf[x] !== x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; }
-    people.forEach(function (p) { uf[p.$id] = p.$id; });
-    people.forEach(function (p) { (p.partnerIds || []).forEach(function (q) { if (byId[q]) uf[find(p.$id)] = find(q); }); });
-    var units = {}, order = [];
-    people.forEach(function (p) {
-      var r = find(p.$id);
-      if (!units[r]) { units[r] = { id: r, members: [], kids: [], parent: null, gen: 0 }; order.push(units[r]); }
-      units[r].members.push(p); units[r].gen = Math.max(units[r].gen, gen[p.$id]);
-    });
-    order.forEach(function (u) {
-      for (var i = 0; i < u.members.length; i++) {
-        var pid = (u.members[i].parentIds || []).filter(function (x) { return byId[x]; })[0];
-        if (!pid) continue;
-        var pu = units[find(pid)];
-        if (pu && pu !== u) { u.parent = pu; pu.kids.push(u); break; }
-      }
-    });
-    function uw(u) { return u.members.length * TC.w + (u.members.length - 1) * TC.pg; }
-    function measure(u) {
-      if (u.sw !== undefined) return u.sw;
-      u.sw = uw(u);                       // guards against odd loops
-      var kids = u.kids, total = 0;
-      kids.forEach(function (k, i) { total += measure(k) + (i ? TC.ug : 0); });
-      u.kw = total; u.sw = Math.max(uw(u), total);
-      return u.sw;
-    }
-    var seen = {};
-    function place(u, x0) {
-      seen[u.id] = true;
-      var kids = u.kids.filter(function (k) { return !seen[k.id]; });
-      if (!kids.length) { u.x = x0 + (u.sw - uw(u)) / 2; return; }
-      var total = 0; kids.forEach(function (k, i) { total += k.sw + (i ? TC.ug : 0); });
-      var cx = x0 + (u.sw - total) / 2;
-      kids.forEach(function (k) { place(k, cx); cx += k.sw + TC.ug; });
-      var first = kids[0], last = kids[kids.length - 1];
-      var mid = (first.x + uw(first) / 2 + last.x + uw(last) / 2) / 2;
-      u.x = Math.max(x0, mid - uw(u) / 2);
-    }
-    var cursor = TC.pad;
-    var roots = order.filter(function (u) { return !u.parent; });
-    roots.concat(order).forEach(function (u) {
-      if (seen[u.id]) return;
-      measure(u); place(u, cursor); cursor += u.sw + TC.ug * 2;
-    });
-    var pos = {}, maxX = 0, maxY = 0;
-    order.forEach(function (u) {
-      u.members.forEach(function (m, i) {
-        var x = (u.x || TC.pad) + i * (TC.w + TC.pg), y = TC.pad + u.gen * (TC.h + TC.gy);
-        pos[m.$id] = { x: x, y: y }; maxX = Math.max(maxX, x + TC.w); maxY = Math.max(maxY, y + TC.h);
-      });
-    });
-    return { pos: pos, width: maxX + TC.pad, height: maxY + TC.pad, byId: byId };
-  }
+  /* ---------- FAMILY TREE PAGE (bottom bar): a view-only tree drawn by family-chart (see tree-chart.js) ---------- */
+  var KIND_LABEL = { birth: 'Birth parent', adoptive: 'Adoptive parent', step: 'Step-parent', foster: 'Foster parent', guardian: 'Guardian' };
+  function kindsOf(p) { return window.FamilyTreeChart ? window.FamilyTreeChart.parseKinds(p) : {}; }
+  function kindTag(kind) { return kind && kind !== 'birth' ? h('span', { class: 'kind-tag', text: KIND_LABEL[kind] || kind }) : null; }
 
   VIEWS.tree = async function (main, token, focusId) {
     main.appendChild(h('h1', { text: 'Family Tree' }));
@@ -2288,143 +2222,96 @@
         h('p', { class: 'muted small', text: 'An owner or tree admin can start it in Settings.' }), h('a', { class: 'btn', href: '#/settings/tree', text: 'Open family tree settings' })));
       return;
     }
-    var L2 = treeLayout(people), byId = L2.byId;
-    var vp = h('div', { class: 'tree-view', tabindex: '0', role: 'group', 'aria-label': 'Family tree. Drag to move around. Use the plus and minus buttons to zoom. Press Tab to move through the people.' });
-    var world = h('div', { class: 'tree-world' });
-    world.style.width = L2.width + 'px'; world.style.height = L2.height + 'px';
-    // lines
-    var NS = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('width', L2.width); svg.setAttribute('height', L2.height); svg.setAttribute('class', 'tree-lines'); svg.setAttribute('aria-hidden', 'true');
-    function line(d, cls) { var p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('class', cls); svg.appendChild(p); }
-    var drawnPartner = {};
-    people.forEach(function (p) {
-      var me = L2.pos[p.$id];
-      var ps = (p.parentIds || []).filter(function (x) { return byId[x]; });
-      if (ps.length) {
-        var cx = me.x + TC.w / 2, cy = me.y;
-        var coupled = ps.length >= 2 && (byId[ps[0]].partnerIds || []).indexOf(ps[1]) !== -1 && L2.pos[ps[0]].y === L2.pos[ps[1]].y;
-        var anchors = coupled ? [{ x: (L2.pos[ps[0]].x + L2.pos[ps[1]].x + TC.w) / 2, y: L2.pos[ps[0]].y + TC.h / 2 }]
-          : ps.map(function (q) { return { x: L2.pos[q].x + TC.w / 2, y: L2.pos[q].y + TC.h }; });
-        anchors.forEach(function (a) { var my = cy - TC.gy / 2; line('M' + a.x + ' ' + a.y + ' V' + Math.max(my, a.y + 4) + ' H' + cx + ' V' + cy, 'edge'); });
-      }
-      (p.partnerIds || []).forEach(function (q) {
-        if (!byId[q]) return;
-        var key = [p.$id, q].sort().join('_'); if (drawnPartner[key]) return; drawnPartner[key] = true;
-        var a = L2.pos[p.$id], b = L2.pos[q]; if (a.y !== b.y) return;
-        var left = a.x < b.x ? a : b, right = a.x < b.x ? b : a;
-        line('M' + (left.x + TC.w) + ' ' + (a.y + TC.h / 2) + ' H' + right.x, 'edge partner');
-      });
-    });
-    world.appendChild(svg);
-    // people
-    var cards = {};
-    people.forEach(function (p) {
-      var prof = p.userId ? S.profiles.get(p.userId) : null, at = L2.pos[p.$id];
-      var b = h('button', { class: 'tcard', type: 'button', 'data-person': p.$id, 'aria-label': p.name + '. Show family.' }, avatarEl(prof || { displayName: p.name }), h('span', { class: 'tname', text: p.name }));
-      b.style.left = at.x + 'px'; b.style.top = at.y + 'px'; b.style.width = TC.w + 'px'; b.style.height = TC.h + 'px';
-      b.addEventListener('click', function () { if (moved) return; select(p.$id, false); });
-      cards[p.$id] = b; world.appendChild(b);
-    });
-    vp.appendChild(world);
+    if (!window.FamilyTreeChart) { holder.appendChild(alertBox('error', 'The tree drawing code did not load (tree-chart.js). Check that the file was uploaded next to index.html, then refresh.')); return; }
+    var byId = {}; people.forEach(function (p) { byId[p.$id] = p; });
+    var oldest = people.slice().sort(function (a, b) { return new Date(a.$createdAt) - new Date(b.$createdAt); })[0];
+    var mine = personFor(tree, S.user.$id);
+    var startId = focusId && byId[focusId] ? focusId : (mine ? mine.$id : oldest.$id);
+    var mixed = people.some(function (p) { var k = kindsOf(p); return Object.keys(k).some(function (x) { return k[x] !== 'birth'; }); });
+
+    // toolbar: jump to a person, and (only when the family has adoptive/step/foster links) which parents to draw
+    var jump = h('select', { id: 'tree-jump', 'aria-label': 'Jump to a person' },
+      people.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); }).map(function (p) { return h('option', { value: p.$id, text: p.name }); }));
+    jump.value = startId;
+    var bar = h('div', { class: 'tree-bar' }, h('div', { class: 'grow' }, h('label', { for: 'tree-jump', class: 'small muted', text: 'Jump to' }), jump));
+    var lensSel = null;
+    if (mixed) {
+      lensSel = h('select', { id: 'tree-lens', 'aria-label': 'Which parents to draw' },
+        h('option', { value: 'birth', text: 'Draw birth parents' }), h('option', { value: 'raised', text: 'Draw the parents who raised them' }));
+      bar.appendChild(h('div', { class: 'grow' }, h('label', { for: 'tree-lens', class: 'small muted', text: 'Parents shown' }), lensSel));
+    }
+    holder.appendChild(bar);
+
+    var chartEl = h('div', { class: 'tree-chart', role: 'group', 'aria-label': 'Family tree. Drag to move around. Use the plus and minus buttons to zoom. Press Tab to move through the people, then Enter to choose one.' });
+    var ctl = null;
     var tools = h('div', { class: 'tree-tools' },
-      h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom in', text: '+', onclick: function () { zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1.25, true); } }),
-      h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom out', text: '−', onclick: function () { zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 0.8, true); } }),
-      h('button', { class: 'tool', type: 'button', 'aria-label': 'Show the whole tree', text: 'Fit', onclick: function () { fit(true); } }));
-    vp.appendChild(tools);
-    holder.appendChild(vp);
-    holder.appendChild(h('p', { class: 'hint', text: 'Drag to move around. Pinch or use + and − to zoom. Tap a person to see their parents, partner and children.' }));
+      h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom in', text: '+', onclick: function () { if (ctl) ctl.zoom(1.3); } }),
+      h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom out', text: '−', onclick: function () { if (ctl) ctl.zoom(0.77); } }),
+      h('button', { class: 'tool', type: 'button', 'aria-label': 'Show the whole tree', text: 'Fit', onclick: function () { if (ctl) ctl.fit(); } }));
+    holder.appendChild(h('div', { class: 'tree-stage' }, chartEl, tools));
+    var count = h('p', { class: 'hint tree-count', 'aria-live': 'polite' });
+    holder.appendChild(count);
+    holder.appendChild(h('p', { class: 'hint', text: 'Drag to move around. Pinch or use + and − to zoom. Tap a person to centre the tree on them and see their parents, partners and children.' }));
     var panel = h('section', { class: 'card tree-panel', 'aria-live': 'polite', 'aria-label': 'Selected person' });
     holder.appendChild(panel);
 
-    // pan and zoom
-    var k = 1, tx = 0, ty = 0, moved = false, ptrs = {}, last = null;
-    function apply(smooth) {
-      world.classList.toggle('smooth', !!smooth);
-      world.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + k + ')';
-    }
-    function fit(smooth) {
-      var vw = vp.clientWidth || 340, vh = vp.clientHeight || 420;
-      k = Math.max(0.3, Math.min(1, (vw - 16) / L2.width, (vh - 16) / L2.height * 1.6));
-      tx = (vw - L2.width * k) / 2; ty = 8; apply(smooth);
-    }
-    function zoomAt(cx, cy, f, smooth) {
-      var nk = Math.max(0.3, Math.min(2, k * f)); f = nk / k;
-      tx = cx - (cx - tx) * f; ty = cy - (cy - ty) * f; k = nk; apply(smooth);
-    }
-    function focusOn(id) {
-      var at = L2.pos[id]; if (!at) return;
-      var vw = vp.clientWidth, vh = vp.clientHeight;
-      k = Math.max(k, 0.9); tx = vw / 2 - (at.x + TC.w / 2) * k; ty = vh / 2 - (at.y + TC.h / 2) * k; apply(true);
-    }
-    vp.addEventListener('pointerdown', function (ev) {
-      ptrs[ev.pointerId] = { x: ev.clientX, y: ev.clientY }; moved = false;
-      last = Object.keys(ptrs).length === 2 ? pinchInfo() : null;
-    });
-    function pinchInfo() { var a = Object.keys(ptrs).map(function (i) { return ptrs[i]; }); return { d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), cx: (a[0].x + a[1].x) / 2, cy: (a[0].y + a[1].y) / 2 }; }
-    vp.addEventListener('pointermove', function (ev) {
-      var p0 = ptrs[ev.pointerId]; if (!p0) return;
-      var n = Object.keys(ptrs).length;
-      if (n === 1) {
-        var dx = ev.clientX - p0.x, dy = ev.clientY - p0.y;
-        if (!moved && Math.hypot(dx, dy) < 5) return;
-        moved = true; tx += dx; ty += dy; p0.x = ev.clientX; p0.y = ev.clientY; apply(false); vp.classList.add('dragging');
-      } else if (n === 2) {
-        p0.x = ev.clientX; p0.y = ev.clientY; moved = true;
-        var now = pinchInfo(), rect = vp.getBoundingClientRect();
-        if (last && last.d > 0) { tx += now.cx - last.cx; ty += now.cy - last.cy; zoomAt(now.cx - rect.left, now.cy - rect.top, now.d / last.d, false); }
-        last = now;
-      }
-    });
-    function up(ev) { delete ptrs[ev.pointerId]; last = null; vp.classList.remove('dragging'); }
-    vp.addEventListener('pointerup', up); vp.addEventListener('pointercancel', up); vp.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse') up(ev); });
-    vp.addEventListener('wheel', function (ev) { ev.preventDefault(); var r = vp.getBoundingClientRect(); zoomAt(ev.clientX - r.left, ev.clientY - r.top, Math.exp(-ev.deltaY * 0.0015), false); }, { passive: false });
-    vp.addEventListener('keydown', function (ev) {
-      var step = 60, handled = true;
-      if (ev.key === 'ArrowLeft') tx += step; else if (ev.key === 'ArrowRight') tx -= step; else if (ev.key === 'ArrowUp') ty += step; else if (ev.key === 'ArrowDown') ty -= step;
-      else if (ev.key === '+' || ev.key === '=') zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1.25, true); else if (ev.key === '-') zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 0.8, true);
-      else handled = false;
-      if (handled) { ev.preventDefault(); apply(true); }
-    });
-
-    // who is related to whom
     function relatives(id) {
-      var p = byId[id], parents = (p.parentIds || []).filter(function (x) { return byId[x]; }), partners = (p.partnerIds || []).filter(function (x) { return byId[x]; });
-      var children = people.filter(function (c) { return (c.parentIds || []).indexOf(id) !== -1; }).map(function (c) { return c.$id; });
-      var sibs = people.filter(function (c) { return c.$id !== id && (c.parentIds || []).some(function (x) { return parents.indexOf(x) !== -1; }); }).map(function (c) { return c.$id; });
-      return { parents: parents, partners: partners, children: children, siblings: sibs };
+      var p = byId[id], kinds = kindsOf(p);
+      var parents = (p.parentIds || []).filter(function (x) { return byId[x]; }).map(function (x) { return { id: x, kind: kinds[x] || 'birth' }; });
+      var partners = (p.partnerIds || []).filter(function (x) { return byId[x]; });
+      var kids = people.filter(function (c) { return (c.parentIds || []).indexOf(id) !== -1; }).map(function (c) { return { id: c.$id, kind: kindsOf(c)[id] || 'birth' }; });
+      var pids = parents.map(function (x) { return x.id; });
+      var sibs = people.filter(function (c) { return c.$id !== id && (c.parentIds || []).some(function (x) { return pids.indexOf(x) !== -1; }); }).map(function (c) { return c.$id; });
+      return { parents: parents, partners: partners, children: kids, siblings: sibs };
     }
-    function select(id, center) {
+    function select(id) {
       var p = byId[id], r = relatives(id);
-      Object.keys(cards).forEach(function (x) { cards[x].classList.remove('sel', 'rel'); });
-      cards[id].classList.add('sel');
-      [].concat(r.parents, r.partners, r.children, r.siblings).forEach(function (x) { if (cards[x]) cards[x].classList.add('rel'); });
-      vp.classList.add('has-sel');
-      if (center) focusOn(id);
+      jump.value = id;
       clear(panel);
       var prof = p.userId ? S.profiles.get(p.userId) : null;
-      panel.appendChild(h('div', { class: 'tree-who' }, avatarEl(prof || { displayName: p.name }), h('div', { class: 'grow' }, h('h2', { text: p.name }), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null,
-        prof ? h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Open profile' }) : null),
-        h('button', { class: 'btn secondary small', type: 'button', text: 'Clear', onclick: function () { vp.classList.remove('has-sel'); Object.keys(cards).forEach(function (x) { cards[x].classList.remove('sel', 'rel'); }); clear(panel); } })));
-      function group(label, ids) {
-        if (!ids.length) return;
-        panel.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: label }), h('div', { class: 'rel-list' }, ids.map(function (x) {
-          return h('button', { class: 'chip', type: 'button', text: byId[x].name, onclick: function () { select(x, true); } });
+      var actions = [];
+      if (prof) actions.push(h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Open profile' }));
+      actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Suggest a change', onclick: function () { sendSuggestion(p.$id); } }));
+      if (canEditTree() || p.userId === S.user.$id) actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Edit', onclick: function () { personDialog(p, tree, function (nid) { S.tree = null; route(false); }); } }));
+      panel.appendChild(h('div', { class: 'tree-who' }, avatarEl(prof || { displayName: p.name }), h('div', { class: 'grow' }, h('h2', { text: p.name }), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null)));
+      panel.appendChild(h('div', { class: 'row' }, actions));
+      function group(label, items) {
+        if (!items.length) return;
+        panel.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: label }), h('div', { class: 'rel-list' }, items.map(function (it) {
+          return h('button', { class: 'chip', type: 'button', onclick: function () { if (ctl) ctl.focus(it.id); select(it.id); } }, byId[it.id].name, kindTag(it.kind));
         }))));
       }
-      group(r.parents.length > 1 ? 'Parents' : 'Parent', r.parents); group(r.partners.length > 1 ? 'Partners' : 'Partner', r.partners);
-      group(r.children.length > 1 ? 'Children' : 'Child', r.children); group(r.siblings.length > 1 ? 'Siblings' : 'Sibling', r.siblings);
+      group(r.parents.length > 1 ? 'Parents' : 'Parent', r.parents);
+      group(r.partners.length > 1 ? 'Partners' : 'Partner', r.partners.map(function (x) { return { id: x }; }));
+      group(r.children.length > 1 ? 'Children' : 'Child', r.children);
+      group(r.siblings.length > 1 ? 'Siblings' : 'Sibling', r.siblings.map(function (x) { return { id: x }; }));
       if (!r.parents.length && !r.partners.length && !r.children.length) panel.appendChild(h('p', { class: 'muted small', text: 'No relatives linked to ' + p.name + ' in the tree yet.' }));
     }
-    requestAnimationFrame(function () {
-      fit(false);
-      if (focusId && cards[focusId]) { select(focusId, true); cards[focusId].classList.add('hl'); }
-    });
+    jump.addEventListener('change', function () { if (ctl) ctl.focus(jump.value); select(jump.value); });
+    if (lensSel) lensSel.addEventListener('change', function () { if (ctl) ctl.setLens(lensSel.value); });
+
+    try {
+      ctl = await window.FamilyTreeChart.mount(chartEl, {
+        people: people, mainId: startId, lens: 'birth',
+        avatar: function (person) { return avatarEl(person.userId ? (S.profiles.get(person.userId) || { displayName: person.name }) : { displayName: person.name }); },
+        onSelect: function (id) { select(id); },
+        onUpdate: function (n) {
+          count.textContent = n.shown >= n.total ? 'Showing all ' + n.total + (n.total === 1 ? ' person.' : ' people.') : 'Showing ' + n.shown + ' of ' + n.total + ' people around the person you chose. Tap anyone, or use “Jump to”, to see the rest.';
+        }
+      });
+    } catch (e) {
+      clear(chartEl).appendChild(alertBox('error', 'The tree picture could not be drawn (' + friendly(e) + '). Your family tree is safe. You can still see everyone in Settings.'));
+      chartEl.appendChild(h('a', { class: 'btn', href: '#/settings/tree', text: 'Open the list view' }));
+      return;
+    }
+    if (token !== S.nav) { ctl.destroy(); return; }
+    select(startId);
   };
 
   // Settings > Family and members: the member list and everything about managing it.
   async function settingsFamilyHub(main, token, tab, personId) {
     if (tab === 'tree') { location.replace('#/settings/tree' + (personId ? '/' + personId : '')); return; }
+    main.appendChild(h('a', { class: 'btn secondary', href: '#/tree', text: 'Open the Family Tree' }));
     await familyMembers(main, token);
     if (token !== S.nav) return;
     return settingsFamily(main, token);
@@ -3312,13 +3199,42 @@
       sel.value = value || ''; return h('div', null, h('label', { for: id, text: label }), sel);
     }
     var others = tree.people.filter(function (x) { return !p || x.$id !== p.$id; });
-    var personOpts = [['', 'None']].concat(others.map(function (x) { return [x.$id, x.name]; }));
     var linked = {}; tree.people.forEach(function (x) { if (x.userId && (!p || x.$id !== p.$id)) linked[x.userId] = true; });
     var memberOpts = [['', 'Not linked to an account']];
     S.profiles.forEach(function (pr) { if (!linked[pr.userId]) memberOpts.push([pr.userId, pr.displayName]); });
-    var par = p ? (p.parentIds || []) : [], prt = p ? (p.partnerIds || []) : [];
-    var s1 = select('par1', 'Parent', personOpts, par[0]), s2 = select('par2', 'Other parent', personOpts, par[1]);
-    var s3 = select('partner', 'Partner', personOpts, prt[0]), s4 = select('link', 'Linked family member', memberOpts, p ? p.userId : '');
+    var known = {}; tree.people.forEach(function (x) { known[x.$id] = true; });
+    var par = p ? (p.parentIds || []).filter(function (x) { return known[x]; }) : [], prt = p ? (p.partnerIds || []).filter(function (x) { return known[x]; }) : [];
+    var curKinds = p ? kindsOf(p) : {};
+    var s4 = select('link', 'Linked family member', memberOpts, p ? p.userId : '');
+    var KIND_ORDER = ['birth', 'adoptive', 'step', 'foster', 'guardian'];
+    var MAX_PARENTS = 6, MAX_PARTNERS = 8;
+    var parentRows = h('div', { class: 'stack parent-rows' }), partnerRows = h('div', { class: 'stack partner-rows' });
+    var addParentBtn, addPartnerBtn;
+    function personPick(value, label) {
+      var sel = h('select', { 'aria-label': label }, [h('option', { value: '', text: 'Choose someone…' })].concat(others.map(function (x) { return h('option', { value: x.$id, text: x.name }); })));
+      sel.value = value || ''; return sel;
+    }
+    function sync() {
+      if (addParentBtn) addParentBtn.disabled = parentRows.children.length >= MAX_PARENTS;
+      if (addPartnerBtn) addPartnerBtn.disabled = partnerRows.children.length >= MAX_PARTNERS;
+    }
+    function addParentRow(id, kind) {
+      var ps = personPick(id, 'Parent'), ks = h('select', { 'aria-label': 'How is this parent related?' }, KIND_ORDER.map(function (k) { return h('option', { value: k, text: KIND_LABEL[k] }); }));
+      ks.value = kind || 'birth';
+      var row = h('div', { class: 'row' }, h('div', { class: 'grow' }, ps), h('div', null, ks),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Remove', 'aria-label': 'Remove this parent', onclick: function () { row.parentNode.removeChild(row); sync(); } }));
+      row._id = ps; row._kind = ks; parentRows.appendChild(row); sync();
+    }
+    function addPartnerRow(id) {
+      var ps = personPick(id, 'Partner');
+      var row = h('div', { class: 'row' }, h('div', { class: 'grow' }, ps),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Remove', 'aria-label': 'Remove this partner', onclick: function () { row.parentNode.removeChild(row); sync(); } }));
+      row._id = ps; partnerRows.appendChild(row); sync();
+    }
+    addParentBtn = h('button', { class: 'btn secondary small', type: 'button', text: '+ Add a parent', onclick: function () { addParentRow('', 'birth'); } });
+    addPartnerBtn = h('button', { class: 'btn secondary small', type: 'button', text: '+ Add a partner', onclick: function () { addPartnerRow(''); } });
+    par.forEach(function (id) { addParentRow(id, curKinds[id] || 'birth'); });
+    prt.forEach(function (id) { addPartnerRow(id); });
     var msg = h('div'), save = h('button', { class: 'btn', type: 'submit', text: p ? 'Save' : 'Add person' });
     var cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: close });
     var remove = p ? h('button', { class: 'btn danger', type: 'button', text: 'Delete from tree', onclick: async function () {
@@ -3330,16 +3246,23 @@
       var n = name.value.trim();
       if (!n) return showAlert(msg, 'error', 'Please enter a name.');
       var v = function (id) { return dlg.querySelector('#' + id).value; };
-      var parents = [v('par1'), v('par2')].filter(Boolean);
-      if (parents.length === 2 && parents[0] === parents[1]) return showAlert(msg, 'error', 'Choose two different parents.');
+      var parentList = [].slice.call(parentRows.children).map(function (r) { return { id: r._id.value, kind: r._kind.value }; }).filter(function (x) { return x.id; });
+      var parents = parentList.map(function (x) { return x.id; });
+      var partnerList = [].slice.call(partnerRows.children).map(function (r) { return r._id.value; }).filter(Boolean);
+      if (parents.some(function (x, i) { return parents.indexOf(x) !== i; })) return showAlert(msg, 'error', 'Each parent can only be listed once.');
+      if (partnerList.some(function (x, i) { return partnerList.indexOf(x) !== i; })) return showAlert(msg, 'error', 'Each partner can only be listed once.');
+      if (parents.some(function (x) { return partnerList.indexOf(x) !== -1; })) return showAlert(msg, 'error', 'A parent cannot also be this person\u2019s partner.');
+      var kindsObj = {}; parentList.forEach(function (x) { if (x.kind !== 'birth') kindsObj[x.id] = x.kind; });
+      var kindsKey = function (o) { return JSON.stringify(Object.keys(o).sort().map(function (k) { return [k, o[k]]; })); };
+      var origKinds = {}; par.forEach(function (id) { if (curKinds[id] && curKinds[id] !== 'birth') origKinds[id] = curKinds[id]; });
       busy(save, async function () {
         try {
           var payload = { familyId: S.familyId, name: n };
           if (admin && !isSelf) payload.userId = v('link');
           if (!locked) { payload.birthday = bd.value || (p && p.birthday && String(p.birthday).length === 4 ? p.birthday : ''); payload.gender = gd.value; }
-          var origPar = par.slice(0, 2).join(','), origPrt = (prt[0] || '');
-          if (!p || parents.join(',') !== origPar) payload.parentIds = parents;
-          if (!p || v('partner') !== origPrt) payload.partnerIds = v('partner') ? [v('partner')] : [];
+          if (!p || parents.join(',') !== par.join(',')) payload.parentIds = parents;
+          if (p ? kindsKey(kindsObj) !== kindsKey(origKinds) : Object.keys(kindsObj).length) payload.parentKinds = kindsObj;
+          if (!p || partnerList.slice().sort().join(',') !== prt.slice().sort().join(',')) payload.partnerIds = partnerList;
           var id;
           if (p) { payload.personId = p.$id; await api('treeEditPerson', payload); id = p.$id; }
           else id = (await api('treeAddPerson', payload)).personId;
@@ -3351,7 +3274,11 @@
       h('div', null, h('label', { for: 'pgender', text: 'Gender' }), gd),
       h('div', null, h('label', { for: 'pbday', text: 'Birthday' }), bd),
       locked ? h('p', { class: 'hint', text: 'Only ' + p.name + ' can change their name, gender and birthday, because it is their account.' }) : null,
-      s1, s2, s3, (admin && !isSelf) ? s4 : null,
+      h('div', null, h('strong', { text: 'Parents' }), parentRows, addParentBtn,
+        h('p', { class: 'hint', text: 'List everyone who is a parent to this person, and say how: birth, adoptive, step, foster or guardian. The tree can draw two parents at a time, so the tree page lets you switch between birth parents and the parents who raised them.' })),
+      h('div', null, h('strong', { text: 'Partners' }), partnerRows, addPartnerBtn,
+        h('p', { class: 'hint', text: 'A person can have more than one partner, for example a current and a former one.' })),
+      (admin && !isSelf) ? s4 : null,
       h('p', { class: 'hint', text: 'Linking a member lets them confirm “this is me”. The tree entry and their sign-in account stay separate.' }),
       msg, h('div', { class: 'row' }, cancel, save), (remove && admin) ? h('div', { class: 'stack' }, remove) : null));
     document.body.appendChild(dlg); dlg.showModal(); name.focus();

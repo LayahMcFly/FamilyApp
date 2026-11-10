@@ -701,22 +701,33 @@ body.sheet-open .nav { z-index: 30 !important; }
 .bell { width: 38px; }
 
 /* v1.8 — the view-only Family Tree page */
-.tree-view { position: relative; overflow: hidden; height: calc(100vh - 330px); min-height: 360px; margin: 0 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-2); touch-action: none; cursor: grab; }
-.tree-view.dragging { cursor: grabbing; }
-.tree-view * { touch-action: none; }
-.tree-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-.tree-world.smooth { transition: transform .28s ease; }
-@media (prefers-reduced-motion: reduce) { .tree-world.smooth { transition: none; } }
-.tree-lines { position: absolute; left: 0; top: 0; pointer-events: none; }
-.tree-lines .edge { fill: none; stroke: var(--muted); stroke-width: 2; opacity: .7; }
-.tree-lines .partner { stroke: #7c4dbd; stroke-width: 3; opacity: 1; }
-.tcard { position: absolute; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; box-shadow: 0 4px 12px -8px rgba(0,0,0,.5); }
-.tcard .avatar { flex: none; width: 36px; height: 36px; font-size: .85rem; }
-.tcard .tname { font-weight: 600; font-size: .85rem; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.tree-view.has-sel .tcard:not(.sel):not(.rel) { opacity: .4; }
-.tcard.sel { outline: 3px solid var(--accent); }
-.tcard.rel { border-color: var(--accent); }
-.tcard.hl { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 40%, transparent); }
+/* v1.20 — the tree is drawn by family-chart (vendor/). Your page security rules (CSP) do not allow inline
+   style="" attributes, and the library writes a few of them, so the same rules live here instead. */
+.tree-stage { position: relative; margin: 0 12px; }
+.tree-chart { position: relative; height: calc(100vh - 380px); min-height: 380px; margin: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-2); overflow: hidden; touch-action: none; cursor: grab;
+  --female-color: color-mix(in srgb, #e58fb0 30%, var(--surface)); --male-color: color-mix(in srgb, #6fa8dc 30%, var(--surface)); --genderless-color: color-mix(in srgb, #b9a3e3 30%, var(--surface));
+  --background-color: var(--surface); --text-color: var(--text); font-family: inherit; }
+.tree-chart:active { cursor: grabbing; }
+.tree-chart #f3Canvas { position: relative; overflow: hidden; width: 100%; height: 100%; }
+.tree-chart #htmlSvg { position: absolute; width: 100%; height: 100%; z-index: 2; top: 0; left: 0; }
+.tree-chart .cards_view { transform-origin: 0 0; }
+.tree-chart.f3 div.card, .tree-chart.f3 div.card:not(article) { transform: translate(-50%, -50%); pointer-events: auto; background: none; border: 0; box-shadow: none; border-radius: 0; padding: 0; margin: 0; transition: none; }
+.tree-chart .fit_screen_icon, .tree-chart svg.main_svg > g:not(.view) { display: none; }
+.tree-chart .f3-nav-cont { display: none; }
+.tree-chart.f3 .link { fill: none; stroke: var(--muted); stroke-width: 2px; opacity: .75; }
+.tree-chart.f3 .link.f3-path-to-main { stroke: var(--accent); stroke-width: 3px; opacity: 1; }
+.tree-chart .f3-pcard { display: flex; align-items: center; gap: 8px; width: 170px; min-height: 56px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; box-shadow: 0 4px 12px -8px rgba(0,0,0,.5); }
+.tree-chart .f3-pcard:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.tree-chart .card-female .f3-pcard { background: var(--female-color); }
+.tree-chart .card-male .f3-pcard { background: var(--male-color); }
+.tree-chart .card-genderless .f3-pcard { background: var(--genderless-color); }
+.tree-chart .card-main .f3-pcard { outline: 3px solid var(--accent); }
+.tree-chart .f3-av { flex: none; display: block; width: 36px; height: 36px; }
+.tree-chart .f3-av .avatar { width: 36px; height: 36px; font-size: .85rem; }
+.tree-chart .f3-txt { display: flex; flex-direction: column; min-width: 0; }
+.tree-chart .f3-nm { font-weight: 600; font-size: .85rem; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.tree-chart .f3-more { margin-top: 2px; font-size: .68rem; line-height: 1.15; color: var(--muted); }
+.tree-chart .text-overflow-mask { display: none; }
 .tree-tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; z-index: 3; }
 .tool { min-width: 44px; min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1.1rem; font-weight: 700; cursor: pointer; }
 .tree-panel { margin-top: 10px; }
@@ -726,7 +737,7 @@ body.sheet-open .nav { z-index: 30 !important; }
 .rel-group { margin-top: 10px; }
 .rel-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .chip { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-weight: 600; }
-.tree-box > .tree-view, .tree-box > .tree-panel { margin-inline: 12px; }
+.tree-box > .tree-stage, .tree-box > .tree-panel, .tree-box > .tree-bar { margin-inline: 12px; }
 
 /* v1.9 — modern pass: links are buttons, softer cards */
 a { text-decoration: none; font-weight: 600; }
@@ -980,7 +991,8 @@ dialog input[type="date"] { border-color: transparent; }
   .topbar-inner .fam-select, .topbar-inner .fam-name { flex: 0 0 auto; min-width: 180px; max-width: 280px; }
   .main[data-view="settings"], .main[data-view="profile"], .main[data-view="create"], .main[data-view="saved"], .main[data-view="activity"], .main[data-view="family"], .main[data-view="post"] { max-width: 640px; }
   .main[data-view="tree"] { max-width: 1000px; }
-  .main[data-view="tree"] .tree-view { height: calc(100vh - 300px); min-height: 480px; margin-inline: 0; }
+  .main[data-view="tree"] .tree-chart { height: calc(100vh - 340px); min-height: 480px; }
+  .main[data-view="tree"] .tree-stage, .main[data-view="tree"] .tree-bar, .main[data-view="tree"] .tree-count { margin-inline: 0; }
   .main[data-view="tree"] .tree-panel, .main[data-view="tree"] .tree-box > .tree-panel { margin-inline: 0; }
   .main[data-view="tree"] h1, .main[data-view="tree"] .hint { margin-inline: 0; }
   .main[data-view="home"] { padding-top: 8px; }
@@ -1009,3 +1021,11 @@ dialog input[type="date"] { border-color: transparent; }
 .sheet-backdrop { background: rgba(0, 0, 0, .32); }
 .reel + .sheet-backdrop, .reel .sheet-backdrop { background: rgba(0, 0, 0, .45); }
 .sheet .sheet-head { min-height: 48px; }
+
+/* v1.20 — tree toolbar (view switch, jump-to) and relationship labels */
+.tree-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 12px; }
+.tree-bar select { min-height: 44px; max-width: 100%; }
+.tree-bar .grow { flex: 1 1 160px; }
+.tree-count { margin: 6px 12px; }
+.kind-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: .72rem; font-weight: 600; vertical-align: middle; }
+.partner-rows .row, .parent-rows .row { align-items: flex-end; }
