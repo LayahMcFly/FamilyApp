@@ -2648,11 +2648,12 @@
     var tools = h('div', { class: 'tree-tools' },
       h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom in', text: '+', onclick: function () { if (ctl) ctl.zoom(1.3); } }),
       h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom out', text: '−', onclick: function () { if (ctl) ctl.zoom(0.77); } }),
-      h('button', { class: 'tool', type: 'button', 'aria-label': 'Show the whole tree', text: 'Fit', onclick: function () { if (ctl) ctl.fit(); } }));
+      h('button', { class: 'tool', type: 'button', 'aria-label': 'Show the whole tree', text: 'Fit', onclick: function () { if (ctl) ctl.fit(); } }),
+      mine ? h('button', { class: 'tool', type: 'button', 'aria-label': 'Go back to me in the tree', title: 'Back to me', text: 'Me', onclick: function () { if (ctl) ctl.focus(mine.$id); select(mine.$id); } }) : null);
     holder.appendChild(h('div', { class: 'tree-stage' }, chartEl, tools));
     var count = h('p', { class: 'hint tree-count', 'aria-live': 'polite' });
     holder.appendChild(count);
-    holder.appendChild(h('p', { class: 'hint', text: 'Drag to move around. Pinch or use + and − to zoom. Tap a person to centre the tree on them and see their parents, partners and children.' }));
+    holder.appendChild(h('p', { class: 'hint', text: 'Drag to move around. Pinch or use + and − to zoom. Tap a person to centre the tree on them and see their parents, partners and children.' + (mine ? ' Lost? Press “Me” to come back to yourself.' : '') }));
     var panel = h('section', { class: 'card tree-panel', 'aria-live': 'polite', 'aria-label': 'Selected person' });
     holder.appendChild(panel);
 
