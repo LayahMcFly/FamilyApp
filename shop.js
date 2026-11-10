@@ -79,7 +79,7 @@
     main.appendChild(none);
     var blocks = [];
     SECTIONS.forEach(function (sec) {
-    var slots = cat.slots.filter(function (x) { return (x.section || 'gifts') === sec.id; });
+    var slots = cat.slots.filter(function (x) { return x.available && (x.section || 'gifts') === sec.id; });
     if (!slots.length) return;
     var head2 = h('h2', { class: 'shop-section', text: sec.title }); main.appendChild(head2);
     var grid = h('div', { class: 'shop-grid' }); blocks.push({ head: head2, grid: grid });
