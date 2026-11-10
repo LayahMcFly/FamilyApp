@@ -602,9 +602,9 @@
           link = document.createElement('link'); link.rel = 'icon'; link.type = 'image/png'; document.head.appendChild(link);
         }
         link.href = cv.toDataURL('image/png');
-        a += 0.35;
+        a += 0.05;   // a full turn takes about 15 seconds
       }
-      function run() { if (timer || document.hidden) return; frame(); timer = setInterval(frame, 160); }
+      function run() { if (timer || document.hidden) return; frame(); timer = setInterval(frame, 120); }
       function stop() { clearInterval(timer); timer = null; }
       document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else run(); });
       run();
