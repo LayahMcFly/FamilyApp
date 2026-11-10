@@ -1048,3 +1048,30 @@ dialog input[type="date"] { border-color: transparent; }
 .avatar.initial { font-family: "Dancing Script", "Snell Roundhand", "Segoe Script", "Brush Script MT", cursive; font-weight: 700; font-size: 1.5em; line-height: 1; padding-bottom: .1em; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
 .avatar.lg.initial { font-size: 3rem; }
 .avatar.initial { color: var(--on-accent, #fff); }
+
+/* v1.21.4 — the Create button: a wide rainbow that spins slowly (only a slice shows at a time) with drifting sparkle dust */
+@keyframes plus-spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes plus-dust { to { background-position: 3px -13px, 11px -21px, 7px -15px; } }
+@keyframes plus-twinkle { from { opacity: .45; } to { opacity: 1; } }
+@media (max-width: 899px) {
+  .nav a[data-route="create"], .nav a[data-route="create"][aria-current="page"] {
+    --plus-grad: linear-gradient(90deg, #ff3b6b, #ff8a1f, #ffd60a, #3ddc84, #22b8ff, #7c4dff, #e040fb, #ff3b6b);
+    background: transparent !important; overflow: hidden; isolation: isolate; animation: plus-breathe 3.2s ease-in-out infinite;
+  }
+  :root[data-ring="married"] .nav a[data-route="create"] { --plus-grad: linear-gradient(90deg, #f7d774, #c98a14, #fff0b0, #b87a10, #f7d774); }
+  :root[data-ring="grand"] .nav a[data-route="create"] { --plus-grad: linear-gradient(90deg, #8fa7d8, #f4f8ff, #6f8fd0, #a28bdc, #8fa7d8); }
+  .nav a[data-route="create"]::before, .nav a[data-route="create"][aria-current="page"]::before {
+    content: ""; position: absolute; z-index: -2; top: 50%; left: 50%; width: 300%; height: 300%; margin: 0; border-radius: 0;
+    background: var(--plus-grad); transform: translate(-50%, -50%); animation: plus-spin 7s linear infinite;
+  }
+  .nav a[data-route="create"]::after {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: 50%;
+    background-image: radial-gradient(circle, #fff 0 1px, transparent 1.7px), radial-gradient(circle, #fff 0 .8px, transparent 1.4px), radial-gradient(circle, #fff 0 1.2px, transparent 2px);
+    background-size: 18px 18px, 23px 23px, 29px 29px; background-position: 3px 5px, 11px 2px, 7px 14px;
+    animation: plus-dust 3.6s linear infinite, plus-twinkle 1.4s ease-in-out infinite alternate;
+  }
+  .nav a[data-route="create"] svg { position: relative; z-index: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav a[data-route="create"]::before, .nav a[data-route="create"][aria-current="page"]::before, .nav a[data-route="create"]::after { animation: none; }
+}
