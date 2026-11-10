@@ -776,3 +776,33 @@ label:first-child { margin-top: 0; }
 .about-tools, .about-cat-head { gap: 8px; }
 .about-tools > * + * { margin-left: 8px; }
 .row + :where(label, .field) { margin-top: 18px; }
+
+/* v1.10.0 — Shorts look like Instagram Reels */
+.reels-top { display: flex; align-items: center; gap: 14px; padding: 12px 14px 44px; font-size: 1.25rem; font-weight: 700; }
+.reels-back { pointer-events: auto; display: grid; place-items: center; width: 40px; height: 40px; margin-left: -6px; color: #fff; text-decoration: none; }
+.reels-back svg { width: 28px; height: 28px; stroke-width: 2.4; }
+.reel .actions { right: 4px; bottom: 112px; gap: 14px; }
+.reel .act { min-width: 48px; font-size: .75rem; font-weight: 600; }
+.reel .act svg { width: 28px; height: 28px; stroke-width: 1.9; }
+.reel .act[aria-pressed="true"] svg, .reel .actions .act:first-child[aria-pressed="true"] svg { fill: currentColor; }
+.reel .actions .act:first-child[aria-pressed="true"] { color: #ff3040; }
+.reel .act.save[aria-pressed="true"] svg { fill: #fff; }
+.reel-info { padding: 90px 14px 12px; gap: 8px; background: linear-gradient(transparent, #000a 45%, #000d); }
+.reel-info .post-head { gap: 10px; align-items: center; }
+.reel-info .post-head .avatar { width: 34px; height: 34px; font-size: .8rem; }
+.reel-info .post-head .name, .reel-info .post-head .name a { font-weight: 700; font-size: .95rem; color: #fff; text-decoration: none; }
+.reel-info .post-head .who { display: flex; align-items: baseline; gap: 8px; }
+.reel-info .post-head .small { font-size: .8rem; opacity: .8; }
+.reel-info .post-body { font-size: .92rem; line-height: 1.35; margin-right: 64px; }
+.reel-comment { min-height: 44px; padding: 0 18px; background: #26262ccc; border: 1px solid #ffffff1f; color: #cfcfd4; font-size: .92rem; }
+.heart-burst { position: absolute; z-index: 8; width: 110px; height: 110px; margin: -55px 0 0 -55px; pointer-events: none; color: #ff3040; filter: drop-shadow(0 6px 14px #0008); animation: burst .8s ease-out forwards; }
+.heart-burst svg { width: 100%; height: 100%; fill: currentColor; stroke: none; }
+@keyframes burst { 0% { transform: scale(.3) rotate(-12deg); opacity: 0; } 18% { transform: scale(1.15) rotate(-6deg); opacity: 1; } 35% { transform: scale(.95) rotate(-6deg); } 70% { transform: scale(1) rotate(-6deg) translateY(-6px); opacity: 1; } 100% { transform: scale(1.1) rotate(-6deg) translateY(-30px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .heart-burst { animation: none; opacity: 1; } }
+.media { position: relative; }
+.btn.danger-text { color: var(--danger); }
+/* dark comments sheet like Reels */
+.reel .sheet { --surface: #1c1c1e; --surface-2: #2a2a2e; --bg: #1c1c1e; --text: #f5f5f5; --muted: #a8a8ad; --border: #333338; --accent-text: #7cc4ff; background: #1c1c1e; color: #f5f5f5; max-height: 68vh; box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); }
+.reel .sheet::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 4px; background: #5b5b60; margin: -4px auto 10px; }
+.reel .sheet-head { justify-content: center; position: relative; }
+.reel .sheet-head .btn { position: absolute; right: 0; }
