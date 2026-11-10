@@ -1032,3 +1032,9 @@ dialog input[type="date"] { border-color: transparent; }
 
 /* v1.20.1: the family's name as the title above the feed */
 .family-title { margin: 6px 12px 2px; font-size: 1.35rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+
+/* v1.21.1: while the comments sheet is open (or being dragged away) the bottom bar and its plus button stay out of sight, so the plus no longer pokes up beside the sheet. */
+@media (max-width: 899px) {
+  .nav { transition: opacity .18s ease; }
+  body.sheet-open .nav { opacity: 0; pointer-events: none; }
+}
