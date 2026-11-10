@@ -326,3 +326,11 @@ Use one normal window and one private window, with two different email addresses
 > **Added in v1.4.0 (Saved libraries):** open Databases > family > `bookmarks` > Columns > Create column > String. Key `collectionId`, size `24`, not required. New installs made with the setup script get this column automatically.
 
 > **Added in v1.6.0 (comment likes, pinned comments):** two more columns, both String and not required. In `posts`: key `pinnedCommentIds`, size `120`. In `comments`: key `likedBy`, size `36`, and turn **Array** on. Then redeploy the `family-api` Function with the new package. New installs made with the setup script get both automatically. Notifications and Trending need no setup.
+
+> **Added in v1.7.0 (profiles, About me, family tree):**
+> 1. Open Databases > family > `profiles` > Columns and add three: `bio` (String, size 200), `about` (String, size 8000), `treeAdmin` (Boolean). None are required.
+> 2. Create two new tables, `people` and `suggestions`, with **Row security ON** and no table permissions (same as the others).
+>    - `people` columns: `familyId` (String 36, required), `name` (String 80, required), `userId` (String 36), `confirmed` (Boolean), `parentIds` (String 36, Array), `partnerIds` (String 36, Array), `createdBy` (String 36). Index: `idx_familyId` on `familyId`.
+>    - `suggestions` columns: `familyId` (String 36, required), `authorId` (String 36, required), `personId` (String 36), `text` (String 500, required), `status` (String 12, required). Indexes: `idx_familyId`, `idx_authorId`, `idx_status`, each on the column of the same name.
+> 3. Redeploy the `family-api` Function with the new package.
+> New installs made with the setup script get all of this automatically.

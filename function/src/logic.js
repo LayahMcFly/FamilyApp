@@ -19,7 +19,9 @@ export const TABLES = {
   posts: 'posts',
   comments: 'comments',
   reactions: 'reactions',
-  bookmarks: 'bookmarks'
+  bookmarks: 'bookmarks',
+  people: 'people',
+  suggestions: 'suggestions'
 };
 
 export const LIMITS = {
@@ -27,7 +29,15 @@ export const LIMITS = {
   commentMax: 500,
   nameMax: 60,
   imageMaxBytes: 8 * 1024 * 1024,
-  avatarMaxBytes: 1024 * 1024
+  avatarMaxBytes: 1024 * 1024,
+  bioMax: 200,
+  aboutCategories: 10,
+  aboutItems: 12,
+  aboutTitleMax: 32,
+  aboutItemMax: 40,
+  personNameMax: 80,
+  maxPeople: 300,
+  suggestionMax: 500
 };
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
@@ -156,6 +166,69 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     }
   }
 
+  /* ---------- family tree helpers ---------- */
+  async function treePeople(familyId) {
+    const out = [];
+    let cursor = null;
+    while (out.length < 1000) {
+      const q = [Query.equal('familyId', [familyId]), Query.limit(100)];
+      if (cursor) q.push(Query.cursorAfter(cursor));
+      const page = await listRows(TABLES.people, q);
+      out.push(...page.rows);
+      if (page.rows.length < 100) break;
+      cursor = page.rows[page.rows.length - 1].$id;
+    }
+    return out;
+  }
+  // A tree admin is a family owner or someone an owner designated. A relationship label never counts.
+  async function requireTreeAdmin(user, ctx) {
+    if (ctx.isOwner) return;
+    const prof = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${ctx.familyId}_${user.$id}`])]);
+    if (!prof || prof.treeAdmin !== true) throw forbidden('Only the family owner or a tree admin can change the family tree. You can send a suggestion instead.');
+  }
+  async function checkLink(familyId, raw, selfId, all) {
+    if (raw === undefined || raw === null || raw === '') return '';
+    const uid = idOf(raw, 'userId');
+    const prof = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${familyId}_${uid}`])]);
+    if (!prof) throw bad('That account is not a member of this family yet.');
+    if (all.some((x) => x.userId === uid && x.$id !== selfId)) throw bad('That member is already linked to someone in the tree.');
+    return uid;
+  }
+  function checkIds(raw, all, selfId) {
+    if (raw === undefined || raw === null) return [];
+    if (!Array.isArray(raw) || raw.length > 8) throw bad('That list of relatives is not valid.');
+    const out = [];
+    for (const id of raw) {
+      idOf(id, 'person');
+      if (id === selfId) throw bad('A person cannot be their own relative.');
+      if (!all.some((x) => x.$id === id)) throw bad('A relative in that list is not in this family tree.');
+      if (!out.includes(id)) out.push(id);
+    }
+    return out;
+  }
+  function assertNoCycle(all, personId, parentIds) {
+    const byId = new Map(all.map((x) => [x.$id, x]));
+    const seen = new Set();
+    const stack = [...parentIds];
+    while (stack.length) {
+      const id = stack.pop();
+      if (id === personId) throw bad('That would make someone their own ancestor.');
+      if (seen.has(id)) continue;
+      seen.add(id);
+      for (const pp of (byId.get(id) || {}).parentIds || []) stack.push(pp);
+    }
+  }
+  async function addPartner(all, otherId, selfId) {
+    const o = all.find((x) => x.$id === otherId);
+    const cur = (o && o.partnerIds) || [];
+    if (o && !cur.includes(selfId)) await updateRow(TABLES.people, otherId, { partnerIds: [...cur, selfId] });
+  }
+  async function dropPartner(all, otherId, selfId) {
+    const o = all.find((x) => x.$id === otherId);
+    const cur = (o && o.partnerIds) || [];
+    if (o && cur.includes(selfId)) await updateRow(TABLES.people, otherId, { partnerIds: cur.filter((x) => x !== selfId) });
+  }
+
   /* ---------- file ownership + normalisation ---------- */
   /**
    * A file may be attached only if (a) it carries update permission for the caller, which a
@@ -270,11 +343,165 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         avatarFileId = next;
         if (old) await deleteFileQuiet(old);
       }
-      const data = { familyId, userId: user.$id, profileKey: key, displayName, avatarFileId };
+      const extra = {};
+      if (body.bio !== undefined) extra.bio = textOf(body.bio ?? '', 'Bio', { max: LIMITS.bioMax });
+      const data = { familyId, userId: user.$id, profileKey: key, displayName, avatarFileId, ...extra };
+      const wrapBio = async (fn) => {
+        try {
+          return await fn();
+        } catch (e) {
+          if (extra.bio !== undefined && sdkCode(e) === 400) {
+            throw bad('Bios need one more setup step: add the bio column to the profiles table (see the Setup Guide).');
+          }
+          throw e;
+        }
+      };
       const row = existing
-        ? await updateRow(TABLES.profiles, existing.$id, { displayName, avatarFileId })
-        : await createRow(TABLES.profiles, ID.unique(), data, teamRead(familyId));
-      return { profile: { id: row.$id, userId: user.$id, displayName, avatarFileId } };
+        ? await wrapBio(() => updateRow(TABLES.profiles, existing.$id, { displayName, avatarFileId, ...extra }))
+        : await wrapBio(() => createRow(TABLES.profiles, ID.unique(), data, teamRead(familyId)));
+      return { profile: { id: row.$id, userId: user.$id, displayName, avatarFileId, bio: row.bio || '', about: row.about || '' } };
+    },
+
+    /** "About me": a list of categories, each with a few short answers. Stored as JSON on my profile row, written only here. */
+    async saveAbout({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      const list = body.about;
+      if (!Array.isArray(list) || list.length > LIMITS.aboutCategories) throw bad(`You can have up to ${LIMITS.aboutCategories} categories.`);
+      const clean = list.map((c, i) => {
+        if (!c || typeof c !== 'object') throw bad('A category is not valid.');
+        const title = textOf(c.title ?? '', 'Category name', { min: 1, max: LIMITS.aboutTitleMax });
+        if (!Array.isArray(c.items) || c.items.length > LIMITS.aboutItems) throw bad(`Each category can have up to ${LIMITS.aboutItems} answers.`);
+        const items = c.items.map((x) => textOf(typeof x === 'string' ? x : '', 'Answer', { min: 1, max: LIMITS.aboutItemMax }));
+        const key = typeof c.key === 'string' && /^[a-z0-9]{1,20}$/.test(c.key) ? c.key : `c${i}`;
+        return { key, title, items };
+      });
+      const existing = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${familyId}_${user.$id}`])]);
+      if (!existing) throw bad('Set up your profile first.');
+      const json = JSON.stringify(clean);
+      try {
+        await updateRow(TABLES.profiles, existing.$id, { about: json });
+      } catch (e) {
+        if (sdkCode(e) === 400) throw bad('About me needs one more setup step: add the about column to the profiles table (see the Setup Guide).');
+        throw e;
+      }
+      return { about: json };
+    },
+
+    /* ---------- family tree ---------- */
+    async setTreeAdmin({ user, body }) {
+      const { familyId, isOwner } = await requireMember(user, body.familyId);
+      if (!isOwner) throw forbidden('Only a family owner can choose tree admins.');
+      const target = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${familyId}_${idOf(body.userId, 'userId')}`])]);
+      if (!target) throw missing('That person has no profile in this family yet.');
+      const on = body.admin !== false;
+      try {
+        await updateRow(TABLES.profiles, target.$id, { treeAdmin: on });
+      } catch (e) {
+        if (sdkCode(e) === 400) throw bad('Tree admins need one more setup step: add the treeAdmin column to the profiles table (see the Setup Guide).');
+        throw e;
+      }
+      return { admin: on };
+    },
+
+    async treeAddPerson({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      await requireTreeAdmin(user, ctx);
+      const all = (await treePeople(ctx.familyId));
+      if (all.length >= LIMITS.maxPeople) throw new ApiError(409, 'quota', `A family tree can hold up to ${LIMITS.maxPeople} people.`);
+      const name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
+      const linkId = await checkLink(ctx.familyId, body.userId, null, all);
+      const parentIds = checkIds(body.parentIds, all, null);
+      const partnerIds = checkIds(body.partnerIds, all, null);
+      const row = await createRow(TABLES.people, ID.unique(),
+        { familyId: ctx.familyId, name, userId: linkId, confirmed: false, parentIds, partnerIds, createdBy: user.$id }, teamRead(ctx.familyId));
+      for (const pid of partnerIds) await addPartner(all, pid, row.$id);
+      return { personId: row.$id };
+    },
+
+    async treeEditPerson({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      await requireTreeAdmin(user, ctx);
+      const all = await treePeople(ctx.familyId);
+      const p = all.find((x) => x.$id === body.personId);
+      if (!p) throw missing('That person is not in this family tree.');
+      const data = {};
+      if (body.name !== undefined) data.name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
+      if (body.userId !== undefined) {
+        const linkId = await checkLink(ctx.familyId, body.userId, p.$id, all);
+        if (linkId !== (p.userId || '')) { data.userId = linkId; data.confirmed = false; }
+      }
+      if (body.parentIds !== undefined) {
+        data.parentIds = checkIds(body.parentIds, all, p.$id);
+        assertNoCycle(all, p.$id, data.parentIds);
+      }
+      let partners = null;
+      if (body.partnerIds !== undefined) partners = checkIds(body.partnerIds, all, p.$id);
+      if (partners) data.partnerIds = partners;
+      if (Object.keys(data).length) await updateRow(TABLES.people, p.$id, data);
+      if (partners) {
+        const before = Array.isArray(p.partnerIds) ? p.partnerIds : [];
+        for (const pid of partners.filter((x) => !before.includes(x))) await addPartner(all, pid, p.$id);
+        for (const pid of before.filter((x) => !partners.includes(x))) await dropPartner(all, pid, p.$id);
+      }
+      return { ok: true };
+    },
+
+    async treeDeletePerson({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      await requireTreeAdmin(user, ctx);
+      const all = await treePeople(ctx.familyId);
+      const p = all.find((x) => x.$id === body.personId);
+      if (!p) throw missing('That person is not in this family tree.');
+      for (const o of all) {
+        if (o.$id === p.$id) continue;
+        const par = (o.parentIds || []).filter((x) => x !== p.$id);
+        const prt = (o.partnerIds || []).filter((x) => x !== p.$id);
+        if (par.length !== (o.parentIds || []).length || prt.length !== (o.partnerIds || []).length) {
+          await updateRow(TABLES.people, o.$id, { parentIds: par, partnerIds: prt });
+        }
+      }
+      await deleteRow(TABLES.people, p.$id);
+      return { ok: true };
+    },
+
+    /** The person a tree admin linked to my account says "yes, this is me" (or "no", which unlinks it). */
+    async treeConfirm({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      const p = await getRowOrNull(TABLES.people, idOf(body.personId, 'personId'));
+      if (!p || p.familyId !== familyId) throw missing('That person is not in this family tree.');
+      if (p.userId !== user.$id) throw forbidden('This tree entry is not linked to your account.');
+      if (body.confirm === false) {
+        await updateRow(TABLES.people, p.$id, { userId: '', confirmed: false });
+        return { confirmed: false };
+      }
+      await updateRow(TABLES.people, p.$id, { confirmed: true });
+      return { confirmed: true };
+    },
+
+    async suggestTreeChange({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      const text = textOf(body.text, 'Suggestion', { min: 3, max: LIMITS.suggestionMax });
+      let personId = '';
+      if (body.personId) {
+        const p = await getRowOrNull(TABLES.people, idOf(body.personId, 'personId'));
+        if (!p || p.familyId !== familyId) throw missing('That person is not in this family tree.');
+        personId = p.$id;
+      }
+      const open = await listRows(TABLES.suggestions, [Query.equal('familyId', [familyId]), Query.equal('authorId', [user.$id]), Query.equal('status', ['open']), Query.limit(21)]);
+      if (open.rows.length >= 20) throw new ApiError(409, 'quota', 'You already have 20 open suggestions. Wait for a tree admin to review some.');
+      const row = await createRow(TABLES.suggestions, ID.unique(),
+        { familyId, authorId: user.$id, personId, text, status: 'open' }, teamRead(familyId));
+      return { suggestionId: row.$id };
+    },
+
+    async resolveSuggestion({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      await requireTreeAdmin(user, ctx);
+      const s = await getRowOrNull(TABLES.suggestions, idOf(body.suggestionId, 'suggestionId'));
+      if (!s || s.familyId !== ctx.familyId) throw missing('That suggestion was not found.');
+      const status = body.status === 'dismissed' ? 'dismissed' : 'done';
+      await updateRow(TABLES.suggestions, s.$id, { status });
+      return { status };
     },
 
     async familyUsage({ user, body }) {

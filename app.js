@@ -80,6 +80,9 @@
     mute: ['M4 9v6h4l5 4V5L8 9z', 'M17 9.5l5 5', 'M22 9.5l-5 5'],
     pin: ['M9 4h6l-1 6 3 3H7l3-3z', 'M12 13v7'],
     bell: ['M6 17V11a6 6 0 0 1 12 0v6l1.5 2h-15z', 'M10 21h4'],
+    user: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1'],
+    eye: ['M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
+    gear: ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'],
     flame: ['M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .2 1.2.8 2 1.7 2.3C10.2 8.5 10.5 5.5 12 3z']
   };
   function icon(name) {
@@ -1005,7 +1008,7 @@
     { id: 'shorts', label: 'Shorts', icon: 'shorts' },
     { id: 'saved', label: 'Saved', icon: 'bookmark' },
     { id: 'family', label: 'Family', icon: 'users' },
-    { id: 'settings', label: 'Settings', icon: 'settings' }
+    { id: 'profile', label: 'Profile', icon: 'user' }
   ];
   var VIEWS = {};
 
@@ -1058,7 +1061,7 @@
       return;
     }
     var segs = (location.hash.replace(/^#\/?/, '') || 'home').split('?')[0].split('/');
-    var name = segs[0], param = segs[1] || '';
+    var name = segs[0], param = segs[1] || '', param2 = segs[2] || '';
     if (!VIEWS[name]) name = 'home';
     S.nav++;
     var token = S.nav;
@@ -1066,11 +1069,11 @@
     clear(S.main);
     S.main.classList.toggle('reels-main', name === 'shorts');
     Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
-      if (a.getAttribute('data-route') === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      if (a.getAttribute('data-route') === (name === 'settings' ? 'profile' : name)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
-    document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
-    Promise.resolve().then(function () { return VIEWS[name](S.main, token, param); }).catch(function (e) {
+    document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
+    Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });
     if (!first) { S.main.focus({ preventScroll: true }); window.scrollTo(0, 0); }
@@ -1436,7 +1439,7 @@
     if (people.length) {
       main.appendChild(h('div', { class: 'stories', role: 'list', 'aria-label': 'Family members' }, people.map(function (p) {
         var first = String(p.displayName || '').split(' ')[0];
-        return h('div', { class: 'story', role: 'listitem' }, h('div', { class: 'ring' }, avatarEl(p, 'lg')), h('span', { text: p.userId === S.user.$id ? 'You' : first }));
+        return h('a', { class: 'story', role: 'listitem', href: '#/profile/' + p.userId, 'aria-label': 'Open ' + (p.userId === S.user.$id ? 'your' : first + '\u2019s') + ' profile' }, h('div', { class: 'ring' }, avatarEl(p, 'lg')), h('span', { text: p.userId === S.user.$id ? 'You' : first }));
       })));
     }
     append(main, trendingStrip(trend));
@@ -1531,7 +1534,7 @@
     var edited = new Date(post.$updatedAt) - new Date(post.$createdAt) > 3000;
     var kindLabel = { photo: 'Photo', video: 'Video', short: 'Short' }[post.kind];
     (isReel ? info : card).appendChild(h('div', { class: 'post-head' }, avatarEl(prof),
-      h('div', { class: 'who' }, h('div', { class: 'name', text: name }),
+      h('div', { class: 'who' }, h('div', { class: 'name' }, h('a', { class: 'member-link', href: '#/profile/' + post.authorId, text: name })),
         h('div', { class: 'small muted' }, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), edited ? ' · edited' : '')),
       S.trend && S.trend.ids.has(post.$id) ? h('span', { class: 'badge hot' }, icon('flame'), ' Trending') : null,
       kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null));
@@ -1951,9 +1954,17 @@
     main.appendChild(familyCreateCard('Name your new family', 'You become its owner. It has its own members, posts and photos, completely separate from your other families.'));
   };
 
-  VIEWS.family = async function (main, token) {
-    var fam = currentFamily();
+  VIEWS.family = async function (main, token, tab, personId) {
+    var fam = currentFamily(), onTree = tab === 'tree';
     main.appendChild(h('h1', { text: fam ? fam.name : 'Family' }));
+    main.appendChild(h('nav', { class: 'tabs fam-tabs', 'aria-label': 'Family sections' },
+      h('a', { class: 'tab', href: '#/family', 'aria-current': onTree ? null : 'page', text: 'Members' }),
+      h('a', { class: 'tab', href: '#/family/tree', 'aria-current': onTree ? 'page' : null, text: 'Family Tree' })));
+    if (onTree) return familyTree(main, token, personId);
+    return familyMembers(main, token);
+  };
+
+  async function familyMembers(main, token) {
     var listBox = h('div', { class: 'card' }, spinnerLine('Loading…'));
     main.appendChild(listBox);
     var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
@@ -1971,15 +1982,28 @@
     joined.forEach(function (m) {
       var p = S.profiles.get(m.userId) || null;
       var isOwnerRow = m.roles.indexOf('owner') >= 0;
+      var isTA = !!(p && p.treeAdmin === true);
+      var taBtn = null;
+      if (S.isOwner && !isOwnerRow && p) {
+        taBtn = h('button', { class: 'link-btn small', type: 'button', text: isTA ? 'Remove tree admin' : 'Make tree admin', 'aria-label': (isTA ? 'Remove tree admin from ' : 'Make tree admin: ') + p.displayName, onclick: function (ev) {
+          busy(ev.currentTarget, async function () {
+            try {
+              var r = await api('setTreeAdmin', { familyId: S.familyId, userId: m.userId, admin: !isTA });
+              p.treeAdmin = r.admin; toast(r.admin ? p.displayName + ' can now manage the family tree.' : 'Tree admin removed.'); route(false);
+            } catch (e) { toast(errText(e)); }
+          });
+        } });
+      }
       listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: m.userName || '?' }),
-        h('div', { class: 'grow' }, h('strong', { text: p ? p.displayName : (m.userName || 'Family member') }),
+        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + m.userId }, h('strong', { text: p.displayName })) : h('strong', { text: m.userName || 'Family member' }),
           m.userId === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null,
-          isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null)));
+          isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null,
+          isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null), taBtn));
     });
     if (S.isOwner) renderAdminTools(main, token);
     else main.appendChild(h('p', { class: 'muted small', text: 'To add a relative, ask a family owner to invite their email address.' }));
     renderLeaveAndDelete(main, me, joined);
-  };
+  }
 
   function renderAdminTools(main, token) {
     var fid = S.familyId;
@@ -2092,21 +2116,291 @@
    * 12. SETTINGS (profile, appearance, account)
    * ===================================================================== */
 
-  VIEWS.settings = function (main) {
-    main.appendChild(h('h1', { text: 'Settings' }));
+  /* =====================================================================
+   * 12b. PROFILE, ABOUT ME, SETTINGS, FAMILY TREE
+   * Everything here is private to the ACTIVE family. Writes go through the family-api function.
+   * ===================================================================== */
 
-    // ---- profile (per family) ----
-    var fam = currentFamily();
+  var AB = { cats: 10, items: 12, title: 32, item: 40 };
+  var ABOUT_PROMPTS = [
+    { key: 'movies', ask: 'My favorite movies', title: 'Favorite movies' },
+    { key: 'colors', ask: 'My favorite colors', title: 'Favorite colors' },
+    { key: 'foods', ask: 'My favorite foods', title: 'Favorite foods' },
+    { key: 'shows', ask: 'My favorite shows', title: 'Favorite shows' },
+    { key: 'music', ask: 'My favorite songs or artists', title: 'Favorite songs and artists' },
+    { key: 'hobbies', ask: 'My hobbies', title: 'Hobbies' },
+    { key: 'loves', ask: 'Things I love', title: 'Things I love' },
+    { key: 'fears', ask: 'Things I’m afraid of', title: 'Things I’m afraid of' }
+  ];
+  function aboutOf(profile) {
+    try { var a = JSON.parse((profile && profile.about) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+  }
+  function canEditTree() { return !!(S.isOwner || (S.profile && S.profile.treeAdmin === true)); }
+  function famName() { var f = currentFamily(); return f ? f.name : 'this family'; }
+  function firstName(p) { return String((p && p.displayName) || 'This person').split(' ')[0]; }
+  function errText(e) { return e && e.message && !e.type && !e.apiCode ? e.message : friendly(e); }
+
+  // A small text-entry dialog (custom category, editing an answer, suggestions).
+  function textDialog(title, value, label, opts, onSubmit) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var dlg = h('dialog', { 'aria-labelledby': 'dlg-title' });
+      var inp = opts.multiline
+        ? h('textarea', { rows: 4, maxlength: opts.max || 500, 'aria-label': opts.aria || title, placeholder: opts.placeholder || '' })
+        : h('input', { type: 'text', maxlength: opts.max || 60, 'aria-label': opts.aria || title, placeholder: opts.placeholder || '' });
+      inp.value = value || '';
+      var msg = h('div'), ok = h('button', { class: 'btn', type: 'submit', text: label }), cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel' });
+      function done(v) { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); resolve(v); }
+      cancel.addEventListener('click', function () { done(false); });
+      dlg.addEventListener('cancel', function (e) { e.preventDefault(); done(false); });
+      dlg.appendChild(h('form', { novalidate: true, onsubmit: function (ev) {
+        ev.preventDefault();
+        busy(ok, async function () { try { await onSubmit(inp.value.trim()); done(true); } catch (e) { showAlert(msg, 'error', errText(e)); } }, 'Saving…');
+      } }, h('h2', { id: 'dlg-title', text: title }), opts.hint ? h('p', { class: 'hint', text: opts.hint }) : null, inp, msg, h('div', { class: 'row' }, cancel, ok)));
+      document.body.appendChild(dlg); dlg.showModal(); inp.focus();
+    });
+  }
+
+  // The list of prompts that opens from "Add something about me".
+  function pickPrompt(taken, onPick) {
+    var dlg = h('dialog', { class: 'sheet-dialog', 'aria-labelledby': 'dlg-title' });
+    function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    var list = h('div', { class: 'lib-list' });
+    ABOUT_PROMPTS.forEach(function (p) {
+      var has = taken.indexOf(p.key) !== -1;
+      list.appendChild(h('button', { class: 'lib-row', type: 'button', disabled: has, onclick: function () { close(); onPick({ key: p.key, title: p.title, items: [] }); } },
+        h('span', { text: p.ask }), has ? h('span', { class: 'lib-here', text: 'Added' }) : null));
+    });
+    list.appendChild(h('button', { class: 'lib-row', type: 'button', onclick: function () {
+      close();
+      textDialog('Custom prompt', '', 'Add', { max: AB.title, placeholder: 'For example: My dream trip', aria: 'Name of your custom category' }, async function (v) {
+        if (!v) throw new Error('Give the category a name.');
+        if (v.length > AB.title) throw new Error('Category names can be up to ' + AB.title + ' characters.');
+        onPick({ key: 'x' + Math.random().toString(36).slice(2, 10), title: v, items: [] });
+      });
+    } }, h('span', { text: 'A custom prompt…' })));
+    dlg.appendChild(h('h2', { id: 'dlg-title', text: 'Add something about me' }));
+    dlg.appendChild(list);
+    dlg.appendChild(h('button', { class: 'btn secondary block', type: 'button', text: 'Cancel', onclick: close }));
+    document.body.appendChild(dlg); dlg.showModal();
+  }
+
+  function whoCanSee() {
+    return h('p', { class: 'hint', text: 'Everyone in ' + famName() + ' can read your profile and About me. Only you can change them. Nobody outside this family can see them, and your email address is never shown here. You have a separate profile in each family you belong to.' });
+  }
+
+  /* ---------- the About me editor: changes stay a draft until you press Save ---------- */
+  function aboutEditor(initial) {
+    var base = JSON.stringify(initial), draft = JSON.parse(base), focusKey = null;
+    var wrap = h('div'), list = h('div'), msg = h('div');
+    var saveBtn = h('button', { class: 'btn', type: 'button', text: 'Save About me' });
+    var discardBtn = h('button', { class: 'btn secondary', type: 'button', text: 'Discard changes' });
+    var note = h('p', { class: 'small muted' });
+    function dirty() { return JSON.stringify(draft) !== base; }
+    function mini(label, glyph, fn) { return h('button', { class: 'mini', type: 'button', 'aria-label': label, title: label, text: glyph, onclick: fn }); }
+    function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return; var t = arr[i]; arr[i] = arr[j]; arr[j] = t; paint(); }
+
+    function paint() {
+      clear(list);
+      draft.forEach(function (c, i) {
+        var tags = h('ul', { class: 'tags editable' });
+        c.items.forEach(function (it, j) {
+          tags.appendChild(h('li', { class: 'tag' }, h('span', { text: it }),
+            mini('Move ' + it + ' earlier', '‹', function () { move(c.items, j, -1); }),
+            mini('Move ' + it + ' later', '›', function () { move(c.items, j, 1); }),
+            mini('Edit ' + it, '✎', function () {
+              textDialog('Edit answer', it, 'Save', { max: AB.item, aria: 'Answer' }, async function (v) {
+                if (!v) throw new Error('An answer cannot be empty.');
+                c.items[j] = v; paint();
+              });
+            }),
+            mini('Remove ' + it, '×', function () { c.items.splice(j, 1); paint(); })));
+        });
+        var input = h('input', { type: 'text', maxlength: AB.item, 'aria-label': 'Add an answer to ' + c.title, placeholder: 'Add an answer', 'data-key': c.key });
+        var addForm = h('form', { class: 'about-add', novalidate: true, onsubmit: function (ev) {
+          ev.preventDefault();
+          var v = input.value.trim();
+          if (!v) return;
+          if (c.items.length >= AB.items) return showAlert(msg, 'error', 'Each category can have up to ' + AB.items + ' answers.');
+          if (c.items.some(function (x) { return x.toLowerCase() === v.toLowerCase(); })) return showAlert(msg, 'error', 'You already added that one.');
+          showAlert(msg, 'error', ''); c.items.push(v); focusKey = c.key; paint();
+        } }, input, h('button', { class: 'btn small', type: 'submit', text: 'Add' }));
+        list.appendChild(h('div', { class: 'about-cat' },
+          h('div', { class: 'about-cat-head' }, h('h3', { text: c.title }), h('div', { class: 'about-tools' },
+            mini('Move ' + c.title + ' up', '↑', function () { move(draft, i, -1); }),
+            mini('Move ' + c.title + ' down', '↓', function () { move(draft, i, 1); }),
+            mini('Rename ' + c.title, '✎', function () {
+              textDialog('Rename category', c.title, 'Save', { max: AB.title, aria: 'Category name' }, async function (v) {
+                if (!v) throw new Error('Give the category a name.');
+                c.title = v; paint();
+              });
+            }),
+            mini('Remove the category ' + c.title, '×', function () { draft.splice(i, 1); paint(); }))),
+          c.items.length ? tags : h('p', { class: 'small muted', text: 'No answers yet.' }), addForm));
+      });
+      if (!draft.length) list.appendChild(h('p', { class: 'muted', text: 'Nothing here yet. Use the button below to add a category.' }));
+      saveBtn.disabled = !dirty(); discardBtn.disabled = !dirty();
+      note.textContent = dirty() ? 'You have changes that are not saved. Nobody else sees them until you press Save.' : 'Everything shown here is saved.';
+      if (focusKey) { var el = list.querySelector('input[data-key="' + focusKey + '"]'); focusKey = null; if (el) el.focus(); }
+    }
+    var addBtn = h('button', { class: 'btn secondary block add-about', type: 'button', onclick: function () {
+      if (draft.length >= AB.cats) return showAlert(msg, 'error', 'You can have up to ' + AB.cats + ' categories.');
+      pickPrompt(draft.map(function (c) { return c.key; }), function (cat) { draft.push(cat); focusKey = cat.key; paint(); });
+    } }, '+ Add something about me');
+    saveBtn.addEventListener('click', function () {
+      busy(saveBtn, async function () {
+        try {
+          var r = await api('saveAbout', { familyId: S.familyId, about: draft });
+          S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
+          draft = aboutOf(S.profile); base = JSON.stringify(draft);
+          showAlert(msg, 'ok', 'Saved. Your family can now see it.'); paint();
+        } catch (e) { showAlert(msg, 'error', errText(e)); }
+      }, 'Saving…');
+    });
+    discardBtn.addEventListener('click', async function () {
+      if (!dirty()) return;
+      if (await confirmDialog('Discard your changes?', 'Your unsaved edits to About me will be lost. What is already saved stays.', 'Discard')) { draft = JSON.parse(base); showAlert(msg, 'error', ''); paint(); }
+    });
+    wrap.appendChild(list); wrap.appendChild(addBtn); wrap.appendChild(msg); wrap.appendChild(note);
+    wrap.appendChild(h('div', { class: 'row' }, saveBtn, discardBtn));
+    paint();
+    return { el: wrap, isDirty: dirty, addCategory: function (cat) { if (!draft.some(function (c) { return c.key === cat.key; })) { draft.push(cat); focusKey = cat.key; paint(); } } };
+  }
+
+  /* ---------- family tree data ---------- */
+  async function loadTree(force) {
+    var c = S.tree;
+    if (!force && c && c.fid === S.familyId && Date.now() - c.at < 20000) return c;
+    var fid = S.familyId;
+    var people = await listAllRows('people', [Query.equal('familyId', [fid])], 400);
+    var sug = [];
+    try { sug = await listAllRows('suggestions', [Query.equal('familyId', [fid]), Query.orderDesc('$createdAt')], 200); } catch (e) { sug = []; }
+    var out = { fid: fid, at: Date.now(), people: people, suggestions: sug };
+    if (fid === S.familyId) S.tree = out;
+    return out;
+  }
+  function personFor(tree, uid) { return tree ? tree.people.filter(function (p) { return p.userId === uid; })[0] || null : null; }
+
+  async function sendSuggestion(personId, prefill) {
+    return textDialog('Suggest a change to the tree', prefill || '', 'Send suggestion', { multiline: true, max: 500, aria: 'Your suggestion', placeholder: 'For example: Add my cousin Maya as Aunt Rose’s daughter.', hint: 'A family owner or tree admin will review it. Other members of ' + famName() + ' can see suggestions.' }, async function (v) {
+      if (v.length < 3) throw new Error('Please write a little more.');
+      await api('suggestTreeChange', { familyId: S.familyId, text: v, personId: personId || undefined });
+      S.tree = null; toast('Suggestion sent.');
+    });
+  }
+
+  /* ---------- PROFILE ---------- */
+  VIEWS.profile = async function (main, token, param, param2) {
+    if (param === 'edit') return profileEdit(main, token, param2);
+    var preview = param === 'preview';
+    var uid = (!param || preview) ? S.user.$id : param;
+    var own = uid === S.user.$id;
+    if (Date.now() - S.profilesAt > 30000) await loadProfiles();
+    if (token !== S.nav) return;
+    var prof = S.profiles.get(uid);
+    if (!prof) {
+      main.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That profile is not available in this family.' }), h('a', { class: 'btn', href: '#/family', text: 'Back to Family' })));
+      return;
+    }
+    var tree = null;
+    try { tree = await loadTree(false); } catch (e) { tree = null; }
+    if (token !== S.nav) return;
+    var mine = own && !preview;
+    main.appendChild(h('h1', { class: 'sr-only', text: own ? 'My profile' : prof.displayName + '’s profile' }));
+    if (preview) {
+      main.appendChild(h('div', { class: 'preview-bar', role: 'status' },
+        h('span', null, h('strong', { text: 'Viewing as family. ' }), 'This is what other members of ' + famName() + ' see. Nothing here can be changed in this view.'),
+        h('a', { class: 'btn small', href: '#/profile', text: 'Exit preview' })));
+    }
+    var top = h('div', { class: 'profile-top' });
+    if (!own) top.appendChild(h('a', { class: 'link-btn', href: '#/family', text: '← Family' }));
+    top.appendChild(h('span', { class: 'grow' }));
+    if (mine) {
+      top.appendChild(h('a', { class: 'icon-btn', href: '#/profile/preview', 'aria-label': 'View as family', title: 'View as family' }, icon('eye')));
+      top.appendChild(h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': 'Settings', title: 'Settings' }, icon('gear')));
+    }
+    main.appendChild(top);
+    main.appendChild(h('header', { class: 'profile-head' },
+      h('div', { class: 'profile-avatar' }, avatarEl(prof, 'lg')),
+      h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
+        prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
+    if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
+
+    // About me
+    var about = aboutOf(prof);
+    var sec = h('section', { class: 'card about', 'aria-label': 'About me' }, h('h2', { text: 'About me' }));
+    if (!about.length) sec.appendChild(h('p', { class: 'muted', text: mine ? 'Add your favorite movies, colors, foods and more.' : firstName(prof) + ' has not added anything yet.' }));
+    about.forEach(function (c) {
+      sec.appendChild(h('h3', { text: c.title }));
+      sec.appendChild(h('ul', { class: 'tags' }, c.items.map(function (i) { return h('li', { class: 'tag', text: i }); })));
+    });
+    if (mine) {
+      sec.appendChild(h('button', { class: 'btn secondary block add-about', type: 'button', onclick: function () {
+        pickPrompt(about.map(function (c) { return c.key; }), function (cat) { S.aboutPending = cat; location.hash = '#/profile/edit/about'; });
+      } }, '+ Add something about me'));
+      sec.appendChild(whoCanSee());
+    } else if (preview) sec.appendChild(h('p', { class: 'hint', text: 'Only members of ' + famName() + ' can see this.' }));
+    main.appendChild(sec);
+
+    // Family tree connection (active family only)
+    var box = h('section', { class: 'card', 'aria-label': 'Family tree' }, h('h2', { text: 'Family tree' }));
+    var person = personFor(tree, uid);
+    if (!tree) box.appendChild(h('p', { class: 'muted', text: 'The family tree is not set up yet.' }));
+    else if (person) {
+      box.appendChild(h('p', null, own ? 'You appear in the tree as ' : firstName(prof) + ' appears in the tree as ', h('strong', { text: person.name }), person.confirmed ? '.' : '. This link is waiting for confirmation.'));
+      box.appendChild(h('a', { class: 'btn secondary', href: '#/family/tree/' + person.$id, text: 'View in family tree' }));
+      if (mine && !person.confirmed) box.appendChild(confirmCard(person, function () { route(false); }));
+    } else {
+      box.appendChild(h('p', { class: 'muted', text: 'Not connected to this family’s tree yet.' }));
+      if (!preview) {
+        if (canEditTree()) {
+          box.appendChild(h('button', { class: 'btn secondary', type: 'button', text: 'Add to the family tree', onclick: function (ev) {
+            busy(ev.currentTarget, async function () {
+              try { var r = await api('treeAddPerson', { familyId: S.familyId, name: prof.displayName, userId: uid }); S.tree = null; location.hash = '#/family/tree/' + r.personId; }
+              catch (e) { toast(errText(e)); }
+            });
+          } }));
+        } else {
+          box.appendChild(h('button', { class: 'btn secondary', type: 'button', text: own ? 'Ask to be added to the tree' : 'Suggest connecting ' + firstName(prof), onclick: function () {
+            sendSuggestion('', own ? 'Please add me to the family tree.' : 'Please connect ' + prof.displayName + ' to the family tree.');
+          } }));
+        }
+      }
+    }
+    main.appendChild(box);
+  };
+
+  function confirmCard(person, after) {
+    var msg = h('div');
+    function answer(yes) {
+      return async function (ev) {
+        busy(ev.currentTarget, async function () {
+          try { await api('treeConfirm', { familyId: S.familyId, personId: person.$id, confirm: yes }); S.tree = null; toast(yes ? 'Confirmed. Thank you.' : 'Unlinked.'); after(); }
+          catch (e) { showAlert(msg, 'error', errText(e)); }
+        });
+      };
+    }
+    return h('div', { class: 'confirm-card', role: 'group', 'aria-label': 'Confirm your tree entry' },
+      h('p', null, 'A family tree admin linked your account to ', h('strong', { text: person.name }), '. Is that you?'),
+      h('div', { class: 'row' }, h('button', { class: 'btn small', type: 'button', text: 'Yes, that’s me', onclick: answer(true) }),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'No, that’s not me', onclick: answer(false) })), msg);
+  }
+
+  async function profileEdit(main, token, focus) {
+    main.appendChild(h('h1', { text: 'Edit profile' }));
+    var fam = currentFamily(), fid = S.familyId;
+    if (Date.now() - S.profilesAt > 30000) await loadProfiles();
+    if (token !== S.nav) return;
     var name = field('displayName', 'Display name', 'text', { required: true, maxlength: 60, value: S.profile.displayName });
-    var pmsg = h('div');
-    var avatarBox = h('div', { class: 'row' });
+    var bio = h('textarea', { id: 'bio', rows: 3, maxlength: 200, 'aria-label': 'Bio', placeholder: 'A short line about you' });
+    bio.value = S.profile.bio || '';
+    var pmsg = h('div'), avatarBox = h('div', { class: 'row' });
     function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); }
     paintAvatar();
     var file = h('input', { id: 'newAvatar', type: 'file', accept: 'image/jpeg,image/png,image/webp', 'aria-label': 'Choose a new profile picture' });
-    var saveName = h('button', { class: 'btn', type: 'submit', text: 'Save name' });
+    var saveBtn = h('button', { class: 'btn', type: 'submit', text: 'Save profile' });
     var removeAv = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove picture' });
-    var fid = S.familyId;
-
     async function saveProfile(extra) {
       var r = await api('saveProfile', Object.assign({ familyId: fid, displayName: S.profile.displayName }, extra));
       if (fid !== S.familyId) return;
@@ -2120,11 +2414,10 @@
         toast('Uploading picture…');
         up = await uploadFile(await imageToJpegFile(f, L.avatarEdge || 256, 0.85, true, 'avatar.jpg'));
         await saveProfile({ avatarFileId: up.$id });
-        paintAvatar();
-        toast('Picture updated.');
+        paintAvatar(); toast('Picture updated.');
       } catch (e) {
         if (up) storage.deleteFile({ bucketId: CFG.bucketId, fileId: up.$id }).catch(function () {});
-        showAlert(pmsg, 'error', e.message && !e.type ? e.message : friendly(e));
+        showAlert(pmsg, 'error', errText(e));
       }
       file.value = '';
     });
@@ -2132,33 +2425,79 @@
       if (!S.profile.avatarFileId) return toast('You have no picture to remove.');
       busy(removeAv, async function () {
         try { await saveProfile({ avatarFileId: '' }); paintAvatar(); toast('Picture removed.'); }
-        catch (e) { showAlert(pmsg, 'error', friendly(e)); }
+        catch (e) { showAlert(pmsg, 'error', errText(e)); }
       });
     });
-    var pform = h('form', { novalidate: true, onsubmit: function (ev) {
+    var form = h('form', { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
       var n = name.input.value.trim();
       if (!n) return showAlert(pmsg, 'error', 'Your display name cannot be empty.');
-      busy(saveName, async function () {
-        try {
-          var r = await api('saveProfile', { familyId: fid, displayName: n });
-          S.profile = Object.assign({}, S.profile, r.profile); S.profiles.set(S.user.$id, S.profile);
-          showAlert(pmsg, 'ok', 'Saved.');
-        } catch (e) { showAlert(pmsg, 'error', friendly(e)); }
+      busy(saveBtn, async function () {
+        try { await saveProfile({ displayName: n, bio: bio.value.trim() }); showAlert(pmsg, 'ok', 'Saved.'); }
+        catch (e) { showAlert(pmsg, 'error', errText(e)); }
       }, 'Saving…');
-    } }, name.wrap, pmsg, h('div', { class: 'stack' }, saveName));
-    main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile' }, h('h2', { text: 'Profile' }),
-      h('p', { class: 'hint', text: 'This name and picture are shown only in ' + (fam ? fam.name : 'this family') + '. Each family has its own profile.' }),
+    } }, name.wrap, h('div', null, h('label', { for: 'bio', text: 'Bio' }), bio, h('div', { class: 'hint', text: 'Up to 200 characters. Optional.' })), pmsg, h('div', { class: 'stack' }, saveBtn));
+    var ed = aboutEditor(aboutOf(S.profile));
+    if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
       avatarBox,
       h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), file, h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
-      h('div', { class: 'stack' }, removeAv), pform));
+      h('div', { class: 'stack' }, removeAv), form));
+    var aboutCard = h('section', { class: 'card', id: 'about-editor', 'aria-label': 'About me' }, h('h2', { text: 'About me' }),
+      h('p', { class: 'small muted', text: 'Add as many categories as you like and several answers to each. All of it is optional.' }), ed.el, whoCanSee());
+    main.appendChild(aboutCard);
+    main.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn secondary', type: 'button', text: 'Done', onclick: async function () {
+      if (ed.isDirty() && !(await confirmDialog('Leave without saving?', 'Your unsaved edits to About me will be lost.', 'Leave'))) return;
+      location.hash = '#/profile';
+    } })));
+    if (focus === 'about') setTimeout(function () { aboutCard.scrollIntoView({ block: 'start' }); }, 50);
+  }
 
-    // ---- appearance ----
+  /* ---------- SETTINGS (opened from the gear on my profile) ---------- */
+  var SETTING_SECTIONS = [
+    { id: 'account', label: 'Account and security', note: 'Email, password' },
+    { id: 'appearance', label: 'Appearance', note: 'Light or dark, style, accent color' },
+    { id: 'storage', label: 'Storage and downloads', note: 'My uploads, family space, data use' },
+    { id: 'privacy', label: 'Privacy and data', note: 'Who can see what' }
+  ];
+  VIEWS.settings = async function (main, token, section) {
+    var sec = SETTING_SECTIONS.filter(function (s) { return s.id === section; })[0];
+    if (!sec) {
+      main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/profile', text: '← Profile' })));
+      main.appendChild(h('h1', { text: 'Settings' }));
+      main.appendChild(h('div', { class: 'set-list' }, SETTING_SECTIONS.map(function (s) {
+        return h('a', { class: 'set-row', href: '#/settings/' + s.id }, h('span', null, h('strong', { text: s.label }), h('span', { class: 'small muted', text: s.note })), h('span', { 'aria-hidden': 'true', text: '›' }));
+      })));
+      main.appendChild(h('div', { class: 'stack' }, h('button', { class: 'btn danger block', type: 'button', text: 'Sign out', onclick: signOut })));
+      return;
+    }
+    main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/settings', text: '← Settings' })));
+    main.appendChild(h('h1', { text: sec.label }));
+    if (sec.id === 'account') settingsAccount(main);
+    else if (sec.id === 'appearance') settingsAppearance(main);
+    else if (sec.id === 'storage') await settingsStorage(main, token);
+    else settingsPrivacy(main);
+  };
+
+  function settingsAccount(main) {
+    var amsg = h('div');
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Account' },
+      h('p', null, 'Signed in as ', h('strong', { text: S.user.email }), S.user.emailVerification ? ' (email verified)' : ' (email not verified)'),
+      h('p', { class: 'hint', text: 'Only you see this. It is never shown to your family.' }),
+      S.user.emailVerification ? null : h('div', { class: 'stack' }, resendVerificationButton()),
+      h('div', { class: 'stack' }, h('button', { class: 'btn secondary', type: 'button', text: 'Email me a password reset link', onclick: function (ev) {
+        busy(ev.currentTarget, async function () {
+          try { await account.createRecovery({ email: S.user.email, url: baseUrl() + '?action=recover' }); showAlert(amsg, 'ok', 'Reset link sent. Check your inbox.'); }
+          catch (e) { showAlert(amsg, 'error', friendly(e)); }
+        });
+      } })), amsg));
+  }
+
+  function settingsAppearance(main) {
     var look = h('section', { class: 'card', 'aria-label': 'Appearance' });
     main.appendChild(look);
     function paintLook() {
       clear(look);
-      look.appendChild(h('h2', { text: 'Appearance' }));
       look.appendChild(h('h3', { text: 'Light or dark' }));
       look.appendChild(h('div', { class: 'tabs', role: 'group', 'aria-label': 'Light or dark mode' }, [['system', 'Follow system'], ['light', 'Light'], ['dark', 'Dark']].map(function (m) {
         return h('button', { class: 'tab', type: 'button', text: m[1], 'aria-pressed': prefs.mode === m[0] ? 'true' : 'false', onclick: function () { prefs.mode = m[0]; savePrefs(); paintLook(); } });
@@ -2170,7 +2509,7 @@
       })));
       look.appendChild(h('h3', { text: 'Accent color' }));
       var sw = h('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' });
-      sw.appendChild(h('button', { class: 'swatch none', type: 'button', 'aria-label': 'Use the style\'s own color', 'aria-pressed': prefs.accent ? 'false' : 'true', onclick: function () { prefs.accent = ''; savePrefs(); paintLook(); } }));
+      sw.appendChild(h('button', { class: 'swatch none', type: 'button', 'aria-label': 'Use the style’s own color', 'aria-pressed': prefs.accent ? 'false' : 'true', onclick: function () { prefs.accent = ''; savePrefs(); paintLook(); } }));
       ACCENTS.forEach(function (a) {
         var b = h('button', { class: 'swatch', type: 'button', 'aria-label': a.name, 'aria-pressed': prefs.accent === a.hex ? 'true' : 'false', onclick: function () { prefs.accent = a.hex; savePrefs(); paintLook(); } });
         b.style.background = a.hex; sw.appendChild(b);
@@ -2182,35 +2521,248 @@
       look.appendChild(h('p', { class: 'hint', text: 'Saved on this device and on your account, so it follows you to your other devices.' }));
     }
     paintLook();
+  }
 
-    // ---- account ----
+  function settingsPrivacy(main) {
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Who can see what' },
+      h('h2', { text: 'Who can see what' }),
+      h('ul', { class: 'plain' },
+        h('li', { text: 'Posts, comments, your profile, About me and the family tree are visible only to members of the family they belong to. Nothing is public.' }),
+        h('li', { text: 'Your profile is separate in each family. Each family only sees the one you made there.' }),
+        h('li', { text: 'Your email address and account settings are visible only to you.' }),
+        h('li', { text: 'Your saved posts and library names are visible only to you.' }),
+        h('li', { text: 'No ads, no trackers, no face recognition or AI photo processing.' })),
+      h('p', { class: 'small muted', text: 'Anyone who can see a photo could still take a screenshot or share it, so share thoughtfully.' })));
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Your data' },
+      h('h2', { text: 'Your data' }),
+      h('p', { text: 'You can delete your own posts, comments and uploads at any time (see Storage and downloads). Leaving a family, or deleting one you own, is under Family → Members.' }),
+      h('p', { class: 'small muted', text: 'Exporting a copy of your data is not available yet.' })));
+  }
+
+  async function settingsStorage(main, token) {
+    // 1. Data use (a setting that lives on this device)
     var autoBox = h('input', { type: 'checkbox', id: 'autoplay' });
     autoBox.checked = autoplayOn();
     autoBox.addEventListener('change', function () {
       try { localStorage.setItem('fc_autoplay', autoBox.checked ? 'on' : 'off'); } catch (e) { /* the switch still works until the page reloads */ }
       toast(autoBox.checked ? 'Shorts will play by themselves.' : 'Shorts will wait for you to tap play.');
     });
-    main.appendChild(h('section', { class: 'card', 'aria-label': 'Shorts' },
-      h('h2', { text: 'Shorts' }),
-      h('label', { class: 'switch-row', for: 'autoplay' }, autoBox, h('span', null, h('strong', { text: 'Autoplay Shorts' }), h('span', { class: 'small muted', text: ' Every Short you scroll to downloads in full. That uses mobile data and counts toward the site\'s monthly download allowance, so turn this off when you are not on Wi-Fi. This setting is saved on this device only.' })))));
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'On this device' },
+      h('h2', { text: 'On this device' }),
+      h('p', { text: 'Family Circle does not save photos or videos on your device for offline use, so there are no downloaded files for it to manage or clear. Your browser may keep ordinary temporary copies of what you view; you can clear those in your browser’s settings.' }),
+      h('p', { class: 'small muted', text: 'This website cannot see or delete files in your phone’s Downloads folder or photo library.' }),
+      h('label', { class: 'switch-row', for: 'autoplay' }, autoBox, h('span', null, h('strong', { text: 'Autoplay Shorts' }), h('span', { class: 'small muted', text: ' Every Short you scroll to downloads in full. That uses mobile data and counts toward the site’s monthly download allowance, so turn this off when you are not on Wi-Fi. Saved on this device only.' })))));
 
-    var amsg = h('div');
-    main.appendChild(h('section', { class: 'card', 'aria-label': 'Account' },
-      h('h2', { text: 'Account' }),
-      h('p', null, 'Signed in as ', h('strong', { text: S.user.email }), S.user.emailVerification ? ' (email verified)' : ' (email not verified)'),
-      S.user.emailVerification ? null : h('div', { class: 'stack' }, resendVerificationButton()),
-      h('div', { class: 'stack' }, h('button', { class: 'btn secondary', type: 'button', text: 'Email me a password reset link', onclick: function (ev) {
-        busy(ev.currentTarget, async function () {
-          try { await account.createRecovery({ email: S.user.email, url: baseUrl() + '?action=recover' }); showAlert(amsg, 'ok', 'Reset link sent. Check your inbox.'); }
-          catch (e) { showAlert(amsg, 'error', friendly(e)); }
+    // 2. My uploads in the cloud
+    var upBox = h('section', { class: 'card', 'aria-label': 'My uploads' }, h('h2', { text: 'My photos and videos in the cloud' }), spinnerLine('Loading your uploads…'));
+    var famBox = h('section', { class: 'card', 'aria-label': 'Family space' }, h('h2', { text: 'Shared family space' }));
+    main.appendChild(upBox); main.appendChild(famBox);
+    var famUse = h('div'); famBox.appendChild(famUse);
+
+    async function loadUploads() {
+      var posts;
+      try { posts = await listAllRows('posts', [Query.equal('familyId', [S.familyId]), Query.equal('authorId', [S.user.$id]), Query.orderDesc('$createdAt')], 300); }
+      catch (e) { clear(upBox); upBox.appendChild(h('h2', { text: 'My photos and videos in the cloud' })); upBox.appendChild(alertBox('error', friendly(e))); return; }
+      if (token !== S.nav) return;
+      var media = posts.filter(function (p) { return p.mediaFileId; });
+      var total = media.reduce(function (a, p) { return a + (p.mediaSize || 0); }, 0);
+      clear(upBox);
+      upBox.appendChild(h('h2', { text: 'My photos and videos in the cloud' }));
+      famUse.setAttribute('data-mine', String(total));
+      if (!media.length) { upBox.appendChild(h('p', { class: 'muted', text: 'You have not shared any photos or videos in ' + famName() + '.' })); paintFamily(total); return; }
+      upBox.appendChild(h('p', { text: media.length + (media.length === 1 ? ' upload' : ' uploads') + ', ' + fmtBytes(total) + ' in ' + famName() + '. Your small profile picture is not counted.' }));
+      upBox.appendChild(h('p', { class: 'hint', text: 'Deleting an upload removes the whole post from the family feed for everyone, with its comments, likes and saves, and permanently deletes the file. You can only delete your own.' }));
+      var checks = [], listEl = h('div', { class: 'upload-list' });
+      media.forEach(function (p) {
+        var cb = h('input', { type: 'checkbox', 'aria-label': 'Select this ' + p.kind + ' from ' + new Date(p.$createdAt).toLocaleDateString() });
+        checks.push({ cb: cb, post: p });
+        listEl.appendChild(h('label', { class: 'upload-row' }, cb,
+          h('span', { class: 'grow' }, h('strong', { text: { photo: 'Photo', video: 'Video', short: 'Short' }[p.kind] || 'Post' }), ' ', h('span', { class: 'small muted', text: new Date(p.$createdAt).toLocaleDateString() + ' · ' + fmtBytes(p.mediaSize || 0) }),
+            p.body ? h('span', { class: 'small upload-cap', text: String(p.body).slice(0, 80) }) : null),
+          h('a', { class: 'link-btn small', href: '#/post/' + p.$id, text: 'View' })));
+      });
+      var delBtn = h('button', { class: 'btn danger', type: 'button', text: 'Delete selected', disabled: true });
+      var all = h('button', { class: 'btn secondary small', type: 'button', text: 'Select all' });
+      function count() { return checks.filter(function (c) { return c.cb.checked; }).length; }
+      function sync() { var n = count(); delBtn.disabled = !n; delBtn.textContent = n ? 'Delete selected (' + n + ')' : 'Delete selected'; }
+      checks.forEach(function (c) { c.cb.addEventListener('change', sync); });
+      all.addEventListener('click', function () { var every = count() === checks.length; checks.forEach(function (c) { c.cb.checked = !every; }); all.textContent = every ? 'Select all' : 'Select none'; sync(); });
+      var umsg = h('div');
+      delBtn.addEventListener('click', async function () {
+        var chosen = checks.filter(function (c) { return c.cb.checked; }).map(function (c) { return c.post; });
+        if (!chosen.length) return;
+        var bytes = chosen.reduce(function (a, p) { return a + (p.mediaSize || 0); }, 0);
+        var ok = await confirmDialog('Permanently delete ' + chosen.length + (chosen.length === 1 ? ' upload?' : ' uploads?'),
+          'This removes ' + (chosen.length === 1 ? 'the post' : 'these posts') + ' from the family feed for everyone in ' + famName() + ', along with their comments, likes and saves, and permanently deletes the ' + fmtBytes(bytes) + ' of files. It cannot be undone.', 'Delete permanently');
+        if (!ok) return;
+        delBtn.disabled = true; var failed = 0, n = 0;
+        for (var i = 0; i < chosen.length; i++) {
+          showAlert(umsg, 'ok', 'Deleting ' + (i + 1) + ' of ' + chosen.length + '…');
+          try {
+            var done = false, tries = 0;
+            while (!done && tries++ < 20) { done = (await api('deletePost', { familyId: S.familyId, postId: chosen[i].$id })).done; }
+            if (!done) throw new Error('slow'); S.saved.delete(chosen[i].$id); n++;
+          } catch (e) { failed++; }
+        }
+        S.usage = null; S.nav++; // refresh this screen with real numbers
+        toast(n + (n === 1 ? ' upload deleted.' : ' uploads deleted.') + (failed ? ' ' + failed + ' could not be deleted. Try again.' : ''));
+        route(false);
+      });
+      upBox.appendChild(h('div', { class: 'row' }, all)); upBox.appendChild(listEl); upBox.appendChild(umsg); upBox.appendChild(h('div', { class: 'stack' }, delBtn));
+      paintFamily(total);
+    }
+    async function paintFamily(mine) {
+      clear(famUse); 
+      var u;
+      try { u = await getUsage(true); } catch (e) { famUse.appendChild(h('p', { class: 'muted', text: 'The family’s total could not be loaded right now.' })); return; }
+      var pct = Math.min(100, Math.round(u.usedBytes * 100 / Math.max(1, u.limitBytes)));
+      famUse.appendChild(h('p', { text: 'Everyone in ' + famName() + ' has used ' + fmtBytes(u.usedBytes) + ' of ' + fmtBytes(u.limitBytes) + '.' }));
+      famUse.appendChild(h('progress', { class: 'meter', max: 100, value: pct, 'aria-label': 'Family storage used: ' + pct + ' percent' }));
+      famUse.appendChild(h('p', { class: 'small muted', text: 'About ' + fmtBytes(mine) + ' of that is yours. Every member can see this total, and nobody else’s uploads.' }));
+      famUse.appendChild(h('p', { class: 'hint', text: 'Nothing is deleted automatically. If the space fills up, new photos and videos pause and everything already shared stays.' }));
+      if (S.isOwner) famUse.appendChild(h('p', { class: 'small muted', text: 'As a family owner you can also remove another member’s post from that post’s own menu. It is labeled “Remove this post as family admin” and is separate from your own uploads here.' }));
+    }
+    await loadUploads();
+  }
+
+  /* ---------- FAMILY TREE ---------- */
+  async function familyTree(main, token, focusId) {
+    var box = h('div', { class: 'tree-box' }, spinnerLine('Loading the family tree…'));
+    main.appendChild(box);
+    async function draw(focus, force) {
+      var tree;
+      try { tree = await loadTree(force); }
+      catch (e) { clear(box).appendChild(alertBox('error', e && e.code === 404 ? 'The family tree needs one more setup step: create the people and suggestions tables (see the Setup Guide).' : friendly(e))); return; }
+      if (token !== S.nav) return;
+      paint(tree, focus);
+    }
+    function paint(tree, focus) {
+      clear(box);
+      var edit = canEditTree(), me = S.user.$id, people = tree.people;
+      box.appendChild(h('p', { class: 'hint', text: 'This tree is private to ' + famName() + '. ' + (edit ? 'You can change it because you are an owner or tree admin.' : 'A family owner or tree admin keeps it up to date. You can suggest a correction on anyone.') + ' People in the tree are separate from sign-in accounts: someone does not need an account to be in it, and a relationship never gives anyone app admin rights.' }));
+      people.filter(function (p) { return p.userId === me && !p.confirmed; }).forEach(function (p) { box.appendChild(h('div', { class: 'card' }, confirmCard(p, function () { draw(p.$id, true); }))); });
+      var bar = h('div', { class: 'row' });
+      if (edit) bar.appendChild(h('button', { class: 'btn small', type: 'button', text: '+ Add a person', onclick: function () { personDialog(null, tree, function (id) { draw(id, true); }); } }));
+      bar.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Suggest a change', onclick: function () { sendSuggestion('').then(function (ok) { if (ok) draw(focus, true); }); } }));
+      box.appendChild(bar);
+
+      var byId = {}; people.forEach(function (p) { byId[p.$id] = p; });
+      var kids = {};
+      people.forEach(function (p) { (p.parentIds || []).forEach(function (pid) { if (byId[pid]) (kids[pid] = kids[pid] || []).push(p.$id); }); });
+      function hasParents(p) { return (p.parentIds || []).some(function (x) { return byId[x]; }); }
+      var rendered = {};
+      function card(p) {
+        var partners = (p.partnerIds || []).map(function (x) { return byId[x]; }).filter(Boolean);
+        var prof = p.userId ? S.profiles.get(p.userId) : null;
+        var el = h('div', { class: 'tnode', 'data-person': p.$id, tabindex: '-1' },
+          avatarEl(prof || { displayName: p.name }),
+          h('div', { class: 'grow' }, h('strong', { text: p.name }),
+            partners.length ? h('div', { class: 'small muted', text: 'Partner: ' + partners.map(function (x) { return x.name; }).join(', ') }) : null,
+            p.userId ? h('div', { class: 'small muted', text: p.confirmed ? 'Member of this family' : 'Waiting for them to confirm' }) : null),
+          h('div', { class: 'tnode-actions' },
+            prof ? h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Profile' }) : null,
+            edit ? h('button', { class: 'link-btn small', type: 'button', text: 'Edit', 'aria-label': 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (id) { draw(id, true); }); } })
+                 : h('button', { class: 'link-btn small', type: 'button', text: 'Suggest', 'aria-label': 'Suggest a change about ' + p.name, onclick: function () { sendSuggestion(p.$id).then(function (ok) { if (ok) draw(p.$id, true); }); } })));
+        return el;
+      }
+      function node(p, depth) {
+        rendered[p.$id] = true;
+        var partners = (p.partnerIds || []).map(function (x) { return byId[x]; }).filter(Boolean);
+        var inline = partners.filter(function (x) { return !hasParents(x) && !rendered[x.$id]; });
+        inline.forEach(function (x) { rendered[x.$id] = true; });
+        var couple = h('div', { class: 'couple' }, card(p));
+        inline.forEach(function (x) { couple.appendChild(card(x)); });
+        var li = h('li'); li.appendChild(couple);
+        var ids = [];
+        [p].concat(partners).forEach(function (x) { (kids[x.$id] || []).forEach(function (c) { if (ids.indexOf(c) < 0 && !rendered[c]) ids.push(c); }); });
+        if (ids.length && depth < 40) li.appendChild(h('ul', { class: 'tree' }, ids.filter(function (c) { return !rendered[c]; }).map(function (c) { return node(byId[c], depth + 1); })));
+        return li;
+      }
+      if (!people.length) {
+        box.appendChild(h('div', { class: 'empty' }, h('p', { text: 'No one is in the family tree yet.' }), edit ? h('p', { class: 'muted small', text: 'Use “Add a person” to start with the oldest generation you know.' }) : h('p', { class: 'muted small', text: 'Ask an owner or tree admin to start it, or send a suggestion.' })));
+      } else {
+        var ul = h('ul', { class: 'tree root' });
+        people.slice().sort(function (a, b) { return new Date(a.$createdAt) - new Date(b.$createdAt); }).forEach(function (p) { if (!hasParents(p) && !rendered[p.$id]) ul.appendChild(node(p, 0)); });
+        people.forEach(function (p) { if (!rendered[p.$id]) ul.appendChild(node(p, 0)); });
+        box.appendChild(h('div', { class: 'tree-scroll' }, ul));
+      }
+      // suggestions
+      var open = tree.suggestions.filter(function (s) { return s.status === 'open' && (edit || s.authorId === me); });
+      if (open.length) {
+        var sbox = h('section', { class: 'card', 'aria-label': 'Suggestions' }, h('h2', { text: edit ? 'Suggestions to review' : 'Your open suggestions' }));
+        open.forEach(function (s) {
+          var who = S.profiles.get(s.authorId), p = s.personId ? byId[s.personId] : null;
+          sbox.appendChild(h('div', { class: 'sug' }, h('div', { class: 'small muted', text: (who ? who.displayName : 'A member') + (p ? ' · about ' + p.name : '') }), h('p', { text: s.text }),
+            edit ? h('div', { class: 'row' },
+              h('button', { class: 'btn small', type: 'button', text: 'Mark done', onclick: function (ev) { resolve(ev, s, 'done'); } }),
+              h('button', { class: 'btn secondary small', type: 'button', text: 'Dismiss', onclick: function (ev) { resolve(ev, s, 'dismissed'); } })) : null));
         });
-      } })), amsg,
-      h('div', { class: 'stack' }, h('button', { class: 'btn danger', type: 'button', text: 'Sign out', onclick: signOut }))));
+        box.appendChild(sbox);
+      }
+      if (focus) {
+        var el = box.querySelector('[data-person="' + focus + '"]');
+        if (el) { el.classList.add('hl'); el.scrollIntoView({ block: 'center' }); el.focus({ preventScroll: true }); }
+      }
+    }
+    function resolve(ev, s, status) {
+      busy(ev.currentTarget, async function () {
+        try { await api('resolveSuggestion', { familyId: S.familyId, suggestionId: s.$id, status: status }); draw(null, true); }
+        catch (e) { toast(errText(e)); }
+      });
+    }
+    await draw(focusId, true);
+  }
 
-    main.appendChild(h('section', { class: 'card', 'aria-label': 'About privacy' },
-      h('h2', { text: 'About privacy' }),
-      h('p', { class: 'small muted', text: 'Posts and media are visible only to members of the family they were shared in. Other families cannot see them, and nothing is public. No ads, no trackers, no face recognition or AI photo processing. Please remember that anyone who can see a photo could still take a screenshot or share it, so share thoughtfully.' })));
-  };
+  // Add or edit one person. Only owners and tree admins ever see this; the server checks again.
+  function personDialog(p, tree, done) {
+    var dlg = h('dialog', { 'aria-labelledby': 'dlg-title' });
+    function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    var name = h('input', { type: 'text', maxlength: 80, 'aria-label': 'Name', id: 'pname' });
+    name.value = p ? p.name : '';
+    function select(id, label, options, value) {
+      var sel = h('select', { id: id, 'aria-label': label }, options.map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+      sel.value = value || ''; return h('div', null, h('label', { for: id, text: label }), sel);
+    }
+    var others = tree.people.filter(function (x) { return !p || x.$id !== p.$id; });
+    var personOpts = [['', 'None']].concat(others.map(function (x) { return [x.$id, x.name]; }));
+    var linked = {}; tree.people.forEach(function (x) { if (x.userId && (!p || x.$id !== p.$id)) linked[x.userId] = true; });
+    var memberOpts = [['', 'Not linked to an account']];
+    S.profiles.forEach(function (pr) { if (!linked[pr.userId]) memberOpts.push([pr.userId, pr.displayName]); });
+    var par = p ? (p.parentIds || []) : [], prt = p ? (p.partnerIds || []) : [];
+    var s1 = select('par1', 'Parent', personOpts, par[0]), s2 = select('par2', 'Other parent', personOpts, par[1]);
+    var s3 = select('partner', 'Partner', personOpts, prt[0]), s4 = select('link', 'Linked family member', memberOpts, p ? p.userId : '');
+    var msg = h('div'), save = h('button', { class: 'btn', type: 'submit', text: p ? 'Save' : 'Add person' });
+    var cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: close });
+    var remove = p ? h('button', { class: 'btn danger', type: 'button', text: 'Delete from tree', onclick: async function () {
+      if (!(await confirmDialog('Remove ' + p.name + ' from the tree?', 'This removes the tree entry and its links to other people. It does not delete their account, posts or profile.', 'Remove'))) return;
+      try { await api('treeDeletePerson', { familyId: S.familyId, personId: p.$id }); close(); toast('Removed from the tree.'); done(null); } catch (e) { showAlert(msg, 'error', errText(e)); }
+    } }) : null;
+    dlg.appendChild(h('form', { novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault();
+      var n = name.value.trim();
+      if (!n) return showAlert(msg, 'error', 'Please enter a name.');
+      var v = function (id) { return dlg.querySelector('#' + id).value; };
+      var parents = [v('par1'), v('par2')].filter(Boolean);
+      if (parents.length === 2 && parents[0] === parents[1]) return showAlert(msg, 'error', 'Choose two different parents.');
+      busy(save, async function () {
+        try {
+          var payload = { familyId: S.familyId, name: n, userId: v('link') };
+          var origPar = par.slice(0, 2).join(','), origPrt = (prt[0] || '');
+          if (!p || parents.join(',') !== origPar) payload.parentIds = parents;
+          if (!p || v('partner') !== origPrt) payload.partnerIds = v('partner') ? [v('partner')] : [];
+          var id;
+          if (p) { payload.personId = p.$id; await api('treeEditPerson', payload); id = p.$id; }
+          else id = (await api('treeAddPerson', payload)).personId;
+          close(); toast('Saved.'); done(id);
+        } catch (e) { showAlert(msg, 'error', errText(e)); }
+      }, 'Saving…');
+    } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : 'Add a person' }),
+      h('div', null, h('label', { for: 'pname', text: 'Name' }), name), s1, s2, s3, s4,
+      h('p', { class: 'hint', text: 'Linking a member lets them confirm “this is me”. The tree entry and their sign-in account stay separate.' }),
+      msg, h('div', { class: 'row' }, cancel, save), remove ? h('div', { class: 'stack' }, remove) : null));
+    document.body.appendChild(dlg); dlg.showModal(); name.focus();
+  }
 
   /* =====================================================================
    * 13. START-UP

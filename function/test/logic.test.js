@@ -478,3 +478,52 @@ test('comment likes and pins: members like, only the post author pins, three at 
   const other = (await s.call(s.bob, { action: 'createComment', familyId: 'famA', postId: p2.json.postId, body: 'x' })).json.commentId;
   assert.equal((await s.call(s.alice, { action: 'pinComment', familyId: 'famA', postId, commentId: other })).status, 404);
 });
+
+test('profile bio and About me: validated, saved by the owner of the profile only', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice', bio: 'Hi there' });
+  const r = await s.call(s.alice, { action: 'saveAbout', familyId: 'famA', about: [{ key: 'movies', title: 'Favorite movies', items: ['Spider-Man', 'Mario Brothers'] }] });
+  assert.equal(r.status, 200);
+  const row = [...s.world.tables.profiles.values()].find((p) => p.userId === 'alice');
+  assert.equal(row.bio, 'Hi there');
+  assert.equal(JSON.parse(row.about)[0].items.length, 2);
+  assert.equal((await s.call(s.alice, { action: 'saveAbout', familyId: 'famA', about: [{ title: '', items: [] }] })).status, 400);
+  assert.equal((await s.call(s.alice, { action: 'saveAbout', familyId: 'famA', about: Array(11).fill({ title: 'x', items: [] }) })).status, 400);
+  assert.equal((await s.call(s.alice, { action: 'saveAbout', familyId: 'famA', about: [{ title: 'x', items: ['y'.repeat(41)] }] })).status, 400);
+  // no profile yet / not a member
+  assert.equal((await s.call(s.bob, { action: 'saveAbout', familyId: 'famA', about: [] })).status, 400);
+  assert.equal((await s.call(s.carol, { action: 'saveAbout', familyId: 'famA', about: [] })).status, 403);
+});
+
+test('family tree: owner and tree admins edit, members suggest, linked person confirms', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' });
+  const add = (u, b) => s.call(u, { action: 'treeAddPerson', familyId: 'famA', ...b });
+  // a plain member cannot edit the tree
+  assert.equal((await add(s.bob, { name: 'Rose' })).status, 403);
+  const rose = (await add(s.alice, { name: 'Rose' })).json.personId;
+  const kid = (await add(s.alice, { name: 'Alex', parentIds: [rose], userId: 'bob' })).json.personId;
+  // cannot make a cycle
+  assert.equal((await s.call(s.alice, { action: 'treeEditPerson', familyId: 'famA', personId: rose, parentIds: [kid] })).status, 400);
+  // partner links are mirrored
+  const dev = (await add(s.alice, { name: 'Dev', partnerIds: [rose] })).json.personId;
+  assert.deepEqual(s.world.tables.people.get(rose).partnerIds, [dev]);
+  // someone else cannot confirm Bob's entry, Bob can
+  assert.equal((await s.call(s.alice, { action: 'treeConfirm', familyId: 'famA', personId: kid })).status, 403);
+  assert.equal((await s.call(s.bob, { action: 'treeConfirm', familyId: 'famA', personId: kid })).status, 200);
+  assert.equal(s.world.tables.people.get(kid).confirmed, true);
+  // members suggest, only admins resolve
+  const sg = (await s.call(s.bob, { action: 'suggestTreeChange', familyId: 'famA', text: 'Rose was born in 1950', personId: rose })).json.suggestionId;
+  assert.equal((await s.call(s.bob, { action: 'resolveSuggestion', familyId: 'famA', suggestionId: sg })).status, 403);
+  // owner designates Bob as tree admin; owner only
+  assert.equal((await s.call(s.bob, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob' })).status, 403);
+  assert.equal((await s.call(s.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob' })).status, 200);
+  assert.equal((await s.call(s.bob, { action: 'resolveSuggestion', familyId: 'famA', suggestionId: sg })).status, 200);
+  // deleting a person removes links to them
+  assert.equal((await s.call(s.bob, { action: 'treeDeletePerson', familyId: 'famA', personId: rose })).status, 200);
+  assert.deepEqual(s.world.tables.people.get(kid).parentIds, []);
+  assert.deepEqual(s.world.tables.people.get(dev).partnerIds, []);
+  // another family's tree is out of reach
+  assert.equal((await s.call(s.carol, { action: 'treeAddPerson', familyId: 'famA', name: 'X' })).status, 403);
+});

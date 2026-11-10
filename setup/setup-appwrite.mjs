@@ -31,7 +31,7 @@ const schema = {
     indexes: [['idx_ownerId', 'key', ['ownerId']]]
   },
   profiles: {
-    columns: [S('familyId', 36, true), S('userId', 36, true), S('profileKey', 80, true), S('displayName', 60, true), S('avatarFileId', 36, false)],
+    columns: [S('familyId', 36, true), S('userId', 36, true), S('profileKey', 80, true), S('displayName', 60, true), S('avatarFileId', 36, false), S('bio', 200, false), S('about', 8000, false), { type: 'boolean', key: 'treeAdmin', required: false }],
     indexes: [['idx_familyId', 'key', ['familyId']], ['uniq_profileKey', 'unique', ['profileKey']], ['idx_avatarFileId', 'key', ['avatarFileId']]]
   },
   posts: {
@@ -50,6 +50,14 @@ const schema = {
   reactions: {
     columns: [S('familyId', 36, true), S('postId', 36, true), S('userId', 36, true), S('reactionKey', 80, true)],
     indexes: [['idx_postId', 'key', ['postId']], ['idx_familyId', 'key', ['familyId']], ['uniq_reactionKey', 'unique', ['reactionKey']]]
+  },
+  people: {
+    columns: [S('familyId', 36, true), S('name', 80, true), S('userId', 36, false), { type: 'boolean', key: 'confirmed', required: false }, { type: 'string', key: 'parentIds', size: 36, required: false, array: true }, { type: 'string', key: 'partnerIds', size: 36, required: false, array: true }, S('createdBy', 36, false)],
+    indexes: [['idx_familyId', 'key', ['familyId']]]
+  },
+  suggestions: {
+    columns: [S('familyId', 36, true), S('authorId', 36, true), S('personId', 36, false), S('text', 500, true), S('status', 12, true)],
+    indexes: [['idx_familyId', 'key', ['familyId']], ['idx_authorId', 'key', ['authorId']], ['idx_status', 'key', ['status']]]
   },
   bookmarks: {
     columns: [S('familyId', 36, true), S('userId', 36, true), S('postId', 36, true), S('bookmarkKey', 80, true), S('collectionId', 24, false)],
@@ -95,6 +103,7 @@ for (const [tableId, def] of Object.entries(schema)) {
   for (const c of def.columns) {
     await step('column ' + c.key, () => {
       if (c.type === 'string') return db.createStringColumn({ databaseId, tableId, key: c.key, size: c.size, required: c.required, array: !!c.array });
+      if (c.type === 'boolean') return db.createBooleanColumn({ databaseId, tableId, key: c.key, required: c.required });
       if (c.type === 'enum') return db.createEnumColumn({ databaseId, tableId, key: c.key, elements: c.elements, required: c.required });
       return db.createIntegerColumn({ databaseId, tableId, key: c.key, required: c.required, min: c.min, max: c.max });
     });
