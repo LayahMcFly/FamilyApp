@@ -2213,7 +2213,14 @@
       var msg = h('div'), info = h('div', { class: 'hint' }), prev = h('div', { class: 'preview' }), limitsBox = h('div', { class: 'limits' });
       var bar = h('progress', { max: 100, value: 0, hidden: true, 'aria-label': 'Upload progress' });
       var fileInput = null;
-      var ccBox = null, ccRow = null;
+      var ccBox = null, ccRow = null, origFile = null, editState = null;
+      function openEditor(f) {
+        if (!window.VideoEditor) return Promise.resolve({ kind: 'original', file: f });
+        return window.VideoEditor.open(f, {
+          maxBytes: (L.videoMaxMB || 25) * 1048576, maxInputBytes: (CFG.editorMaxInputMB || 300) * 1048576, maxSeconds: CFG.editorMaxSeconds || 300,
+          shortMaxSeconds: kind === 'short' ? (L.shortMaxSeconds || 60) : 0, requireVertical: kind === 'short', initial: editState, fileName: 'video'
+        });
+      }
       if (kind === 'video' || kind === 'short') {
         ccBox = h('input', { type: 'checkbox', id: 'cc-make' });
         ccRow = h('div', null, h('label', { class: 'check', for: 'cc-make' }, ccBox, ' Add automatic captions'),
@@ -2226,10 +2233,12 @@
         renderUsage(limitsBox, true);
         info.textContent = kind === 'photo'
           ? 'Photos are shrunk to ' + (L.imageMaxEdge || 1600) + ' pixels on the long side before upload, which saves space.'
-          : 'Up to ' + (L.videoMaxMB || 25) + ' MB' + (kind === 'short' ? ', ' + (L.shortMaxSeconds || 60) + ' seconds or less, and vertical (taller than wide)' : '') + '. Videos are uploaded as they are, not compressed.';
-        fileInput.addEventListener('change', async function () {
+          : 'Up to ' + (L.videoMaxMB || 25) + ' MB' + (kind === 'short' ? ', ' + (L.shortMaxSeconds || 60) + ' seconds or less, and vertical (taller than wide)' : '') + '. When you choose a video, an editor opens on your device (trim, cut sections out, adjust colors). Nothing is uploaded until you tap Post, and only the edited video is uploaded.';
+        fileInput.addEventListener('change', async function (ev) {
+          var again = ev && ev.isTrusted === false && origFile, keep = again ? { file: file, orig: origFile, state: editState } : null;
+          if (!again) { origFile = null; editState = null; }
           file = null; dropPreview(); clear(prev); showAlert(msg, 'error', '');
-          var f = fileInput.files[0]; if (!f) return;
+          var f = (ev && ev.isTrusted === false && origFile) ? origFile : fileInput.files[0]; if (!f) return;
           try {
             if (kind === 'photo') {
               if (f.type === 'image/gif') throw new Error('Animated GIFs are not supported. Please choose a JPEG, PNG or WebP photo.');
@@ -2239,21 +2248,34 @@
             } else {
               var mime = videoMime(f);
               if (!mime) throw new Error('Please choose an MP4, MOV or WebM video.');
-              if (f.size > (L.videoMaxMB || 25) * 1048576) throw new Error('That video is ' + fmtMB(f.size) + '. The limit is ' + (L.videoMaxMB || 25) + ' MB. Try recording a shorter clip or at a lower quality.');
-              var meta = await probeVideo(f);
-              if (kind === 'short') {
-                if (meta.duration > (L.shortMaxSeconds || 60) + 0.5) throw new Error('Shorts must be ' + (L.shortMaxSeconds || 60) + ' seconds or less. This one is ' + Math.round(meta.duration) + ' seconds.');
-                if (meta.h <= meta.w) throw new Error('Shorts must be vertical (taller than wide). Use the Video tab for this one.');
+              // Nothing is uploaded here. The editing screen opens first, and only the edited result can be posted.
+              var res = await openEditor(f);
+              if (!res) {
+                if (keep) { res = { kind: 'edited', file: keep.file, duration: keep.state.duration }; origFile = keep.orig; editState = keep.state; }   // canceled "Edit again": keep what was ready
+                else { fileInput.value = ''; return; }
               }
-              prev.appendChild(h('p', { class: 'small', text: f.name + ' · ' + fmtMB(f.size) + ' · ' + Math.round(meta.duration) + ' seconds' }));
+              if (res.kind === 'edited') {
+                file = res.file; origFile = origFile || f; if (res.state) editState = res;
+                prev.appendChild(h('p', { class: 'small', text: 'Edited video ready: ' + fmtMB(res.file.size) + ' · ' + Math.round(res.duration) + ' seconds. It is uploaded when you tap Post.' }));
+                prev.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Edit again', onclick: function () { fileInput.dispatchEvent(new Event('change')); } }));
+              } else {
+                if (f.size > (L.videoMaxMB || 25) * 1048576) throw new Error('That video is ' + fmtMB(f.size) + '. The limit is ' + (L.videoMaxMB || 25) + ' MB.');
+                var meta = await probeVideo(f);
+                if (kind === 'short') {
+                  if (meta.duration > (L.shortMaxSeconds || 60) + 0.5) throw new Error('Shorts must be ' + (L.shortMaxSeconds || 60) + ' seconds or less. This one is ' + Math.round(meta.duration) + ' seconds.');
+                  if (meta.h <= meta.w) throw new Error('Shorts must be vertical (taller than wide). Use the Video tab for this one.');
+                }
+                file = f; origFile = f; editState = null;
+                prev.appendChild(h('p', { class: 'small', text: f.name + ' · ' + fmtMB(f.size) + ' · ' + Math.round(meta.duration) + ' seconds (not edited)' }));
+              }
             }
             try {
               var uu = await getUsage();
-              var est = kind === 'photo' ? Math.min(f.size, 1.5 * 1048576) : f.size;
+              var est = kind === 'photo' ? Math.min(f.size, 1.5 * 1048576) : file.size;
               if (uu.usedBytes + est > uu.limitBytes) throw new Error('Your family has ' + fmtBytes(Math.max(0, uu.limitBytes - uu.usedBytes)) + ' of photo and video space left, and this file needs about ' + fmtBytes(est) + '. Nothing was uploaded and nothing has been deleted. You can remove posts you no longer need, or ask the family owner.');
             } catch (e2) { if (e2 && e2.message && !e2.type && !e2.apiCode && e2.name === 'Error') throw e2; }   // if the usage check itself fails, the server still checks on posting
-            file = f;
-          } catch (e) { fileInput.value = ''; showAlert(msg, 'error', e.message || friendly(e)); }
+            if (kind === 'photo') file = f;
+          } catch (e) { file = null; origFile = null; editState = null; clear(prev); fileInput.value = ''; showAlert(msg, 'error', e.message || friendly(e)); }
         });
       }
 
