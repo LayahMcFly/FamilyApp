@@ -708,6 +708,7 @@
         clear(box); box.className = 'media reel-media';
         var v = h('video', { src: st.url, loop: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
         v.muted = S.muted;
+        v.addEventListener('loadedmetadata', function () { box.classList.toggle('wide', v.videoWidth > v.videoHeight); });   // landscape videos are shown whole, not cropped
         v.addEventListener('timeupdate', function () { if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%'; });
         box.appendChild(v); box.appendChild(snd); box.appendChild(bar); box.__paintSound(); applyCaptions(v, box, post);
         st.v = v; trackLoaded();
@@ -1486,7 +1487,7 @@
 
   async function fetchPostsPage(kind, cursor) {
     var q = [Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt'), Query.limit(pageSize())];
-    if (kind) q.push(Query.equal('kind', [kind]));
+    if (kind) q.push(Query.equal('kind', Array.isArray(kind) ? kind : [kind]));
     if (cursor) q.push(Query.cursorAfter(cursor));
     var rows = (await listRows('posts', q)).rows;
     return { posts: rows, cursor: rows.length ? rows[rows.length - 1].$id : cursor, done: rows.length < pageSize() };
@@ -1750,8 +1751,8 @@
   VIEWS.shorts = function (main, token) {
     main.appendChild(h('h1', { class: 'sr-only', text: 'Shorts' }));
     main.appendChild(h('div', { class: 'reels-top' }, h('a', { class: 'reels-back', href: '#/home', 'aria-label': 'Back to Home' }, icon('back')), h('span', { text: 'Shorts' })));
-    return pagedFeed(token, main, function (c) { return fetchPostsPage('short', c); }, {
-      className: 'shorts', variant: 'short', infinite: true, emptyTitle: 'No Shorts yet.', emptyHint: 'Record a short vertical video (up to ' + (L.shortMaxSeconds || 60) + ' seconds) and share it.',
+    return pagedFeed(token, main, function (c) { return fetchPostsPage(['short', 'video'], c); }, {
+      className: 'shorts', variant: 'short', infinite: true, emptyTitle: 'No videos yet.', emptyHint: 'Post a video or record a short vertical video (up to ' + (L.shortMaxSeconds || 60) + ' seconds) and share it.',
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a Short' })
     });
   };
@@ -1972,14 +1973,14 @@
     if (post.mediaFileId) {
       var tgt = wrap || card;
       if (post.kind === 'photo') tgt.appendChild(imageBlock(post));
-      else if (post.kind === 'video' || post.kind === 'short') tgt.appendChild(videoBlock(post, post.kind === 'short'));
+      else if (post.kind === 'video' || post.kind === 'short') tgt.appendChild(videoBlock(post, post.kind === 'short' || isReel));
       if (wrap) card.appendChild(wrap);
     }
     // double tap the picture or the Short to like it (it only ever adds a like, like Instagram)
     function doubleTapLike(x, y, box) { heartBurst(box, x, y); if (!st.liked) toggleLike(); }
     (function () {
       var mb = card.querySelector('.media'); if (!mb) return;
-      if (post.kind === 'short') mb.__dbl = function (x, y) { doubleTapLike(x, y, mb); };
+      if (post.kind === 'short' || isReel) mb.__dbl = function (x, y) { doubleTapLike(x, y, mb); };
       else if (post.kind === 'photo') {
         var last = 0;
         mb.addEventListener('click', function (ev) {
