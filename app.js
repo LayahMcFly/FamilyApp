@@ -1424,7 +1424,7 @@
   };
 
   VIEWS.post = async function (main, token, id) {
-    main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/home', text: '← Back to Home' })));
+    main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/home', text: 'Back to Home' })));
     var holder = h('div', null, spinnerLine('Loading…'));
     main.appendChild(holder);
     var rows = id ? (await listRows('posts', [Query.equal('$id', [id]), Query.limit(1)])).rows : [];
@@ -2055,7 +2055,7 @@
     clear(holder);
     var people = tree.people;
     holder.appendChild(h('p', { class: 'hint' }, 'Only members of ' + famName() + ' can see this tree. To change who is who, or to suggest a correction, go to ',
-      h('a', { href: '#/settings/tree', text: 'Settings → Family tree' }), '.'));
+      h('a', { class: 'inline-btn', href: '#/settings/tree', text: 'Edit in Settings' }), '.'));
     if (!people.length) {
       holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'No one is in the family tree yet.' }),
         h('p', { class: 'muted small', text: 'An owner or tree admin can start it in Settings.' }), h('a', { class: 'btn', href: '#/settings/tree', text: 'Open family tree settings' })));
@@ -2576,7 +2576,7 @@
         h('a', { class: 'btn small', href: '#/profile', text: 'Exit preview' })));
     }
     var top = h('div', { class: 'profile-top' });
-    if (!own) top.appendChild(h('a', { class: 'link-btn', href: '#/settings/family', text: '← Family' }));
+    if (!own) top.appendChild(h('a', { class: 'link-btn back-btn', href: '#/settings/family', text: 'Family' }));
     top.appendChild(h('span', { class: 'grow' }));
     if (mine) {
       top.appendChild(h('a', { class: 'icon-btn', href: '#/profile/preview', 'aria-label': 'View as family', title: 'View as family' }, icon('eye')));
@@ -2727,7 +2727,7 @@
   VIEWS.settings = async function (main, token, section, p2, p3) {
     var sec = SETTING_SECTIONS.filter(function (s) { return s.id === section; })[0];
     if (!sec) {
-      main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/profile', text: '← Profile' })));
+      main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/profile', text: 'Profile' })));
       main.appendChild(h('h1', { text: 'Settings' }));
       main.appendChild(h('div', { class: 'set-list' }, SETTING_SECTIONS.map(function (s) {
         return h('a', { class: 'set-row', href: '#/settings/' + s.id }, h('span', null, h('strong', { text: s.label }), h('span', { class: 'small muted', text: s.note })), h('span', { 'aria-hidden': 'true', text: '›' }));
@@ -2735,11 +2735,11 @@
       main.appendChild(h('div', { class: 'stack' }, h('button', { class: 'btn danger block', type: 'button', text: 'Sign out', onclick: signOut })));
       return;
     }
-    main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/settings', text: '← Settings' })));
+    main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/settings', text: 'Settings' })));
     main.appendChild(h('h1', { text: sec.label }));
     if (sec.id === 'account') settingsAccount(main);
     else if (sec.id === 'family') await settingsFamilyHub(main, token, p2, p3);
-    else if (sec.id === 'tree') { main.appendChild(h('p', { class: 'muted small' }, 'Adjust who is who here. To just look at the tree, use the ', h('a', { href: '#/tree', text: 'Family Tree' }), ' button in the bottom bar.')); await familyTree(main, token, p2); }
+    else if (sec.id === 'tree') { main.appendChild(h('p', { class: 'muted small' }, 'Adjust who is who here. To just look at the tree, use the ', h('a', { class: 'inline-btn', href: '#/tree', text: 'Family Tree' }), ' button in the bottom bar.')); await familyTree(main, token, p2); }
     else if (sec.id === 'appearance') settingsAppearance(main);
     else if (sec.id === 'storage') await settingsStorage(main, token);
     else settingsPrivacy(main);

@@ -727,3 +727,21 @@ body.sheet-open .nav { z-index: 30 !important; }
 .rel-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .chip { padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-weight: 600; }
 .tree-box > .tree-view, .tree-box > .tree-panel { margin-inline: 12px; }
+
+/* v1.9 — modern pass: links are buttons, softer cards */
+a { text-decoration: none; font-weight: 600; }
+a:hover { text-decoration: underline; }
+.nav a, .btn, .set-row, .tcard, .trend-card, .act-item, .story, .member-link, .brand, .tab, .link-btn, .inline-btn, .bell { text-decoration: none !important; }
+.link-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); font-weight: 600; font-size: .92rem; transition: background .15s, transform .1s; }
+.link-btn:hover { background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+.link-btn:active { transform: scale(.97); }
+.link-btn.small { min-height: 32px; padding: 4px 12px; font-size: .85rem; }
+.back-btn { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); border-color: transparent; padding-left: 10px; }
+.back-btn::before { content: ""; width: 8px; height: 8px; border-left: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(45deg); margin-right: 2px; }
+.inline-btn { display: inline-flex; align-items: center; min-height: 32px; padding: 3px 12px; margin: 2px 0; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, var(--bg)); color: var(--accent-text); font-weight: 700; font-size: .9rem; }
+.inline-btn:hover { background: color-mix(in srgb, var(--accent) 20%, var(--bg)); }
+.card:not(article) { background: var(--surface); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 22px; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 12px 28px -16px rgba(16,24,40,.22); }
+.card:not(article) input[type="text"], .card:not(article) input[type="email"], .card:not(article) input[type="password"], .card:not(article) textarea, .card:not(article) select { background: var(--surface-2); border-color: transparent; }
+.card:not(article) .btn.secondary, .card:not(article) .chip { background: var(--surface-2); }
+.set-list { border-radius: 22px; border-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 12px 28px -16px rgba(16,24,40,.22); }
+.set-row:active { background: var(--surface-2); }
