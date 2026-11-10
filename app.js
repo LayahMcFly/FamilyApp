@@ -1973,18 +1973,233 @@
     location.replace(tab === 'tree' ? '#/tree' + (personId ? '/' + personId : '') : '#/settings/family');
   };
 
-  // The Family Tree has its own page (bottom bar). Old links into Settings land here.
-  VIEWS.tree = async function (main, token, personId) {
+  /* ---------- FAMILY TREE PAGE (bottom bar): a view-only tree you can drag around ---------- */
+  var TC = { w: 132, h: 64, pg: 16, ug: 36, gy: 84, pad: 24 };
+
+  // Works out where every person goes. Partners sit side by side; children sit under their parents.
+  function treeLayout(peopleIn) {
+    var people = peopleIn.slice().sort(function (a, b) { return new Date(a.$createdAt) - new Date(b.$createdAt); });
+    var byId = {}; people.forEach(function (p) { byId[p.$id] = p; });
+    var gen = {}; people.forEach(function (p) { gen[p.$id] = 0; });
+    for (var it = 0; it < people.length + 5; it++) {
+      var changed = false;
+      people.forEach(function (p) {
+        (p.parentIds || []).forEach(function (q) { if (byId[q] && gen[p.$id] < gen[q] + 1) { gen[p.$id] = gen[q] + 1; changed = true; } });
+        (p.partnerIds || []).forEach(function (q) { if (byId[q] && gen[p.$id] < gen[q]) { gen[p.$id] = gen[q]; changed = true; } });
+      });
+      if (!changed) break;
+    }
+    var uf = {};
+    function find(x) { while (uf[x] !== x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; }
+    people.forEach(function (p) { uf[p.$id] = p.$id; });
+    people.forEach(function (p) { (p.partnerIds || []).forEach(function (q) { if (byId[q]) uf[find(p.$id)] = find(q); }); });
+    var units = {}, order = [];
+    people.forEach(function (p) {
+      var r = find(p.$id);
+      if (!units[r]) { units[r] = { id: r, members: [], kids: [], parent: null, gen: 0 }; order.push(units[r]); }
+      units[r].members.push(p); units[r].gen = Math.max(units[r].gen, gen[p.$id]);
+    });
+    order.forEach(function (u) {
+      for (var i = 0; i < u.members.length; i++) {
+        var pid = (u.members[i].parentIds || []).filter(function (x) { return byId[x]; })[0];
+        if (!pid) continue;
+        var pu = units[find(pid)];
+        if (pu && pu !== u) { u.parent = pu; pu.kids.push(u); break; }
+      }
+    });
+    function uw(u) { return u.members.length * TC.w + (u.members.length - 1) * TC.pg; }
+    function measure(u) {
+      if (u.sw !== undefined) return u.sw;
+      u.sw = uw(u);                       // guards against odd loops
+      var kids = u.kids, total = 0;
+      kids.forEach(function (k, i) { total += measure(k) + (i ? TC.ug : 0); });
+      u.kw = total; u.sw = Math.max(uw(u), total);
+      return u.sw;
+    }
+    var seen = {};
+    function place(u, x0) {
+      seen[u.id] = true;
+      var kids = u.kids.filter(function (k) { return !seen[k.id]; });
+      if (!kids.length) { u.x = x0 + (u.sw - uw(u)) / 2; return; }
+      var total = 0; kids.forEach(function (k, i) { total += k.sw + (i ? TC.ug : 0); });
+      var cx = x0 + (u.sw - total) / 2;
+      kids.forEach(function (k) { place(k, cx); cx += k.sw + TC.ug; });
+      var first = kids[0], last = kids[kids.length - 1];
+      var mid = (first.x + uw(first) / 2 + last.x + uw(last) / 2) / 2;
+      u.x = Math.max(x0, mid - uw(u) / 2);
+    }
+    var cursor = TC.pad;
+    var roots = order.filter(function (u) { return !u.parent; });
+    roots.concat(order).forEach(function (u) {
+      if (seen[u.id]) return;
+      measure(u); place(u, cursor); cursor += u.sw + TC.ug * 2;
+    });
+    var pos = {}, maxX = 0, maxY = 0;
+    order.forEach(function (u) {
+      u.members.forEach(function (m, i) {
+        var x = (u.x || TC.pad) + i * (TC.w + TC.pg), y = TC.pad + u.gen * (TC.h + TC.gy);
+        pos[m.$id] = { x: x, y: y }; maxX = Math.max(maxX, x + TC.w); maxY = Math.max(maxY, y + TC.h);
+      });
+    });
+    return { pos: pos, width: maxX + TC.pad, height: maxY + TC.pad, byId: byId };
+  }
+
+  VIEWS.tree = async function (main, token, focusId) {
     main.appendChild(h('h1', { text: 'Family Tree' }));
-    return familyTree(main, token, personId);
+    var holder = h('div', { class: 'tree-box' }, spinnerLine('Loading the family tree…'));
+    main.appendChild(holder);
+    var tree;
+    try { tree = await loadTree(true); }
+    catch (e) { clear(holder).appendChild(alertBox('error', e && e.code === 404 ? 'The family tree needs one more setup step: create the people and suggestions tables (see the Setup Guide).' : friendly(e))); return; }
+    if (token !== S.nav) return;
+    clear(holder);
+    var people = tree.people;
+    holder.appendChild(h('p', { class: 'hint' }, 'Only members of ' + famName() + ' can see this tree. To change who is who, or to suggest a correction, go to ',
+      h('a', { href: '#/settings/tree', text: 'Settings → Family tree' }), '.'));
+    if (!people.length) {
+      holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'No one is in the family tree yet.' }),
+        h('p', { class: 'muted small', text: 'An owner or tree admin can start it in Settings.' }), h('a', { class: 'btn', href: '#/settings/tree', text: 'Open family tree settings' })));
+      return;
+    }
+    var L2 = treeLayout(people), byId = L2.byId;
+    var vp = h('div', { class: 'tree-view', tabindex: '0', role: 'group', 'aria-label': 'Family tree. Drag to move around. Use the plus and minus buttons to zoom. Press Tab to move through the people.' });
+    var world = h('div', { class: 'tree-world' });
+    world.style.width = L2.width + 'px'; world.style.height = L2.height + 'px';
+    // lines
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', L2.width); svg.setAttribute('height', L2.height); svg.setAttribute('class', 'tree-lines'); svg.setAttribute('aria-hidden', 'true');
+    function line(d, cls) { var p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('class', cls); svg.appendChild(p); }
+    var drawnPartner = {};
+    people.forEach(function (p) {
+      var me = L2.pos[p.$id];
+      var ps = (p.parentIds || []).filter(function (x) { return byId[x]; });
+      if (ps.length) {
+        var cx = me.x + TC.w / 2, cy = me.y;
+        var coupled = ps.length >= 2 && (byId[ps[0]].partnerIds || []).indexOf(ps[1]) !== -1 && L2.pos[ps[0]].y === L2.pos[ps[1]].y;
+        var anchors = coupled ? [{ x: (L2.pos[ps[0]].x + L2.pos[ps[1]].x + TC.w) / 2, y: L2.pos[ps[0]].y + TC.h / 2 }]
+          : ps.map(function (q) { return { x: L2.pos[q].x + TC.w / 2, y: L2.pos[q].y + TC.h }; });
+        anchors.forEach(function (a) { var my = cy - TC.gy / 2; line('M' + a.x + ' ' + a.y + ' V' + Math.max(my, a.y + 4) + ' H' + cx + ' V' + cy, 'edge'); });
+      }
+      (p.partnerIds || []).forEach(function (q) {
+        if (!byId[q]) return;
+        var key = [p.$id, q].sort().join('_'); if (drawnPartner[key]) return; drawnPartner[key] = true;
+        var a = L2.pos[p.$id], b = L2.pos[q]; if (a.y !== b.y) return;
+        var left = a.x < b.x ? a : b, right = a.x < b.x ? b : a;
+        line('M' + (left.x + TC.w) + ' ' + (a.y + TC.h / 2) + ' H' + right.x, 'edge partner');
+      });
+    });
+    world.appendChild(svg);
+    // people
+    var cards = {};
+    people.forEach(function (p) {
+      var prof = p.userId ? S.profiles.get(p.userId) : null, at = L2.pos[p.$id];
+      var b = h('button', { class: 'tcard', type: 'button', 'data-person': p.$id, 'aria-label': p.name + '. Show family.' }, avatarEl(prof || { displayName: p.name }), h('span', { class: 'tname', text: p.name }));
+      b.style.left = at.x + 'px'; b.style.top = at.y + 'px'; b.style.width = TC.w + 'px'; b.style.height = TC.h + 'px';
+      b.addEventListener('click', function () { if (moved) return; select(p.$id, false); });
+      cards[p.$id] = b; world.appendChild(b);
+    });
+    vp.appendChild(world);
+    var tools = h('div', { class: 'tree-tools' },
+      h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom in', text: '+', onclick: function () { zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1.25, true); } }),
+      h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom out', text: '−', onclick: function () { zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 0.8, true); } }),
+      h('button', { class: 'tool', type: 'button', 'aria-label': 'Show the whole tree', text: 'Fit', onclick: function () { fit(true); } }));
+    vp.appendChild(tools);
+    holder.appendChild(vp);
+    holder.appendChild(h('p', { class: 'hint', text: 'Drag to move around. Pinch or use + and − to zoom. Tap a person to see their parents, partner and children.' }));
+    var panel = h('section', { class: 'card tree-panel', 'aria-live': 'polite', 'aria-label': 'Selected person' });
+    holder.appendChild(panel);
+
+    // pan and zoom
+    var k = 1, tx = 0, ty = 0, moved = false, ptrs = {}, last = null;
+    function apply(smooth) {
+      world.classList.toggle('smooth', !!smooth);
+      world.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + k + ')';
+    }
+    function fit(smooth) {
+      var vw = vp.clientWidth || 340, vh = vp.clientHeight || 420;
+      k = Math.max(0.3, Math.min(1, (vw - 16) / L2.width, (vh - 16) / L2.height * 1.6));
+      tx = (vw - L2.width * k) / 2; ty = 8; apply(smooth);
+    }
+    function zoomAt(cx, cy, f, smooth) {
+      var nk = Math.max(0.3, Math.min(2, k * f)); f = nk / k;
+      tx = cx - (cx - tx) * f; ty = cy - (cy - ty) * f; k = nk; apply(smooth);
+    }
+    function focusOn(id) {
+      var at = L2.pos[id]; if (!at) return;
+      var vw = vp.clientWidth, vh = vp.clientHeight;
+      k = Math.max(k, 0.9); tx = vw / 2 - (at.x + TC.w / 2) * k; ty = vh / 2 - (at.y + TC.h / 2) * k; apply(true);
+    }
+    vp.addEventListener('pointerdown', function (ev) {
+      ptrs[ev.pointerId] = { x: ev.clientX, y: ev.clientY }; moved = false;
+      last = Object.keys(ptrs).length === 2 ? pinchInfo() : null;
+    });
+    function pinchInfo() { var a = Object.keys(ptrs).map(function (i) { return ptrs[i]; }); return { d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), cx: (a[0].x + a[1].x) / 2, cy: (a[0].y + a[1].y) / 2 }; }
+    vp.addEventListener('pointermove', function (ev) {
+      var p0 = ptrs[ev.pointerId]; if (!p0) return;
+      var n = Object.keys(ptrs).length;
+      if (n === 1) {
+        var dx = ev.clientX - p0.x, dy = ev.clientY - p0.y;
+        if (!moved && Math.hypot(dx, dy) < 5) return;
+        moved = true; tx += dx; ty += dy; p0.x = ev.clientX; p0.y = ev.clientY; apply(false); vp.classList.add('dragging');
+      } else if (n === 2) {
+        p0.x = ev.clientX; p0.y = ev.clientY; moved = true;
+        var now = pinchInfo(), rect = vp.getBoundingClientRect();
+        if (last && last.d > 0) { tx += now.cx - last.cx; ty += now.cy - last.cy; zoomAt(now.cx - rect.left, now.cy - rect.top, now.d / last.d, false); }
+        last = now;
+      }
+    });
+    function up(ev) { delete ptrs[ev.pointerId]; last = null; vp.classList.remove('dragging'); }
+    vp.addEventListener('pointerup', up); vp.addEventListener('pointercancel', up); vp.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse') up(ev); });
+    vp.addEventListener('wheel', function (ev) { ev.preventDefault(); var r = vp.getBoundingClientRect(); zoomAt(ev.clientX - r.left, ev.clientY - r.top, Math.exp(-ev.deltaY * 0.0015), false); }, { passive: false });
+    vp.addEventListener('keydown', function (ev) {
+      var step = 60, handled = true;
+      if (ev.key === 'ArrowLeft') tx += step; else if (ev.key === 'ArrowRight') tx -= step; else if (ev.key === 'ArrowUp') ty += step; else if (ev.key === 'ArrowDown') ty -= step;
+      else if (ev.key === '+' || ev.key === '=') zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1.25, true); else if (ev.key === '-') zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 0.8, true);
+      else handled = false;
+      if (handled) { ev.preventDefault(); apply(true); }
+    });
+
+    // who is related to whom
+    function relatives(id) {
+      var p = byId[id], parents = (p.parentIds || []).filter(function (x) { return byId[x]; }), partners = (p.partnerIds || []).filter(function (x) { return byId[x]; });
+      var children = people.filter(function (c) { return (c.parentIds || []).indexOf(id) !== -1; }).map(function (c) { return c.$id; });
+      var sibs = people.filter(function (c) { return c.$id !== id && (c.parentIds || []).some(function (x) { return parents.indexOf(x) !== -1; }); }).map(function (c) { return c.$id; });
+      return { parents: parents, partners: partners, children: children, siblings: sibs };
+    }
+    function select(id, center) {
+      var p = byId[id], r = relatives(id);
+      Object.keys(cards).forEach(function (x) { cards[x].classList.remove('sel', 'rel'); });
+      cards[id].classList.add('sel');
+      [].concat(r.parents, r.partners, r.children, r.siblings).forEach(function (x) { if (cards[x]) cards[x].classList.add('rel'); });
+      vp.classList.add('has-sel');
+      if (center) focusOn(id);
+      clear(panel);
+      var prof = p.userId ? S.profiles.get(p.userId) : null;
+      panel.appendChild(h('div', { class: 'tree-who' }, avatarEl(prof || { displayName: p.name }), h('div', { class: 'grow' }, h('h2', { text: p.name }),
+        prof ? h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Open profile' }) : null),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Clear', onclick: function () { vp.classList.remove('has-sel'); Object.keys(cards).forEach(function (x) { cards[x].classList.remove('sel', 'rel'); }); clear(panel); } })));
+      function group(label, ids) {
+        if (!ids.length) return;
+        panel.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: label }), h('div', { class: 'rel-list' }, ids.map(function (x) {
+          return h('button', { class: 'chip', type: 'button', text: byId[x].name, onclick: function () { select(x, true); } });
+        }))));
+      }
+      group(r.parents.length > 1 ? 'Parents' : 'Parent', r.parents); group(r.partners.length > 1 ? 'Partners' : 'Partner', r.partners);
+      group(r.children.length > 1 ? 'Children' : 'Child', r.children); group(r.siblings.length > 1 ? 'Siblings' : 'Sibling', r.siblings);
+      if (!r.parents.length && !r.partners.length && !r.children.length) panel.appendChild(h('p', { class: 'muted small', text: 'No relatives linked to ' + p.name + ' in the tree yet.' }));
+    }
+    requestAnimationFrame(function () {
+      fit(false);
+      if (focusId && cards[focusId]) { select(focusId, true); cards[focusId].classList.add('hl'); }
+    });
   };
 
   // Settings > Family and members: the member list and everything about managing it.
   async function settingsFamilyHub(main, token, tab, personId) {
-    if (tab === 'tree') { location.replace('#/tree' + (personId ? '/' + personId : '')); return; }
+    if (tab === 'tree') { location.replace('#/settings/tree' + (personId ? '/' + personId : '')); return; }
     await familyMembers(main, token);
     if (token !== S.nav) return;
-    main.appendChild(h('p', { class: 'muted small' }, 'The family tree has its own button in the bottom bar. ', h('a', { href: '#/tree', text: 'Open the Family Tree' }), '.'));
     return settingsFamily(main, token);
   }
 
@@ -2503,6 +2718,7 @@
   /* ---------- SETTINGS (opened from the gear on my profile) ---------- */
   var SETTING_SECTIONS = [
     { id: 'family', label: 'Family and members', note: 'Members, invites, tree admins, leave' },
+    { id: 'tree', label: 'Family tree', note: 'Who\u2019s who: add people, links, suggestions' },
     { id: 'account', label: 'Account and security', note: 'Email, password' },
     { id: 'appearance', label: 'Appearance', note: 'Light or dark, style, accent color' },
     { id: 'storage', label: 'Storage and downloads', note: 'My uploads, family space, data use' },
@@ -2523,6 +2739,7 @@
     main.appendChild(h('h1', { text: sec.label }));
     if (sec.id === 'account') settingsAccount(main);
     else if (sec.id === 'family') await settingsFamilyHub(main, token, p2, p3);
+    else if (sec.id === 'tree') { main.appendChild(h('p', { class: 'muted small' }, 'Adjust who is who here. To just look at the tree, use the ', h('a', { href: '#/tree', text: 'Family Tree' }), ' button in the bottom bar.')); await familyTree(main, token, p2); }
     else if (sec.id === 'appearance') settingsAppearance(main);
     else if (sec.id === 'storage') await settingsStorage(main, token);
     else settingsPrivacy(main);
