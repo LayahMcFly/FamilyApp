@@ -1,198 +1,187 @@
-# Family Tree guide (version 1.20.0)
+# Family tree guide (v1.20.0)
 
-**Bottom line.** The Family Tree page is now drawn by the free, open-source `family-chart` library (version 0.9.0, MIT license). The library only draws. Your people and their relationships stay in your own Appwrite `people` table, one family at a time, and nothing is sent to an outside genealogy service. To switch it on you do three things: add one column to the `people` table, upload the new function package, and push the new site files to GitHub.
+The Family Tree page now draws the tree with **family-chart 0.9.0** (free, MIT license, by Donat Soric) and **d3 7.9.0**. Your people, relationships, permissions and approval workflow stay where they were: in your Appwrite database and the `family-api` Function. The library only draws.
 
-Which package this is: the free `family-chart` package from npm (github.com/donatso/family-chart). It is not `family-chart-premium`, which has its own license and is not used anywhere in this project.
+## What changed
 
----
-
-## What the library can and cannot draw
-
-I tested family-chart 0.9.0 in a real browser with awkward family shapes. Results:
-
-| Relationship | What happens | What the app does about it |
+| Area | Before | Now |
 |---|---|---|
-| Several partners (a divorce, a remarriage) | Drawn correctly. Each partner sits beside the person, each with their own children. | Adds a small label on the line: "Married", "Divorced" or "Separated". |
-| Same-sex parents | Drawn correctly as a couple with their child. | Nothing needed. |
-| Gender other than female or male | The library only knows M and F. Anything else is drawn as a neutral card without an error. | Nonbinary, Other and "Not set" all get a neutral purple card. The saved value is kept as you typed it. |
-| Adoptive, step, foster and guardian parents | **Not supported.** Every parent line looks the same. | The app stores the kind of link itself and writes it on the child's card ("Adopted", "Step-child", "Foster child"). The lines stay identical. |
-| A child with three or more parents | **Not supported.** The library throws an error ("child has more than 1 parent") and draws nothing. | The app gives the library the two parents that are most likely "the" parents (a couple first, then birth parents), draws those, and tells you about the rest. The extra links stay saved. Details are below. |
-| A person's partner when you view their child | The library draws only the child's two listed parents. If Jonah's adoptive dad has a wife who is not Jonah's parent, she does not appear above Jonah. | She appears as soon as you tap the adoptive dad. The page explains this in its "What this picture can and cannot show" note. |
-| People not connected to anyone | They have no line to follow, so you cannot reach them by tapping. | The "Jump to a person" menu lists everyone. |
-| Everyone at once | The library shows the family of one chosen person (parents, partners, children, siblings), not all 300 people together. | Tap a card to move. "Simple view" is a second page that lists every person. |
+| Drawing the tree | Hand-written layout code in `app.js` | family-chart (`vendor/`), wrapped by `tree-chart.js` |
+| Navigating | Pan, zoom, tap | Pan, zoom, tap to centre on anyone, "Jump to" menu, keyboard (Tab, then Enter) |
+| Parents | Up to 2 | Up to 6, each marked birth, adoptive, step, foster or guardian |
+| Partners | 1 | Up to 8 |
+| Opening the tree | Bottom bar | Bottom bar, plus an "Open the Family Tree" button on the Family and members page, plus "View in family tree" on a person's profile |
+| Version | 1.19.3 | 1.20.0 (a middle-number bump, because it is a big update) |
 
-How the "silent drop" is prevented. For a child with four parents, the page shows a notice under the tree: "Noor has 4 parents. The tree can draw two, so Birth mum Lena and Step-dad Karl are not drawn above Noor." The child's card also shows "+2 more parents". The tap-through details panel lists all four parents. There is an automated test (`function/test/adapter.test.js`) that checks every parent link is either drawn or reported.
+The workflow is unchanged: owners and tree admins edit, members suggest corrections, an invited relative confirms "this is me", a person record is never the same thing as a sign-in account, and a relationship never gives anyone admin rights.
 
----
+## What the library cannot do (and what the app does about it)
 
-## Step 1. Add the library and its dependencies
+I tested each of these against the real library files, so none of this is guessed.
 
-You do not install anything. The files are already in the project, inside the `vendor` folder:
-
-| File | What it is | License |
+| Limit | What happens | What the app does |
 |---|---|---|
-| `vendor/family-chart.min.js` | The tree-drawing library, version 0.9.0 | MIT, Copyright (c) 2021 Donat Soric |
-| `vendor/family-chart.css` | The library's base styles | MIT |
-| `vendor/d3.min.js` | D3 version 7.9.0, the drawing toolkit that family-chart needs | ISC, Copyright 2010-2023 Mike Bostock |
-| `vendor/LICENSE-family-chart.txt`, `vendor/LICENSE-d3.txt` | The license texts | |
-| `THIRD-PARTY-NOTICES.txt` | Both licenses in one place. Keep this file with the site. | |
-
-Our own files that connect the library to your data:
-
-| File | What it does |
-|---|---|
-| `tree-adapter.js` | Turns your `people` rows into the format the library wants, and lists anything it cannot draw |
-| `tree-chart.css` | Colors the tree to match your theme and repairs two things the library does with inline styles |
-| `app.js` | The new Family Tree page and the new "Edit person" form |
-
-Why the files are copied into the site and not loaded from a public CDN: your site's security rules only allow scripts from your own site (and the Appwrite SDK). Self-hosting also means the tree keeps working even if a CDN is down. The library loads only when someone opens the Family Tree page, so the home feed does not get slower.
-
-**A license detail worth knowing.** The package's `LICENSE.txt` and README say MIT. The `license` field inside its `package.json` says ISC. They disagree. Both are permissive and ask for the same thing (keep the copyright notice and license text with the code), so either way your use is fine. `THIRD-PARTY-NOTICES.txt` explains this and follows the actual license file.
-
-**Security-policy note.** The library writes some `style="..."` attributes into its HTML, and your site blocks those on purpose. `tree-chart.css` re-creates those few rules as normal CSS, so the tree looks right. If you open your browser's developer console on the Family Tree page you will see one or two grey "violates Content Security Policy" lines. They are expected and harmless. Do not loosen the policy to silence them.
-
-**Updating the library later.** Download a newer `family-chart` from npm, copy `dist/family-chart.min.js` and `dist/styles/family-chart.css` over the two files in `vendor`, check the license again, and open the Family Tree page. Ask me to re-run the relationship tests first.
-
----
-
-## Step 2. Create the exact Appwrite schema and indexes
-
-Everything is in one database called `family`. The tree uses two tables.
-
-### Table `people`
-
-Table settings: **Row security ON**, no table-level permissions at all.
-
-| Column | Type | Size | Required | Array | Used for |
-|---|---|---|---|---|---|
-| `familyId` | String | 36 | yes | no | Which family this person belongs to. The Appwrite team ID. |
-| `name` | String | 80 | yes | no | Display name |
-| `userId` | String | 36 | no | no | The sign-in account linked to this person. Empty when nobody is linked. |
-| `confirmed` | Boolean | | no | no | The linked person said "yes, this is me" |
-| `parentIds` | String | 36 | no | **yes** | IDs of parent rows |
-| `partnerIds` | String | 36 | no | **yes** | IDs of partner rows |
-| `createdBy` | String | 36 | no | no | Who added this entry |
-| `birthday` | String | 10 | no | no | `2015-06-30` or just `2015` |
-| `gender` | String | 20 | no | no | Free text such as Female, Male, Nonbinary, Other |
-| `inviteMembershipId` | String | 36 | no | no | Ties an invited relative to their invitation so the entry becomes theirs on accept |
-| **`relKinds`** | String | **2000** | no | no | **New in 1.20.0.** Kinds of links, for example `{"p:abc123":"adoptive","s:def456":"divorced"}` |
-
-Index: `idx_familyId`, type Key, on `familyId`, ascending.
-
-Person records and sign-in accounts stay separate. A person row can exist with `userId` empty (a grandparent who will never sign up). Linking is a separate step that a tree admin starts and the linked person confirms.
-
-### Table `suggestions`
-
-Row security ON, no table-level permissions.
-
-| Column | Type | Size | Required |
-|---|---|---|---|
-| `familyId` | String | 36 | yes |
-| `authorId` | String | 36 | yes |
-| `personId` | String | 36 | no |
-| `text` | String | 500 | yes |
-| `status` | String | 12 | yes |
-
-Indexes (all type Key): `idx_familyId` on `familyId`, `idx_authorId` on `authorId`, `idx_status` on `status`.
-
-### Add only the new column (if your tables already exist)
-
-You already created every column above except `relKinds`. Open the Appwrite Console, open the **Terminal** you used before, and paste this one line:
-
-```
-appwrite tablesdb create-string-column --database-id family --table-id people --key relKinds --size 2000 --required false
-```
-
-Open Databases, then `family`, then `people`, then Columns. Wait until `relKinds` shows **Available**. No new index is needed.
-
-If you skip this step the tree still draws and nothing breaks, but adoptive, step, foster and married/divorced labels are not saved. The server tries to save them, gets an error because the column is missing, and saves everything else.
-
-### Starting from nothing
-
-`setup/setup-appwrite.mjs` creates all tables, columns and indexes in one go, including `relKinds`. `SETUP-GUIDE.md` explains how to run it.
-
----
-
-## Step 3. Configure permissions
-
-There are four layers. None of them depend on the browser behaving.
-
-1. **Table level.** In Console, open `people`, then Settings, then Permissions. The list must be empty. Row security must be ON. With no table permission, nobody can read a row unless the row itself says so.
-2. **Row level.** Every person row is created by the `family-api` function with exactly one permission: `read("team:<that family's team ID>")`. Only members of that family's team can read it. Nobody, including members, gets a write permission on the row.
-3. **Writes go through the function.** The browser never writes to `people`. The function checks each request:
-   - Is the caller a confirmed member of this family's team? If not: refused.
-   - Adding, deleting and linking people: only the family owner, or a member the owner made a tree admin.
-   - Editing someone's links: owner or tree admin.
-   - A person linked to your account who has confirmed: only they can change their own name, gender and birthday. The inviter cannot, even if they are the owner.
-   - Ordinary members can send a suggestion. A tree admin accepts or dismisses it.
-4. **The family is never taken from the browser's word.** The family ID in each request is checked against the caller's real team membership. Nothing in the code has a family ID written into it. The Family Tree page asks Appwrite only for rows where `familyId` equals the family you are currently viewing.
-
-To confirm layers 1 and 2 yourself: Console, `people`, open any row, look at **Permissions**. You should see only `Read: team:<id>`.
-
-The function's own permissions did not change in this update.
-
----
-
-## Step 4. Deploy to your website
-
-Your family app lives in its own GitHub repository (`LayahMcFly/familycircle`) and is published with GitHub Pages. Your ZenfulOutput site links to it. This update is files only, no build step.
-
-1. **Upload the new function package first.** In Appwrite Console, open Functions, then `family-api`, then Deployments, then Create deployment. Choose Upload, and select `family-api.tar.gz` (sent with this guide). The entrypoint and install command are already set from last time. Wait for the status **Ready**, then use **Activate** if it is not already active.
-2. **Add the new column** (Step 2) if you have not yet.
-3. **Update the site files on GitHub.** The easy way: open `github.com/LayahMcFly/familycircle`, click **Add file**, then **Upload files**, and drag these in (keep the folder structure; GitHub keeps folders when you drag the `vendor` folder itself):
-   - `index.html`, `config.js`, `app.js`, `styles.css`
-   - `tree-adapter.js`, `tree-chart.css`
-   - the whole `vendor` folder (5 files)
-   - `THIRD-PARTY-NOTICES.txt`, `FAMILY-TREE-GUIDE.md`, `SETUP-GUIDE.md`
-   - `setup/setup-appwrite.mjs`
-   - `function/` (source and tests, optional but keeps the repo complete)
-
-   Write a note such as "v1.20.0 family tree" and click **Commit changes**.
-4. **Wait about a minute.** GitHub Pages republishes by itself. Open the site and look at the footer. It should say **Family Circle v1.20.0**. If it still says 1.19.3, hold Ctrl+Shift+R (Cmd+Shift+R on a Mac) to reload without the saved copy.
-5. **Check the ZenfulOutput link.** Nothing needs to change there if it already links to the family app's address.
-
-If you would rather host the app inside the ZenfulOutput repository (for example at `zenfuloutput.com/family/`), copy the whole folder into a `family` folder in that repo. All links in the app are relative, so it works from a subfolder. One extra step: in Appwrite Console, open your project, then Overview, then Platforms, then Add platform, then Web, and add the new hostname. Appwrite refuses requests from a hostname it does not know.
-
-Version rule you set: this is a middle-number change (1.19.3 to 1.20.0) because it is a big update. The footer and the `?v=` cache numbers in `index.html` were bumped together.
-
----
-
-## Step 5. Test with two separate families to confirm privacy
-
-You need two sign-in accounts in two different families. Use two browsers (for example Chrome and a private window), so the two sessions never mix.
-
-**Setup**
-1. In browser 1, sign in as yourself. You own **Family A**. Add three people to its tree: "Test Alpha Parent", "Test Alpha Child" (parent: Alpha Parent) and "Test Alpha Adopted" (parent: Alpha Parent, kind: Adoptive).
-2. In browser 2, sign in with a second email. Create **Family B** (Create another family). You own it. Add two people: "Test Beta One" and "Test Beta Two".
-
-**Checks. Each one has an expected result.**
-
-| # | Do this | Expected |
-|---|---|---|
-| 1 | Browser 2, Family B, open Family Tree, then open the "Jump to a person" menu | Only "Test Beta" names. No "Test Alpha" names anywhere. |
-| 2 | Browser 1, Family A, same menu | Only "Test Alpha" names. |
-| 3 | Browser 2: type `#/tree/<an Alpha person ID>` in the address bar (copy an ID from browser 1's address bar after tapping a person on its profile's "View in family tree") | The page shows Family B's own tree. It does not show the Alpha person. |
-| 4 | Browser 2: Settings, Family tree. Search the list | No Alpha people. |
-| 5 | Browser 1: add a **member** (not owner) to Family A, sign them in, and try Add a person | The Add button is missing, or the server answers "Only the family owner or a tree admin can change the family tree." Suggestions work. |
-| 6 | In Appwrite Console, open `people`, open an Alpha row and a Beta row | Alpha shows `Read: team:<A's ID>`. Beta shows `Read: team:<B's ID>`. Nothing else. |
-| 7 | Browser 2: open the browser's developer tools, Network tab, open the Family Tree page, and look at where requests go | Only your Appwrite endpoint and your own site. No request to any genealogy or tracking site. |
-| 8 | Adoptive check, browser 1: open the Family Tree and tap "Test Alpha Parent" | Both children are drawn below. "Test Alpha Adopted" has an "Adopted" label on its card. "Test Alpha Child" has none. |
-
-If any row fails, stop and tell me which one. Do not add real family data until all eight pass.
-
-**Automated version.** The repository includes tests that do the same thing with two fake families. On a computer with Node installed: open a terminal in the `function` folder and run `npm install`, then `npm test`. The line `tree privacy: two families never see or touch each other's people` must say `ok`. All 34 tests pass in this release.
-
----
+| More than 2 parents on one person | The library throws an error and draws nothing | The tree draws two parents at a time. A **Parents shown** menu (visible when your family has any adoptive, step, foster or guardian link) switches between "birth parents" and "the parents who raised them". Cards say "+2 parents not drawn". The side panel always lists every parent with its kind. |
+| All parent lines look alike | The library has no line styles per relationship | The kind is written as a label ("Adoptive parent") in the side panel, not drawn as a different line. |
+| It draws one person's neighbourhood | Aunts, cousins and in-laws' families are not drawn until you centre on someone else | A line under the tree says "Showing 8 of 14 people". Tap anyone, or use **Jump to**, to see the rest. People who are not connected to anyone are reachable through **Jump to**. |
+| A parent who is also the person's partner, or a loop (someone is their own ancestor) | The library can fail on this | The server refuses to save it. If bad data already exists, the drawing skips that one link and counts it as "not drawn". |
+| Card text is inserted as HTML | A name like `<img onerror=…>` could run code | Every name is escaped first. I tested this in Chrome: the name shows as plain text and nothing runs. |
+| Partner status (current or former) | Not represented | Not stored. All partners are drawn the same way. |
 
 ## Costs, separately
 
-**The library is free, the hosting is not unlimited.** family-chart and D3 cost nothing and ask for no payment, ads or account. They run inside your visitors' browsers. Everything that does cost something, or could, is on the Appwrite and GitHub side.
+The library is free, but it does not make your hosting unlimited.
 
-- **Appwrite Cloud, Free plan.** From Appwrite's own documentation: a free account has one organization and two projects. When a limit is reached, the effect is automatic and not a bill. File uploads stop when storage is full. Function runs stop when the monthly allowance is used. API access is denied when bandwidth runs out (on the Free plan, until the next period or an upgrade). Limits reset at the start of each billing period. You cannot buy extra on the Free plan.
-- **The numbers.** Appwrite's documentation pages I could read point to its pricing page for the figures, and that page did not show them to me. A third-party summary of the Free plan (toolradar.com) reports 2 GB storage, 5 GB bandwidth, 750,000 function executions, 75,000 monthly active users, one database, one bucket and two functions per project, and says free projects pause after one week of inactivity. Treat those as unconfirmed until you check Console, then Billing, or Appwrite's pricing page, because plans change.
-- **What the tree uses.** A person row is a few hundred bytes. A family of 300 people is far less than 1 MB of database space, so the tree itself barely touches any limit. Photos and videos use the storage allowance. Opening the tree page counts a handful of database reads.
-- **Pausing.** If the Free plan really pauses projects after a week without activity, your family would see errors the first time they open the site after a quiet week, until you wake the project in Console. Check this in your Console once. If it applies, an occasional login by any family member keeps it awake.
-- **GitHub Pages.** Free for public repositories. GitHub documents soft limits of about 1 GB for the published site and 100 GB of bandwidth a month, which a family site will not approach. Your repository is public, so do not put secrets in it. `config.js` holds only your project ID and endpoint, which are meant to be public.
-- **Paid plans.** If you outgrow the Free plan, the Appwrite paid plan is billed monthly by Appwrite. The app has its own limits too: 500 MB of uploads per family by default (change it with the `familyStorageMB` function variable) and 300 people per tree (`maxPeople` in `function/src/logic.js`). Keep them below what your Appwrite plan allows.
+1. **family-chart and d3:** $0. Both are bundled in `vendor/`, so there is no third-party service and no data leaves your site for them.
+2. **Extra page weight:** about 400 KB for the three vendor files (uncompressed) the first time someone opens the tree. After that the browser keeps them. They load only when the tree opens, so other pages are not slower.
+3. **GitHub Pages:** free, with published limits: a site of at most 1 GB, about 100 GB of traffic a month (a soft limit), and a rule that Pages is not meant to host an online business, a store or commercial software. The tree adds almost nothing to the first two. If your print and photo-gift shop goes live, check that rule before you sell from the same site. [GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)
+4. **Appwrite Cloud:** the free plan is $0, but it is capped. Appwrite's documentation says that when a limit is reached on the free plan, uploads, new accounts and invitations, or function runs stop until usage drops or the next billing period starts. I could not read the current numbers on Appwrite's pricing page, so check them in your Console under the organization's usage page before you invite many families. [Appwrite Free plan](https://appwrite.io/docs/advanced/platform/free)
+5. **What the tree uses in Appwrite:** a person is one small database row, with no files. A tree page load reads the people and suggestions rows (the app reuses them for 20 seconds). Every save is one Function run plus a few row writes (partner links are mirrored on both people). The Function limits a family to 300 people.
 
-Sources: [Appwrite Free plan documentation](https://appwrite.io/docs/advanced/billing/free.md), [Appwrite pricing](https://appwrite.io/pricing), [toolradar summary of Appwrite pricing](https://toolradar.com/tools/appwrite-2-0/pricing), [family-chart on GitHub](https://github.com/donatso/family-chart).
+## Part 1. Add the library and its dependencies
+
+**Result:** `vendor/` and `tree-chart.js` exist in your repo, and the page loads them.
+
+1. In the update zip, find the folder `vendor/` and the file `tree-chart.js`.
+2. In your repo on GitHub, click **Add file > Upload files**. Drag the **contents** of the zip in (keep the folder structure, so `vendor/` stays a folder next to `index.html`). Replace the files GitHub asks about.
+3. Check that the repo now has these files next to `index.html`:
+   - `vendor/d3.min.js` (d3 7.9.0)
+   - `vendor/family-chart.min.js` (family-chart 0.9.0)
+   - `vendor/family-chart.css`
+   - `vendor/LICENSE-family-chart.txt` and `vendor/LICENSE-d3.txt`
+   - `tree-chart.js`
+   - `THIRD-PARTY-NOTICES.md`
+4. Open `index.html` on GitHub. Near the bottom, `tree-chart.js` should be listed before `app.js`.
+
+Do not swap in `family-chart-premium`, a `@latest` CDN link or a trial copy. The files you uploaded are fixed copies of the free package, version 0.9.0. They are unmodified. To check, run `npm pack family-chart@0.9.0` on any computer and compare `dist/family-chart.min.js` with `vendor/family-chart.min.js`.
+
+**Your CSP (the security rule in `index.html`) stays strict.** The library writes a few inline `style=""` attributes that this rule blocks. I moved the equivalent rules into `styles.css` and tested it in Chrome under your exact CSP. Chrome's console may show "Applying inline style violates…" warnings on the tree page. They are expected and harmless. If you ever see the tree drawn as a jumble of overlapping cards, check that the new `styles.css` was uploaded.
+
+## Part 2. Create the exact Appwrite schema and indexes
+
+**Result:** the `people` table has every column the tree uses, including the new `parentKinds`.
+
+There is exactly one new column in this update.
+
+**Option A, the Console (about 2 minutes):**
+
+1. Open the Appwrite Console, then **Databases > family > people > Columns > Create column > String**.
+2. Key: `parentKinds`. Size: `600`. Required: **off**. Array: **off**. Default: empty. Click **Create**.
+3. Wait until its status says **Available**.
+
+**Option B, the setup script:** run the script from `SETUP-SCRIPT.md` again. It skips everything that exists and adds `parentKinds`.
+
+The full `people` table, for reference. Keys are case-sensitive.
+
+| Column key | Type | Size | Required | Array | Written by |
+|---|---|---|---|---|---|
+| `familyId` | string | 36 | yes | no | `treeAddPerson` |
+| `name` | string | 80 | yes | no | `treeAddPerson`, `treeEditPerson` |
+| `userId` | string | 36 | no | no | link to a sign-in account (kept separate) |
+| `confirmed` | boolean | | no | no | `treeConfirm`, `claimInvite` |
+| `parentIds` | string | 36 | no | **yes** | `treeAddPerson`, `treeEditPerson` |
+| `partnerIds` | string | 36 | no | **yes** | `treeAddPerson`, `treeEditPerson` |
+| `createdBy` | string | 36 | no | no | `treeAddPerson` |
+| `birthday` | string | 10 | no | no | `treeAddPerson`, `treeEditPerson` |
+| `gender` | string | 20 | no | no | `treeAddPerson`, `treeEditPerson` |
+| `inviteMembershipId` | string | 36 | no | no | invitations |
+| `parentKinds` | string | 600 | no | no | **new in 1.20.0**: JSON such as `{"<parentId>":"adoptive"}`. "birth" is the default and is never stored. |
+
+Indexes on `people`: one only, `idx_familyId` (type Key, column `familyId`, ascending). It already exists. Every query the tree runs filters on `familyId`, so no new index is needed. The `suggestions` table is unchanged.
+
+Until the column exists, the tree still works, and plain birth-parent links save as before. If you try to save an adoptive, step, foster or guardian link before the column exists, the app shows an error telling you to add it. It never saves the person with the wrong relationship in silence.
+
+## Part 3. Configure permissions
+
+**Result:** the Function is updated with the new checks, and the table permissions are as strict as before.
+
+**Table permissions (check, do not change):**
+
+1. Databases > family > people > **Settings > Permissions**: the permission list is **empty**.
+2. Same page: **Row security** is **ON**.
+
+That combination is the privacy design. The browser has no write rights at all. Each person row is created by the Function with exactly one read permission, the Appwrite Team of that family. Another family's members are not on that list, so Appwrite never returns the row to them.
+
+**Update the Function (this is where the editing rules live):**
+
+1. On a computer with the repo downloaded, open a terminal in the `function` folder and run:
+   `tar --exclude node_modules --exclude test --exclude code.tar.gz -czf code.tar.gz .`
+   (The update zip already contains a ready-made `family-api-1.20.0.tar.gz`. You can use that instead.)
+2. In the Console, open **Functions > family-api > Deployments > Create deployment > Manual**. Upload the file. Entrypoint `src/main.js`, build command `npm install`.
+3. When the build finishes, **activate** the deployment.
+4. No new API-key scopes are needed.
+
+**Who can do what** (the Function checks all of this on the server, not in the browser):
+
+| Person | See the tree | Add, edit, delete people and links | Suggest a correction | Confirm "this is me" |
+|---|---|---|---|---|
+| Owner of that family | yes | yes | yes | only for their own linked entry |
+| Tree admin of that family | yes | yes | yes | only for their own linked entry |
+| Other member of that family | yes | no (can edit only their own linked entry) | yes | only for their own linked entry |
+| Member of a different family | no | no | no | no |
+| Not signed in | no | no | no | no |
+
+Every request names a `familyId`. The Function confirms you are a confirmed member of that family's Team before it reads or writes anything, and it refuses any parent, partner or person ID that belongs to a different family. Nothing in the code has a hardcoded family ID.
+
+## Part 4. Deploy to your site
+
+**Result:** the live site shows version 1.20.0 and the new tree.
+
+You said "my existing zenfuloutput website". I read that as: the tree belongs to the Family Circle site (the `FamilyCircle` repo), and the zenfuloutput hub only links to it. So nothing in the zenfuloutput repo needs to change except, if you want, the link on its Family App card (below). If you meant that the tree itself should live inside the hub repo, tell me and I will adapt it.
+
+1. Upload the update zip contents to your `FamilyCircle` repo, as in Part 1. Replace `app.js`, `styles.css`, `index.html` and `config.js`. Replace `function/src/logic.js`, `function/test/logic.test.js` and `setup/setup-appwrite.mjs`. Add the new files. Commit.
+2. Open **Settings > Pages** in the repo and wait for the green "published" message (usually under two minutes).
+3. Open the site and hard refresh (Ctrl+Shift+R on a computer; on a phone, close the tab and open it again).
+4. Scroll to the footer. It should say **V1.20.0**.
+5. Do Part 2 (the column) and Part 3 (the Function) if you have not already.
+6. Appwrite needs no change. The Web platform hostname stays `layahmcfly.github.io`.
+7. Check the Family App card on the zenfuloutput hub. The repo's name on GitHub is `FamilyCircle`, so the site address is `https://layahmcfly.github.io/FamilyCircle/`. If the card still points at the old `FamilyApp` address, change it. In `config.js` I also fixed the feedback link, which was spelled `FamilyCirle` and would not open.
+
+## Part 5. Test with two separate families
+
+**Result:** you have seen, with your own accounts, that one family cannot reach another family's tree.
+
+You need three accounts you can sign in to (email aliases work): **Account 1** (owner of Family A), **Account 2** (owner of Family B), **Account 3** (an ordinary member of Family A).
+
+I ran the same rules through 26 automated tests against a fake Appwrite, including two families. I did not run anything against your live project, so this part is how you confirm it for real.
+
+1. Sign in as Account 1. Open **Family Tree** and add three people to Family A with unusual names: `Alpha Only`, `Beta Only`, `Gamma Only`. Link them as parent, child and partner.
+2. In Family A, add one more person with two parents plus an **adoptive** parent (Edit person > Parents > + Add a parent > pick "Adoptive parent"). Open the tree. The **Parents shown** menu appears. Switch it and check the cards change.
+3. Sign out. Sign in as Account 2. Create Family B (the "create another family" option). Open **Family Tree**. **Expected:** the tree is empty. None of the Family A names appear, not on the tree, not in **Jump to**, not in Suggestions.
+4. As Account 2, add `Delta Only` to Family B. Sign out.
+5. Sign in as Account 3 (Family A member). **Expected:** you see Alpha, Beta, Gamma, not Delta. There is no **+ Add a person** button, and **Edit** appears only on their own linked entry (if they have one). Everyone else's side panel offers **Suggest a change** only. Send one suggestion.
+6. Sign back in as Account 1. **Expected:** the suggestion appears in Settings > Family tree for you to approve or dismiss.
+7. **Switch families.** If Account 2 is also in Family A (invite it), use the family menu at the top. **Expected:** the tree changes completely with the family, and it never shows a mix.
+8. **Try to break it (browser console).** Signed in as Account 2, open your site, press F12, choose **Console**, paste this with `FAMILY_A_ID` replaced by Family A's Team ID (Appwrite Console > Auth > Teams), then press Enter:
+
+```js
+(async () => {
+  const c = new Appwrite.Client().setEndpoint(FAMILY_CONFIG.endpoint).setProject(FAMILY_CONFIG.projectId);
+  const jwt = (await new Appwrite.Account(c).createJWT()).jwt;
+  const fn = new Appwrite.Functions(c);
+  const call = async (b) => (await fn.createExecution({ functionId: FAMILY_CONFIG.functionId, body: JSON.stringify({ jwt, ...b }), async: false, xpath: '/', method: 'POST' })).responseBody;
+  console.log('write attempt:', await call({ action: 'treeAddPerson', familyId: 'FAMILY_A_ID', name: 'Intruder' }));
+  const r = await new Appwrite.TablesDB(c).listRows({ databaseId: 'family', tableId: 'people', queries: [Appwrite.Query.equal('familyId', ['FAMILY_A_ID'])] });
+  console.log('rows from Family A that I can read:', r.total);
+})();
+```
+
+   **Expected:** the write attempt answers with a "not a member of this family" message (HTTP 403 in the JSON), and the row count is **0**. If it is anything else, stop using the site for real data and tell me what you saw.
+9. Delete the test people when you finish (Edit > Delete from tree).
+
+If steps 3, 5 and 8 all behave as described, two families are isolated.
+
+## Files in the update
+
+| File | What changed |
+|---|---|
+| `tree-chart.js` | New. Turns your people into the library's format, draws them, escapes all text. |
+| `vendor/` | New. family-chart 0.9.0, d3 7.9.0, their licenses. |
+| `app.js` | New tree page, "Open the Family Tree" button, person form with several parents (with kinds) and partners. |
+| `styles.css` | Chart styling, including the CSP-safe rules. |
+| `index.html` | Loads `tree-chart.js`; version 1.20.0. |
+| `config.js` | Version 1.20.0; feedback link fixed. |
+| `function/src/logic.js` | `parentKinds`, up to 6 parents and 8 partners, "a parent cannot also be a partner". |
+| `function/test/logic.test.js` | Tests for all of the above, including two families. |
+| `setup/setup-appwrite.mjs` | Adds the `parentKinds` column for new installs. |
+| `THIRD-PARTY-NOTICES.md` | Required license notices. |

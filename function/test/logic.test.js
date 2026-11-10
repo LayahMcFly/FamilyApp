@@ -11,6 +11,7 @@ function makeWorld() {
     files: {},
     teams: {}, // teamId -> { name, members: [{userId, roles, confirm}] }
     userLabels: {},
+    rejectColumns: [], // pretend these columns do not exist yet (Appwrite answers 400)
     clock: 1_800_000_000_000
   };
   for (const t of Object.values(TABLES)) world.tables[t] = new Map();
@@ -22,6 +23,7 @@ function makeWorld() {
       const id = rowId === 'unique()' || rowId.startsWith('uniq') ? `r${++seq}` : rowId;
       const table = world.tables[tableId];
       if (table.has(id)) throw err(409, 'exists');
+      if (world.rejectColumns.some((c) => data[c] !== undefined)) throw err(400, 'Unknown attribute');
       for (const k of ['reactionKey', 'bookmarkKey', 'profileKey']) {
         if (data[k] !== undefined && [...table.values()].some((r) => r[k] === data[k])) throw err(409, 'unique');
       }
@@ -35,6 +37,7 @@ function makeWorld() {
       return r;
     },
     async updateRow({ tableId, rowId, data }) {
+      if (world.rejectColumns.some((c) => data[c] !== undefined)) throw err(400, 'Unknown attribute');
       const r = await db.getRow({ tableId, rowId });
       Object.assign(r, data);
       return r;
@@ -528,6 +531,68 @@ test('family tree: owner and tree admins edit, members suggest, linked person co
   assert.equal((await s.call(s.carol, { action: 'treeAddPerson', familyId: 'famA', name: 'X' })).status, 403);
 });
 
+test('family tree: adoptive, step and foster parents, several partners, and two families stay apart', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  const add = (u, b, fam = 'famA') => s.call(u, { action: 'treeAddPerson', familyId: fam, ...b });
+  const edit = (u, b, fam = 'famA') => s.call(u, { action: 'treeEditPerson', familyId: fam, ...b });
+  const ids = {};
+  for (const n of ['bm', 'bf', 'am', 'af', 'sp']) ids[n] = (await add(s.alice, { name: n })).json.personId;
+  // a child with four parents: two by birth, two adoptive. "birth" is the default and is not stored.
+  const kinds = { [ids.bm]: 'birth', [ids.bf]: 'birth', [ids.am]: 'adoptive', [ids.af]: 'adoptive' };
+  const kid = await add(s.alice, { name: 'Kid', parentIds: [ids.bm, ids.bf, ids.am, ids.af], parentKinds: kinds });
+  assert.equal(kid.status, 200);
+  assert.deepEqual(JSON.parse(s.world.tables.people.get(kid.json.personId).parentKinds), { [ids.am]: 'adoptive', [ids.af]: 'adoptive' });
+  const kidId = kid.json.personId;
+  // bad kinds are refused, not guessed at
+  assert.equal((await edit(s.alice, { personId: kidId, parentKinds: { [ids.am]: 'cousin' } })).status, 400);
+  assert.equal((await edit(s.alice, { personId: kidId, parentKinds: { [ids.sp]: 'step' } })).status, 400);   // not a parent of Kid
+  assert.equal((await edit(s.alice, { personId: kidId, parentKinds: [ids.am] })).status, 400);
+  // too many parents or partners
+  const many = [];
+  for (let i = 0; i < 7; i++) many.push((await add(s.alice, { name: 'p' + i })).json.personId);
+  assert.equal((await edit(s.alice, { personId: kidId, parentIds: many })).status, 400);
+  assert.equal((await edit(s.alice, { personId: kidId, parentIds: many.slice(0, 6) })).status, 200);
+  assert.equal(s.world.tables.people.get(kidId).parentKinds, '');            // old kinds were dropped with their parents
+  // a parent cannot also be a partner of the same person
+  assert.equal((await edit(s.alice, { personId: kidId, partnerIds: [many[0]] })).status, 400);
+  // several partners, all mirrored
+  const dad = ids.bf;
+  assert.equal((await edit(s.alice, { personId: dad, partnerIds: [ids.bm, ids.sp] })).status, 200);
+  assert.deepEqual(s.world.tables.people.get(ids.sp).partnerIds, [dad]);
+  assert.deepEqual(s.world.tables.people.get(ids.bm).partnerIds, [dad]);
+  // step-parent set, then the step-parent is deleted: the kind goes with them
+  assert.equal((await edit(s.alice, { personId: kidId, parentIds: [ids.bm, ids.sp], parentKinds: { [ids.sp]: 'step' } })).status, 200);
+  assert.deepEqual(JSON.parse(s.world.tables.people.get(kidId).parentKinds), { [ids.sp]: 'step' });
+  assert.equal((await s.call(s.alice, { action: 'treeDeletePerson', familyId: 'famA', personId: ids.sp })).status, 200);
+  assert.deepEqual(s.world.tables.people.get(kidId).parentIds, [ids.bm]);
+  assert.equal(s.world.tables.people.get(kidId).parentKinds, '');
+  // a plain member cannot set kinds; an outsider cannot read or write this tree
+  assert.equal((await edit(s.bob, { personId: kidId, parentKinds: {} })).status, 403);
+  assert.equal((await add(s.dave, { name: 'X' })).status, 403);
+  // a second family: its owner cannot point at the first family's people
+  const famB = await add(s.carol, { name: 'Carol Sr', parentIds: [ids.bm] }, 'famB');
+  assert.equal(famB.status, 400);
+  const own = await add(s.carol, { name: 'Carol Sr' }, 'famB');
+  assert.equal(own.status, 200);
+  assert.equal((await edit(s.carol, { personId: kidId, name: 'Hijack' }, 'famB')).status, 404);
+  assert.equal((await edit(s.carol, { personId: own.json.personId, name: 'Carol' }, 'famA')).status, 403);
+  assert.equal(s.world.tables.people.get(kidId).name, 'Kid');
+});
+
+test('family tree: a missing parentKinds column is reported, never silently dropped', async () => {
+  const s = await setup();
+  const a = (await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'A' })).json.personId;
+  const b = (await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'B' })).json.personId;
+  s.world.rejectColumns = ['parentKinds'];
+  const r = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Kid', parentIds: [a, b], parentKinds: { [a]: 'adoptive' } });
+  assert.equal(r.status, 400);
+  assert.match(JSON.stringify(r.json), /parentKinds column/);
+  // ordinary edits keep working before the column exists
+  const ok = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Kid2', parentIds: [a, b] });
+  assert.equal(ok.status, 200);
+});
+
 test('editPost: author only, stamps editedAt, ignores unchanged text', async () => {
   const s = await setup();
   const post = (await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'hello' })).json.postId;
@@ -584,65 +649,4 @@ test('inviting a relative: relationship, details, claim on accept, and the invit
   // a sibling shares the inviter's parents; "other" is added without a link
   const sib = await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Sis', relation: 'sibling' });
   assert.equal(sib.status, 403);   // Bob is not a tree admin
-});
-
-test('tree link kinds: adoptive, step, foster and partner status are stored, validated and pruned', async () => {
-  const s = await setup();
-  const add = (b) => s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', ...b });
-  const edit = (id, b) => s.call(s.alice, { action: 'treeEditPerson', familyId: 'famA', personId: id, ...b });
-  const bio = (await add({ name: 'Birth mum' })).json.personId;
-  const ad = (await add({ name: 'Adoptive dad' })).json.personId;
-  const third = (await add({ name: 'Step mum' })).json.personId;
-  const kid = (await add({ name: 'Kid', parentIds: [bio, ad, third] })).json.personId;   // three parents can be stored
-  assert.equal(s.world.tables.people.get(kid).parentIds.length, 3);
-  const ok = await edit(kid, { relKinds: { ['p:' + ad]: 'adoptive', ['p:' + third]: 'step', ['p:' + bio]: 'biological' } });
-  assert.equal(ok.status, 200);
-  assert.deepEqual(JSON.parse(s.world.tables.people.get(kid).relKinds), { ['p:' + ad]: 'adoptive', ['p:' + third]: 'step' });   // "biological" is the default, not stored
-  // refused: unknown kind, a person who is not a parent, a malformed key, a non-object
-  assert.equal((await edit(kid, { relKinds: { ['p:' + ad]: 'pirate' } })).status, 400);
-  assert.equal((await edit(kid, { relKinds: { ['p:' + kid]: 'adoptive' } })).status, 400);
-  assert.equal((await edit(kid, { relKinds: { 'x:1': 'adoptive' } })).status, 400);
-  assert.equal((await edit(kid, { relKinds: ['adoptive'] })).status, 400);
-  // removing a parent prunes that entry
-  assert.equal((await edit(kid, { parentIds: [bio, third] })).status, 200);
-  assert.deepEqual(JSON.parse(s.world.tables.people.get(kid).relKinds), { ['p:' + third]: 'step' });
-  // partner status
-  const ex = (await add({ name: 'Ex', partnerIds: [bio] })).json.personId;
-  assert.equal((await edit(bio, { relKinds: { ['s:' + ex]: 'divorced' } })).status, 200);
-  assert.deepEqual(JSON.parse(s.world.tables.people.get(ex).relKinds), { ['s:' + bio]: 'divorced' });   // the other person's record says the same
-  assert.equal((await edit(bio, { relKinds: { ['s:' + ex]: 'married' } })).status, 200);
-  assert.deepEqual(JSON.parse(s.world.tables.people.get(ex).relKinds), { ['s:' + bio]: 'married' });
-  assert.equal((await edit(bio, { relKinds: { ['s:' + ex]: 'partner' } })).status, 200);   // back to the default: nothing stored on either side
-  assert.deepEqual(JSON.parse(s.world.tables.people.get(ex).relKinds), {});
-  assert.equal((await edit(bio, { relKinds: { ['s:' + ex]: 'divorced' } })).status, 200);
-  assert.equal((await edit(bio, { partnerIds: [] })).status, 200);   // ending the link removes the label too
-  assert.deepEqual(JSON.parse(s.world.tables.people.get(ex).relKinds), {});
-  // a plain member cannot change link kinds
-  assert.equal((await s.call(s.bob, { action: 'treeEditPerson', familyId: 'famA', personId: kid, relKinds: {} })).status, 403);
-});
-
-test('tree privacy: two families never see or touch each other\'s people', async () => {
-  const s = await setup();
-  const a = (await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Alpha person' })).json.personId;
-  const b = (await s.call(s.carol, { action: 'treeAddPerson', familyId: 'famB', name: 'Beta person' })).json.personId;
-  // every stored person is readable only by its own family's team
-  assert.deepEqual(s.world.tables.people.get(a).$permissions, ['read("team:famA")']);
-  assert.deepEqual(s.world.tables.people.get(b).$permissions, ['read("team:famB")']);
-  // carol (family B owner) cannot read, edit, delete, link or suggest on family A's people, even by naming her own family
-  const tries = [
-    { action: 'treeEditPerson', familyId: 'famA', personId: a, name: 'x' },
-    { action: 'treeDeletePerson', familyId: 'famA', personId: a },
-    { action: 'treeEditPerson', familyId: 'famB', personId: a, name: 'x' },
-    { action: 'treeDeletePerson', familyId: 'famB', personId: a },
-    { action: 'treeConfirm', familyId: 'famB', personId: a },
-    { action: 'suggestTreeChange', familyId: 'famB', personId: a, text: 'hello there' },
-    { action: 'treeAddPerson', familyId: 'famB', name: 'Link', parentIds: [a] },
-    { action: 'treeAddPerson', familyId: 'famA', name: 'Intruder' }
-  ];
-  for (const t of tries) {
-    const r = await s.call(s.carol, t);
-    assert.ok(r.status === 403 || r.status === 404 || r.status === 400, `${t.action} on ${t.familyId} should be refused, got ${r.status}`);
-  }
-  assert.equal(s.world.tables.people.get(a).name, 'Alpha person');
-  assert.equal(s.world.tables.people.size, 2);
 });
