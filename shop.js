@@ -17,7 +17,7 @@
   var h, clear, icon, toast;
 
   var CONSENT_IMAGE = 'To create your product, the selected image will be shared with Printify and the fulfillment partners needed to make and deliver it.';
-  var CONSENT_DELIVERY = 'Your name, delivery address, email and phone number (if you add one) will be shared with Printify and the shipping partners so they can deliver this order. They are not shown to your family.';
+  var CONSENT_DELIVERY = 'Your name, delivery address, email and phone number (if you add one) will be shared with Printify and the shipping partners so they can deliver this order. They are not shown to your family. Your email is also given to Square so it can send your payment receipt.';
 
   function money(c) { return '$' + (Number(c || 0) / 100).toFixed(2); }
   function st() { return X.S.shop || (X.S.shop = { orders: null, designs: null, addr: null, requestId: null }); }
@@ -85,7 +85,7 @@
       h('ol', { class: 'steps' },
         h('li', { text: 'Pick a product and a photo. Only photos whose owner allowed gifts can be used.' }),
         h('li', { text: 'Crop and place the photo. You see what will be cut off.' }),
-        h('li', { text: 'Check the total, with shipping, before paying on Stripe’s secure page.' }),
+        h('li', { text: 'Check the total, with shipping, before paying on Square’s secure page.' }),
         h('li', { text: 'After payment is confirmed, the photo is sent to Printify to be made and shipped. You can follow it in My orders.' }))));
     if (cat.isAdmin) main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/shop/admin', text: 'Manage the shop (owner only)' })));
   }
@@ -385,10 +385,10 @@
     form.appendChild(h('label', { class: 'check' }, cbDel, ' ', CONSENT_DELIVERY));
     form.appendChild(h('label', { class: 'check' }, cbImg, ' ', CONSENT_IMAGE + ' This happens only after your payment is confirmed.'));
     var quoteBtn = h('button', { class: 'btn secondary block', type: 'submit', text: 'Calculate shipping and total' });
-    var payBtn = h('button', { class: 'btn block', type: 'button', text: 'Pay securely with Stripe', hidden: true });
+    var payBtn = h('button', { class: 'btn block', type: 'button', text: 'Pay securely with Square', hidden: true });
     form.appendChild(quoteBtn); form.appendChild(summary); form.appendChild(payBtn); form.appendChild(msg);
     holder.appendChild(form);
-    holder.appendChild(h('p', { class: 'small muted', text: 'You pay on Stripe’s own page, so this app never sees your card number. Photos are printed and shipped by Printify and its partners. If something is wrong with an order, contact ' + (cat.config.supportEmail || 'the person who runs the shop') + '.' }));
+    holder.appendChild(h('p', { class: 'small muted', text: 'You pay on Square’s own page, so this app never sees your card number. Photos are printed and shipped by Printify and its partners. If something is wrong with an order, contact ' + (cat.config.supportEmail || 'the person who runs the shop') + '.' }));
 
     function readAddr() { var o = {}; Object.keys(F).forEach(function (k) { o[k] = F[k].inp.value; }); o.country = 'US'; return o; }
     function body() { return { familyId: X.S.familyId, designIds: designs.map(function (d) { return d.id; }), address: readAddr() }; }
@@ -417,10 +417,10 @@
         try {
           if (!st().requestId) st().requestId = newRequestId();      // the same cart gets the same id, so a double tap cannot make two orders
           var r = await shopApi('shopCheckout', Object.assign(body(), { requestId: st().requestId, consentImage: true, consentDelivery: true }));
-          if (!r.url) { location.hash = '#/orders/' + r.orderId; return; }
+          if (!r.url) { st().requestId = null; location.hash = '#/orders/' + r.orderId; return; }
           location.href = r.url;
         } catch (e) { X.showAlert(msg, 'error', msgOf(e)); }
-      }, 'Opening Stripe…');
+      }, 'Opening Square…');
     });
   }
 
@@ -439,6 +439,13 @@
       var r = await shopApi('shopOrders'); if (token !== X.S.nav) return; clear(holder);
       if (!r.orders.length) holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'No orders yet.' }), h('a', { class: 'btn', href: '#/shop', text: 'Browse gifts' })));
       else r.orders.forEach(function (o) { holder.appendChild(orderLine(o)); });
+      // A redirect or an email link is never proof of payment, so unpaid orders are re-checked with Square (at most 3).
+      var pend = r.orders.filter(function (o) { return o.paymentStatus === 'pending_payment' || o.paymentStatus === 'processing'; }).slice(0, 3);
+      if (pend.length) {
+        var changed = false;
+        for (var i = 0; i < pend.length; i++) { try { var u = await shopApi('shopOrder', { orderId: pend[i].id, refresh: true }); if (u.order.paymentStatus !== pend[i].paymentStatus) changed = true; } catch (e) { /* the list still shows what we had */ } }
+        if (changed && token === X.S.nav) { var r2 = await shopApi('shopOrders'); if (token === X.S.nav) { clear(holder); r2.orders.forEach(function (o) { holder.appendChild(orderLine(o)); }); } }
+      }
     } catch (e) { if (token === X.S.nav) { clear(holder); holder.appendChild(X.alertBox('error', msgOf(e))); } }
   }
   async function viewOrder(main, token, id, sub) {
@@ -453,7 +460,7 @@
     }
     function draw(o, support) {
       clear(holder);
-      if (sub === 'done' && (o.paymentStatus === 'pending_payment' || o.paymentStatus === 'processing')) holder.appendChild(X.alertBox('ok', 'Thank you. We are confirming your payment with Stripe. This page updates by itself.'));
+      if (sub === 'done' && (o.paymentStatus === 'pending_payment' || o.paymentStatus === 'processing')) holder.appendChild(X.alertBox('ok', 'Thank you. We are confirming your payment with Square. This page updates by itself.'));
       else if (sub === 'done' && o.paymentStatus === 'paid') holder.appendChild(X.alertBox('ok', 'Payment confirmed. Thank you!'));
       holder.appendChild(h('div', { class: 'card inner' }, h('span', { class: 'badge tone-' + o.stage.tone, text: o.stage.label })));
       holder.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'Items' }),
@@ -487,9 +494,11 @@
     function render() {
       clear(holder);
       holder.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'Status' }),
-        h('p', { text: 'Stripe mode: ' + chk.stripeMode.toUpperCase() + (chk.stripeMode === 'live' ? ' (real money)' : ' (practice)') }),
+        h('p', { text: 'Square mode: ' + chk.squareEnvironment.toUpperCase() + (chk.squareEnvironment === 'production' ? ' (real money)' : ' (practice)') }),
+        chk.squareLocation ? h('p', { class: chk.squareLocation.error ? 'small danger-text' : 'small', text: chk.squareLocation.error ? chk.squareLocation.error : 'Square location: ' + chk.squareLocation.name + ' (' + chk.squareLocation.status.toLowerCase() + ', ' + chk.squareLocation.currency + ')' }) : null,
+        chk.squareNotificationUrl ? h('p', { class: 'small', text: 'The Square webhook subscription must use exactly this URL: ' + chk.squareNotificationUrl }) : h('p', { class: 'small danger-text', text: 'Set WEBHOOK_BASE_URL so the Square webhook URL can be worked out.' }),
         h('p', { text: 'Orders go to production: ' + (chk.autoSubmit ? 'automatically after payment' : 'only after YOU approve them') }),
-        h('p', { text: 'Sales tax: ' + (chk.automaticTax ? 'calculated by Stripe Tax' : 'not added') }),
+        h('p', { text: 'Sales tax: ' + (chk.taxPercent ? 'a flat ' + chk.taxPercent + '% that you set (SQUARE_TAX_PERCENT)' : 'not added') }),
         chk.printifyShopsError ? h('p', { class: 'small danger-text', text: chk.printifyShopsError }) : null,
         chk.printifyShops ? h('p', { class: 'small', text: 'Printify stores this token can see: ' + (chk.printifyShops.length ? chk.printifyShops.map(function (x) { return x.title + ' (id ' + x.id + ', ' + (x.channel || 'store') + ')'; }).join('; ') : 'none') + '. PRINTIFY_SHOP_ID must be one of these ids.' }) : null,
         h('ul', { class: 'ticks' }, Object.keys(chk.configured).map(function (k) { return h('li', { text: (chk.configured[k] ? '✓ ' : '✗ missing: ') + k }); }))));
@@ -513,12 +522,15 @@
         var line = h('div', { class: 'admin-order' }, h('div', null, h('strong', { text: money(o.totalCents) }), ' ', h('span', { class: 'badge', text: o.paymentStatus }), ' ', h('span', { class: 'badge', text: o.fulfillmentStatus })),
           h('div', { class: 'small muted', text: o.items.map(function (i) { return i.quantity + '× ' + i.title; }).join(', ') + ' · ' + new Date(o.createdAt).toLocaleString() }),
           o.lastError ? h('div', { class: 'small danger-text', text: o.lastError }) : null,
+          h('div', { class: 'small muted', text: 'Paid with: ' + o.paymentProvider + (o.squarePaymentId ? ' · payment ' + o.squarePaymentId : '') + (o.oldStripeRef ? ' · Stripe ref ' + o.oldStripeRef + ' (refund in the Stripe dashboard)' : '') + (o.refundedCents ? ' · refunded ' + money(o.refundedCents) : '') }),
           o.printifyCostCents ? h('div', { class: 'small muted', text: 'Printify cost (items + shipping): ' + money(o.printifyCostCents) + ' · customer paid ' + money(o.subtotalCents + o.shippingCents) }) : null);
         var acts = h('div', { class: 'row' });
         function act(label, a) { acts.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: label, onclick: async function () {
           if (a === 'approve' && !(await X.confirmDialog('Send to production?', 'Printify will charge your Printify payment method for this order and start making it. Check the order in Printify first.', 'Approve'))) return;
-          if (a === 'cancel_printify' && !(await X.confirmDialog('Cancel at Printify?', 'This cancels the Printify order. It does NOT refund the customer. Refund in Stripe separately.', 'Cancel at Printify'))) return;
+          if (a === 'cancel_printify' && !(await X.confirmDialog('Cancel at Printify?', 'This cancels the Printify order. It does NOT refund the customer. Refund in Square separately.', 'Cancel at Printify'))) return;
           try { await shopApi('shopAdminResolve', { orderId: o.id, act: a }); await reload(); } catch (e) { toast(msgOf(e)); } } })); }
+        if (o.paymentProvider === 'square' && (o.paymentStatus === 'pending_payment' || o.paymentStatus === 'processing')) act('Check payment with Square', 'refresh');
+        if (o.paymentProvider === 'square' && o.paymentStatus === 'paid') act('Check for refunds in Square', 'refresh');
         if (o.paymentStatus === 'paid') {
           if (!o.printifyOrderId && (o.fulfillmentStatus === 'failed' || o.fulfillmentStatus === 'needs_review' || o.fulfillmentStatus === 'creating')) act('Retry creating the Printify order', 'retry');
           if (o.printifyOrderId) { act('Refresh from Printify', 'refresh'); if (['created', 'needs_review'].indexOf(o.fulfillmentStatus) >= 0) act('Approve and send to production', 'approve'); if (['created', 'needs_review'].indexOf(o.fulfillmentStatus) >= 0) act('Cancel at Printify', 'cancel_printify'); }
@@ -553,7 +565,7 @@
         } catch (e) { X.showAlert(msg, 'error', msgOf(e)); }
       }
       async function step3(b, pr) {
-        clear(body); body.appendChild(h('p', { class: 'hint', text: 'Step 3 of 3. Pick the variants to sell and type YOUR selling price for each. Look up Printify’s cost for the same variant in your Printify dashboard, so the price covers cost, shipping you do not pass on, Stripe’s fee and a margin.' }));
+        clear(body); body.appendChild(h('p', { class: 'hint', text: 'Step 3 of 3. Pick the variants to sell and type YOUR selling price for each. Look up Printify’s cost for the same variant in your Printify dashboard, so the price covers cost, shipping you do not pass on, Square’s fee and a margin.' }));
         try {
           var r = await shopApi('shopAdminVariants', { blueprintId: b.id, providerId: pr.id });
           var positions = []; r.variants.forEach(function (v) { v.placeholders.forEach(function (ph) { if (positions.indexOf(ph.position) < 0) positions.push(ph.position); }); });

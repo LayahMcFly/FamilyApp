@@ -1,35 +1,49 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { verifyStripeSignature, formEncode } from '../src/stripe.js';
+import { verifySquareSignature, createSquare, SquareError, SQUARE_VERSION } from '../src/square.js';
 import { verifyPrintifySignature, createPrintify, PrintifyError } from '../src/printify.js';
 import { imageSize } from '../src/images.js';
 
-test('stripe signature: valid, tampered, old, missing', () => {
-  const secret = 'whsec_test123', body = '{"id":"evt_1","type":"x"}', t = 1700000000;
-  const v1 = createHmac('sha256', secret).update(`${t}.${body}`).digest('hex');
-  const h = `t=${t},v1=${v1}`;
-  assert.equal(verifyStripeSignature(body, h, secret, { nowSec: t + 10 }), true);
-  assert.equal(verifyStripeSignature(body + ' ', h, secret, { nowSec: t + 10 }), false);
-  assert.equal(verifyStripeSignature(body, h, 'whsec_other', { nowSec: t + 10 }), false);
-  assert.equal(verifyStripeSignature(body, h, secret, { nowSec: t + 301 }), false);       // outside the 5 minute window
-  assert.equal(verifyStripeSignature(body, `t=${t},v1=${v1.slice(0, 10)}`, secret, { nowSec: t }), false);
-  assert.equal(verifyStripeSignature(body, '', secret, { nowSec: t }), false);
-  assert.equal(verifyStripeSignature(body, `t=${t},v0=abc,v1=${'0'.repeat(64)},v1=${v1}`, secret, { nowSec: t }), true);   // several v1 values: any may match
+const URL_ = 'https://fn.example/webhooks/square';
+test('square signature: base64 HMAC-SHA256 of notification URL + raw body', () => {
+  const key = 'sigkey123', body = '{"event_id":"e1","type":"payment.updated"}';
+  const sig = createHmac('sha256', key).update(URL_ + body).digest('base64');
+  assert.equal(verifySquareSignature(body, sig, key, URL_), true);
+  assert.equal(verifySquareSignature(body + ' ', sig, key, URL_), false, 'one extra byte in the body');
+  assert.equal(verifySquareSignature(body, sig, key, URL_ + '/'), false, 'URL must match exactly');
+  assert.equal(verifySquareSignature(body, sig, 'other', URL_), false);
+  assert.equal(verifySquareSignature(body, '', key, URL_), false);
+  assert.equal(verifySquareSignature(body, sig, '', URL_), false);
+  assert.equal(verifySquareSignature(body, sig, key, ''), false);
+  assert.equal(verifySquareSignature(body, sig.slice(0, 10), key, URL_), false);
 });
 
-test('stripe signature agrees with the official Stripe library', async () => {
-  let Stripe; try { Stripe = (await import('/tmp/stripe-x/node_modules/stripe/esm/stripe.esm.node.js')).default; } catch { return; }   // only when the library is installed
-  const secret = 'whsec_abc', body = JSON.stringify({ id: 'evt_2', object: 'event', type: 'checkout.session.completed' });
-  const header = new Stripe('sk_test_x').webhooks.generateTestHeaderString({ payload: body, secret });
-  assert.equal(verifyStripeSignature(body, header, secret), true);
-  new Stripe('sk_test_x').webhooks.constructEvent(body, header, secret);                  // the library accepts the same header
-  assert.equal(verifyStripeSignature(body, header, 'whsec_nope'), false);
+test('square signature agrees with the official Square library', async () => {
+  let W; try { W = (await import('/tmp/sq/node_modules/square/wrapper/WebhooksHelper.js')).WebhooksHelper; } catch { return; }   // only when the library is installed
+  const key = 'abc', body = JSON.stringify({ event_id: 'e', type: 'payment.updated', data: { object: { payment: { id: 'p' } } } });
+  const sig = createHmac('sha256', key).update(URL_ + body).digest('base64');
+  assert.equal(await W.verifySignature({ requestBody: body, signatureHeader: sig, signatureKey: key, notificationUrl: URL_ }), true);
+  assert.equal(verifySquareSignature(body, sig, key, URL_), true);
 });
 
-test('form encoding matches what Stripe expects', () => {
-  const s = formEncode({ mode: 'payment', line_items: [{ quantity: 2, price_data: { currency: 'usd', unit_amount: 1999, product_data: { name: 'A & B' } } }], metadata: { orderId: 'o1' }, skip: undefined });
-  assert.deepEqual(s, ['mode=payment', 'line_items%5B0%5D%5Bquantity%5D=2', 'line_items%5B0%5D%5Bprice_data%5D%5Bcurrency%5D=usd', 'line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=1999', 'line_items%5B0%5D%5Bprice_data%5D%5Bproduct_data%5D%5Bname%5D=A%20%26%20B', 'metadata%5BorderId%5D=o1']);
+test('square client: version header, bearer token, base URL per environment, safe errors, retries only for reads', async () => {
+  const calls = []; const replies = [];
+  const fetchImpl = async (url, opts) => { calls.push({ url, opts }); const r = replies.shift() || { status: 200, body: {} }; return { ok: r.status < 300, status: r.status, json: async () => r.body }; };
+  const sq = createSquare({ accessToken: 'TOKEN', environment: 'sandbox', fetchImpl, sleep: async () => {} });
+  replies.push({ status: 200, body: { payment_link: { id: 'pl' } } });
+  await sq.createPaymentLink({ idempotency_key: 'k' });
+  assert.equal(calls[0].url, 'https://connect.squareupsandbox.com/v2/online-checkout/payment-links'); assert.equal(calls[0].opts.method, 'POST');
+  assert.equal(calls[0].opts.headers.Authorization, 'Bearer TOKEN'); assert.equal(calls[0].opts.headers['Square-Version'], SQUARE_VERSION);
+  const live = createSquare({ accessToken: 'T', environment: 'production', fetchImpl, sleep: async () => {} });
+  await live.retrievePayment('p/1'); assert.equal(calls[1].url, 'https://connect.squareup.com/v2/payments/p%2F1');
+  assert.equal(createSquare({ accessToken: 'T', environment: 'anything', fetchImpl }).environment, 'sandbox', 'unknown values fall back to sandbox');
+  replies.push({ status: 429, body: {} }, { status: 200, body: { order: { id: 'o' } } });
+  assert.equal((await sq.retrieveOrder('o')).order.id, 'o'); assert.equal(calls.length, 4, 'a read is retried once');
+  const n = calls.length; replies.push({ status: 500, body: {} }, { status: 200, body: {} });
+  await assert.rejects(() => sq.createPaymentLink({}), (e) => e instanceof SquareError && e.status === 500); assert.equal(calls.length, n + 1, 'a create is never retried blindly');
+  replies.length = 0; replies.push({ status: 400, body: { errors: [{ category: 'INVALID_REQUEST_ERROR', code: 'BAD_REQUEST', field: 'order', detail: 'echo TOKEN secret' }] } });
+  await assert.rejects(() => sq.retrieveLocation('L'), (e) => e instanceof SquareError && e.status === 400 && e.codes[0] === 'BAD_REQUEST' && !JSON.stringify(e).includes('TOKEN') && !String(e.message).includes('TOKEN'));
 });
 
 test('printify signature: sha256= prefix, body only, constant-time compare', () => {

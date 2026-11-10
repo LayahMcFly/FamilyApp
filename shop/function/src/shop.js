@@ -4,14 +4,15 @@
  * Trust model
  *  - `user` is the account Appwrite returns for the caller's own JWT. It is never read from the request body.
  *  - Prices, variants, shipping and totals are decided here. The browser only says WHICH saved designs and WHERE to ship.
- *  - Printify and Stripe secrets exist only in this function's environment.
+ *  - Printify and Square secrets exist only in this function's environment.
  *  - Payment and fulfillment are two separate states. A browser redirect proves nothing: payment is confirmed by asking
- *    Stripe's API for the Checkout Session (webhook events only tell us WHEN to ask).
+ *    Square's API for the Payment and its Order (webhook events only tell us WHEN to ask).
+ *  - Only payments for OUR location, tied to an order WE created (reference_id + saved Square order id), are ever looked at.
  *  - A Printify order is created only AFTER payment is verified, so nothing can enter production for an unpaid order.
  */
 import { Query, Permission, Role } from 'node-appwrite';
 import { ApiError, bad, forbidden, missing, conflict, idOf, intIn, rowId, sha256hex, money, publicError } from './util.js';
-import { verifyStripeSignature } from './stripe.js';
+import { verifySquareSignature, SquareError } from './square.js';
 import { PrintifyError, verifyPrintifySignature } from './printify.js';
 import { imageSize } from './images.js';
 
@@ -33,7 +34,8 @@ export const SLOTS = {
 export const LIMITS = { maxDesignsOpen: 20, maxQty: 10, maxLines: 10, minPrint: 600, maxDesignBytes: 5 * 1024 * 1024, specMax: 3500 };
 
 // Payment and fulfillment are tracked separately.
-const PAY_RANK = { pending_payment: 0, processing: 1, expired: 1, payment_failed: 1, paid: 3, refunded: 4 };
+const PAY_RANK = { pending_payment: 0, processing: 1, expired: 1, payment_failed: 1, paid: 3, partially_refunded: 4, refunded: 5 };
+const UNFULFILLED = ['not_started', 'creating', 'created', 'failed', 'needs_review', 'has_issues'];
 const FULFILL_FORWARD = ['not_started', 'creating', 'created', 'sending', 'in_production', 'shipped', 'delivered'];
 const rankOf = (s) => FULFILL_FORWARD.indexOf(s);
 const PRINTIFY_TO_OURS = {
@@ -52,6 +54,11 @@ export function stageOf(o) {
   if (p === 'processing') return { label: 'Payment is processing', tone: 'wait' };
   if (p === 'expired' || p === 'payment_failed') return { label: 'Payment was not completed. You were not charged for this order.', tone: 'stop' };
   if (p === 'refunded') return { label: 'Refunded', tone: 'stop' };
+  const part = p === 'partially_refunded' ? ' A partial refund was issued.' : '';
+  const r = stageByFulfillment(f);
+  return part ? { ...r, label: r.label + part } : r;
+}
+function stageByFulfillment(f) {
   if (f === 'canceled') return { label: 'Canceled. The shop owner will handle any refund.', tone: 'stop' };
   if (f === 'delivered') return { label: 'Delivered', tone: 'ok' };
   if (f === 'shipped') return { label: 'Shipped', tone: 'ok' };
@@ -61,7 +68,7 @@ export function stageOf(o) {
   return { label: 'Payment received. We are preparing your order.', tone: 'ok' };
 }
 
-export function createShop({ users, db, storage, stripe, printify, cfg, now = () => Date.now(), log = () => {} }) {
+export function createShop({ users, db, storage, square, printify, cfg, now = () => Date.now(), log = () => {} }) {
   const databaseId = cfg.databaseId;
   const listRows = (tableId, queries) => db.listRows({ databaseId, tableId, queries });
   const createRow = (tableId, id, data, permissions) => db.createRow({ databaseId, tableId, rowId: id, data, permissions });
@@ -74,6 +81,10 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
   const countries = cfg.countries && cfg.countries.length ? cfg.countries : ['US'];
   const currency = (cfg.currency || 'usd').toLowerCase();
   const nowIso = () => new Date(now()).toISOString();
+  const CUR = currency.toUpperCase();
+  const taxPercent = Number(cfg.taxPercent || 0);
+  const squareReady = () => !!(square && cfg.squareConfigured && cfg.squareLocationId);
+  const notificationUrl = () => cfg.squareNotificationUrl || (cfg.webhookBase ? `${cfg.webhookBase.replace(/\/$/, '')}/webhooks/square` : '');
 
   /* ---------- identity ---------- */
   function requireVerifiedUser(user) {
@@ -152,7 +163,7 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
     return {
       products,
       slots: Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, available: products.some((p) => p.key === key) })),
-      config: { countries, currency, maxQty: LIMITS.maxQty, supportEmail: cfg.supportEmail || '', automaticTax: !!cfg.automaticTax, testMode: /^(sk|rk)_test_/.test(cfg.stripeKeyPrefix || '') },
+      config: { countries, currency, maxQty: LIMITS.maxQty, supportEmail: cfg.supportEmail || '', taxPercent, testMode: cfg.squareEnvironment !== 'production', paymentsReady: squareReady() },
       isAdmin: isAdmin(user)
     };
   }
@@ -167,9 +178,11 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
   }
   async function releaseIfStale(d) {
     if (!d.orderId) return d;
-    const o = await getRowOrNull(T.orders, d.orderId);
+    let o = await getRowOrNull(T.orders, d.orderId);
     const age = o ? now() - new Date(o.$createdAt).getTime() : Infinity;
-    const dead = !o || ['expired', 'payment_failed'].includes(o.paymentStatus) || (o.paymentStatus === 'pending_payment' && age > 35 * 60e3);
+    // A Square payment link does not expire by itself, so before freeing a design we ask Square whether it was paid, and close the link.
+    if (o && o.paymentStatus === 'pending_payment' && age > 35 * 60e3) { try { o = await closeUnpaid(o); } catch (e) { log('stale close failed', String(e && e.message)); return d; } }
+    const dead = !o || ['expired', 'payment_failed'].includes(o.paymentStatus);
     if (dead) { await updateRow(T.designs, d.$id, { orderId: '' }); return { ...d, orderId: '' }; }
     return d;
   }
@@ -305,7 +318,7 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
     const address = cleanAddress(body.address, user);
     const { lines, subtotalCents } = await priceDesigns(user, familyId, body.designIds);
     const shippingCents = await shippingFor(lines, address);
-    return { lines: lines.map(({ title, variantLabel, quantity, unitCents }) => ({ title, variantLabel, quantity, unitCents })), subtotalCents, shippingCents, totalCents: subtotalCents + shippingCents, currency, taxNote: cfg.automaticTax ? 'Sales tax, if it applies, is added by our payment provider on the next page.' : 'No sales tax is added by this shop.' };
+    return { lines: lines.map(({ title, variantLabel, quantity, unitCents }) => ({ title, variantLabel, quantity, unitCents })), subtotalCents, shippingCents, totalCents: subtotalCents + shippingCents, currency, taxNote: taxPercent > 0 ? `Sales tax of ${taxPercent}% is added on Square\u2019s payment page.` : 'No sales tax is added by this shop.' };
   }
 
   /* ---------- checkout ---------- */
@@ -320,9 +333,34 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
       tracking, address
     };
   };
+  /** What Square built must match what we priced: our location, our reference id, our amounts, and only a tax we expect. Returns '' when fine. */
+  function squareOrderProblem(sq, orderId, subtotalCents, shippingCents) {
+    if (!sq || typeof sq !== 'object') return 'no order returned';
+    if (sq.location_id !== cfg.squareLocationId) return 'location';
+    if (sq.reference_id !== orderId) return 'reference';
+    const total = Number(sq.total_money && sq.total_money.amount);
+    const tax = Number((sq.total_tax_money && sq.total_tax_money.amount) || 0);
+    if (!Number.isInteger(total) || String((sq.total_money || {}).currency).toUpperCase() !== CUR) return 'currency';
+    if (total !== subtotalCents + shippingCents + tax) return 'total';
+    if (taxPercent === 0 && tax !== 0) return 'unexpected tax';
+    if (taxPercent > 0 && (tax > Math.ceil((subtotalCents + shippingCents) * taxPercent / 100) + 1 || tax < Math.floor(subtotalCents * taxPercent / 100) - 1)) return 'tax amount';
+    const lines = Array.isArray(sq.line_items) ? sq.line_items : [];
+    if (lines.length) {
+      const sum = lines.reduce((n, l) => n + Number(l.quantity) * Number(l.base_price_money && l.base_price_money.amount), 0);
+      if (sum !== subtotalCents) return 'items';
+    }
+    return '';
+  }
+  async function failCheckout(orderId, lines, why, e) {
+    log('square checkout failed', why, e instanceof SquareError ? `${e.status} ${e.codes.join(',')}` : String(e && e.message));
+    await updateRow(T.orders, orderId, { paymentStatus: 'payment_failed', lastError: 'Checkout could not be started.' });
+    for (const l of lines) await updateRow(T.designs, l.designId, { orderId: '' });
+    throw new ApiError(502, 'checkout_failed', 'Payment could not be started. You were not charged. Please try again.');
+  }
   async function checkout({ user, body }) {
     const { familyId } = await requireMember(user, body.familyId);
     if (body.consentImage !== true || body.consentDelivery !== true) throw bad('Please confirm both permission boxes before paying.');
+    if (!squareReady()) throw new ApiError(503, 'payments_not_ready', 'Payments are not set up yet. Please try again later.');
     const requestId = typeof body.requestId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(body.requestId) ? body.requestId : null;
     if (!requestId) throw bad('Missing request id.');
     const orderId = rowId('order', user.$id, requestId);
@@ -334,97 +372,167 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
     const address = cleanAddress(body.address, user);
     const { lines, subtotalCents } = await priceDesigns(user, familyId, body.designIds);
     const shippingCents = await shippingFor(lines, address);
-    const totalCents = subtotalCents + shippingCents;
     const row = {
       ownerId: user.$id, familyId, paymentStatus: 'pending_payment', fulfillmentStatus: 'not_started', items: JSON.stringify(lines), address: JSON.stringify(address),
-      subtotalCents, shippingCents, taxCents: 0, totalCents, currency, stripeSessionId: '', stripePaymentIntent: '', checkoutUrl: '', printifyOrderId: '', tracking: '[]', lastError: '',
-      consentAt: nowIso(), consentVersion: 1, needsReview: ''
+      subtotalCents, shippingCents, taxCents: 0, totalCents: subtotalCents + shippingCents, currency, paymentProvider: 'square', squarePaymentLinkId: '', squareOrderId: '', squarePaymentId: '', refundedCents: 0,
+      checkoutUrl: '', printifyOrderId: '', tracking: '[]', lastError: '', consentAt: nowIso(), consentVersion: 2, needsReview: ''
     };
     await createRow(T.orders, orderId, row, ownerRead(user.$id));
     for (const l of lines) await updateRow(T.designs, l.designId, { orderId });
-    const params = {
-      mode: 'payment',
-      client_reference_id: orderId,
-      customer_email: user.email,
-      success_url: `${cfg.siteUrl}#/orders/${orderId}/done`,
-      cancel_url: `${cfg.siteUrl}#/shop/cart`,
-      expires_at: Math.floor(now() / 1000) + 31 * 60,
-      metadata: { orderId, familyId },
-      payment_intent_data: { metadata: { orderId } },
-      line_items: lines.map((l) => ({ quantity: l.quantity, price_data: { currency, unit_amount: l.unitCents, product_data: { name: `${l.title} (${l.variantLabel})`.slice(0, 120) } } })),
-      shipping_options: [{ shipping_rate_data: { type: 'fixed_amount', display_name: 'Standard shipping', fixed_amount: { amount: shippingCents, currency } } }]
+    const short = orderId.slice(0, 8);
+    const request = {
+      idempotency_key: orderId,
+      description: `FamilyCircle order ${short}`,
+      payment_note: `FamilyCircle order ${short}`,
+      order: {
+        location_id: cfg.squareLocationId,
+        reference_id: orderId,
+        metadata: { orderId, familyId },
+        line_items: lines.map((l) => ({ name: `${l.title} (${l.variantLabel})`.slice(0, 500), quantity: String(l.quantity), base_price_money: { amount: l.unitCents, currency: CUR }, metadata: { designId: l.designId } })),
+        ...(taxPercent > 0 ? { taxes: [{ uid: 'sales-tax', name: 'Sales tax', type: 'ADDITIVE', percentage: String(taxPercent), scope: 'ORDER' }] } : {})
+      },
+      checkout_options: {
+        redirect_url: `${cfg.siteUrl}#/orders/${orderId}/done`,
+        ask_for_shipping_address: false,                 // the address was collected in the app, so shipping could be priced BEFORE payment
+        allow_tipping: false, enable_coupon: false, enable_loyalty: false,
+        ...(shippingCents > 0 ? { shipping_fee: { name: 'Standard shipping', charge: { amount: shippingCents, currency: CUR } } } : {}),
+        ...(cfg.supportEmail ? { merchant_support_email: cfg.supportEmail } : {})
+      },
+      pre_populated_data: { buyer_email: user.email }
     };
-    if (cfg.automaticTax) { params.automatic_tax = { enabled: true }; params.shipping_address_collection = { allowed_countries: countries }; }
-    let session;
-    try { session = await stripe.createCheckoutSession(params, orderId); }
-    catch (e) {
-      log('stripe checkout failed', e && e.detail ? JSON.stringify(e.detail) : String(e && e.message));
-      await updateRow(T.orders, orderId, { paymentStatus: 'payment_failed', lastError: 'Checkout could not be started.' });
-      for (const l of lines) await updateRow(T.designs, l.designId, { orderId: '' });
-      throw new ApiError(502, 'checkout_failed', 'Payment could not be started. You were not charged. Please try again.');
-    }
-    await updateRow(T.orders, orderId, { stripeSessionId: session.id, checkoutUrl: session.url });
-    return { orderId, url: session.url };
+    let link;
+    try { link = await square.createPaymentLink(request); } catch (e) { return failCheckout(orderId, lines, 'create', e); }
+    const pl = (link && link.payment_link) || {};
+    const url = String(pl.url || pl.long_url || '');
+    if (!pl.id || !pl.order_id || !/^https:\/\//.test(url)) return failCheckout(orderId, lines, 'unexpected response');
+    let sq = ((link.related_resources && link.related_resources.orders) || []).find((x) => x && x.id === pl.order_id);
+    try { if (!sq) sq = (await square.retrieveOrder(pl.order_id)).order; } catch (e) { sq = null; }
+    const problem = squareOrderProblem(sq, orderId, subtotalCents, shippingCents);
+    if (problem) { try { await square.deletePaymentLink(pl.id); } catch { /* the order row is already marked failed below, and a payment for it would be held */ } return failCheckout(orderId, lines, `order check: ${problem}`); }
+    const taxCents = Number((sq.total_tax_money && sq.total_tax_money.amount) || 0);
+    await updateRow(T.orders, orderId, { squarePaymentLinkId: pl.id, squareOrderId: pl.order_id, checkoutUrl: url, taxCents, totalCents: Number(sq.total_money.amount) });
+    return { orderId, url };
   }
   async function cancelOrder({ user, body }) {
-    const o = await getRowOrNull(T.orders, idOf(body.orderId, 'orderId'));
+    let o = await getRowOrNull(T.orders, idOf(body.orderId, 'orderId'));
     if (!o || o.ownerId !== user.$id) throw missing('Order not found.');
     if (o.paymentStatus !== 'pending_payment') throw conflict('not_cancelable', 'This order was already paid or closed. Contact the shop owner to cancel it.');
-    try { if (o.stripeSessionId) await stripe.expireSession(o.stripeSessionId); } catch { /* it may already be expired or paid: the check below asks Stripe */ }
-    const settled = await applyStripeSession(o.stripeSessionId, {});
-    return { order: publicOrder(settled || o) };
+    o = await closeUnpaid(o);
+    return { order: publicOrder(o) };
+  }
+  /** A Square payment link has no expiry of its own. Before an unpaid order is closed we ask Square whether it was paid, then delete the link. */
+  async function closeUnpaid(o) {
+    if (o.paymentStatus !== 'pending_payment') return o;
+    let note = '';
+    if (o.paymentProvider === 'square' && o.squareOrderId && squareReady()) {
+      const cur = await reconcile(o);
+      if (cur.paymentStatus !== 'pending_payment') return cur;           // it was paid (or is processing): do not close it
+      if (o.squarePaymentLinkId) { try { await square.deletePaymentLink(o.squarePaymentLinkId); } catch (e) { if (!(e instanceof SquareError && e.status === 404)) log('link delete failed', String(e && e.message)); } }
+    } else if (o.paymentProvider !== 'square') note = 'Closed after the shop moved to Square. If this order was paid through the old payment provider, tell the shop owner.';
+    const closed = await updateRow(T.orders, o.$id, { paymentStatus: 'expired', lastError: note });
+    await releaseOrderDesigns(closed);
+    return closed;
   }
 
-  /* ---------- payment: Stripe is asked, never believed from the browser ---------- */
+  /* ---------- payment: Square is asked, never believed from the browser or from an event body ---------- */
   function orderIsHeld(o) { return o.fulfillmentStatus === 'needs_review'; }
   async function releaseOrderDesigns(o) {
     let items = []; try { items = JSON.parse(o.items || '[]'); } catch { items = []; }
     for (const i of items) { try { await updateRow(T.designs, i.designId, { orderId: '' }); } catch (e) { if (sdkCode(e) !== 404) throw e; } }
   }
-  async function applyStripeSession(sessionId, { failed = false } = {}) {
-    if (!sessionId) return null;
-    const session = await stripe.retrieveSession(sessionId);
-    const id = session.client_reference_id;
-    if (!id) return null;
-    let o = await getRowOrNull(T.orders, id);
-    if (!o || o.stripeSessionId !== session.id) return null;          // a session we did not create for this order
-    const paid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
-    if (paid) return markPaid(o, session);
-    let next = null;
-    if (failed) next = 'payment_failed';
-    else if (session.status === 'expired') next = 'expired';
-    else if (session.status === 'complete') next = 'processing';        // delayed payment method: waiting for the bank
-    if (next && PAY_RANK[next] > PAY_RANK[o.paymentStatus]) {
-      o = await updateRow(T.orders, o.$id, { paymentStatus: next });
-      if (next === 'expired' || next === 'payment_failed') await releaseOrderDesigns(o);
-    } else if (next && o.paymentStatus === 'processing' && (next === 'expired' || next === 'payment_failed')) {
-      o = await updateRow(T.orders, o.$id, { paymentStatus: next }); await releaseOrderDesigns(o);
+  const notFound = (e) => e instanceof SquareError && e.status === 404;
+  /** Fetches the payment and its order from Square, and returns our order only when it is one of ours at our location. Otherwise null (ignored). */
+  async function locate(paymentId, known) {
+    let payment;
+    try { payment = (await square.retrievePayment(paymentId)).payment; } catch (e) { if (notFound(e)) return null; throw e; }
+    if (!payment || payment.location_id !== cfg.squareLocationId || !payment.order_id) return null;
+    let sq = known && known.id === payment.order_id ? known : null;
+    try { if (!sq) sq = (await square.retrieveOrder(payment.order_id)).order; } catch (e) { if (notFound(e)) return null; throw e; }
+    const ref = sq && sq.reference_id;
+    if (!sq || typeof ref !== 'string' || !/^[a-f0-9]{35}$/.test(ref) || sq.location_id !== cfg.squareLocationId) return null;
+    const o = await getRowOrNull(T.orders, ref);
+    if (!o || o.paymentProvider !== 'square' || o.squareOrderId !== sq.id) return null;           // an unrelated payment on this Square account
+    return { o, payment, sq };
+  }
+  async function applyPayment(paymentId, known) {
+    const hit = await locate(paymentId, known);
+    return hit ? applyPaymentToOrder(hit.o, hit.payment, hit.sq) : null;
+  }
+  async function applyPaymentToOrder(o, payment, sq) {
+    const st = String(payment.status);
+    if (st === 'COMPLETED') return markPaid(o, payment, sq);
+    if (PAY_RANK[o.paymentStatus] >= PAY_RANK.paid) return o;
+    if (st === 'APPROVED' || st === 'PENDING') {
+      if (o.paymentStatus === 'pending_payment') return updateRow(T.orders, o.$id, { paymentStatus: 'processing', squarePaymentId: payment.id });
+      return o;
+    }
+    if (st === 'FAILED' || st === 'CANCELED') {
+      if (o.paymentStatus === 'processing') { const f = await updateRow(T.orders, o.$id, { paymentStatus: 'payment_failed', lastError: '' }); await releaseOrderDesigns(f); return f; }
+      return o;       // one declined attempt: the Square page stays open for another try, so the order keeps waiting
     }
     return o;
   }
-  async function markPaid(o, session) {
-    if (PAY_RANK[o.paymentStatus] >= PAY_RANK.paid) return o;           // already paid (duplicate or out-of-order event)
-    const shipping = Number((session.shipping_cost && session.shipping_cost.amount_subtotal) ?? (session.total_details && session.total_details.amount_shipping) ?? 0);
-    const tax = Number((session.total_details && session.total_details.amount_tax) || 0);
-    const problems = [];
-    if (String(session.currency).toLowerCase() !== o.currency) problems.push('currency');
-    if (Number(session.amount_subtotal) !== o.subtotalCents) problems.push('items total');
-    if (shipping !== o.shippingCents) problems.push('shipping');
-    if (Number(session.amount_total) !== o.subtotalCents + o.shippingCents + tax) problems.push('total');
-    if (cfg.automaticTax) {
-      const a = JSON.parse(o.address || '{}');
-      const d = (session.collected_information && session.collected_information.shipping_details && session.collected_information.shipping_details.address) || (session.shipping_details && session.shipping_details.address) || {};
-      const zip5 = (z) => String(z || '').slice(0, 5);
-      if (!d.country || d.country !== a.country || zip5(d.postal_code) !== zip5(a.zip) || String(d.state || '').toUpperCase() !== a.region) problems.push('delivery address');
+  async function markPaid(o, payment, sq) {
+    if (PAY_RANK[o.paymentStatus] >= PAY_RANK.paid) {            // duplicate or out-of-order event
+      if (o.squarePaymentId && o.squarePaymentId !== payment.id && !String(o.lastError || '').includes(payment.id)) {
+        return updateRow(T.orders, o.$id, { lastError: `A second payment (${payment.id}) was received for this order. Refund the extra payment in Square.` });
+      }
+      return o;
     }
-    const data = {
-      paymentStatus: 'paid', paidAt: nowIso(), taxCents: tax, totalCents: Number(session.amount_total) || o.totalCents,
-      stripePaymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : (session.payment_intent && session.payment_intent.id) || ''
-    };
+    const problems = [];
+    const total = Number(payment.total_money && payment.total_money.amount);
+    if (total !== o.totalCents) problems.push('amount');
+    if (Number((payment.tip_money && payment.tip_money.amount) || 0) !== 0) problems.push('tip');
+    if (String((payment.total_money || {}).currency).toUpperCase() !== CUR) problems.push('currency');
+    if (!sq || Number(sq.total_money && sq.total_money.amount) !== o.totalCents) problems.push('order total');
+    if (!sq || !['OPEN', 'COMPLETED'].includes(String(sq.state))) problems.push('order state');
+    if (!sq || !sq.metadata || sq.metadata.orderId !== o.$id) problems.push('order reference');
+    const lines = sq && Array.isArray(sq.line_items) ? sq.line_items : [];
+    if (lines.length && lines.reduce((n, l) => n + Number(l.quantity) * Number(l.base_price_money && l.base_price_money.amount), 0) !== o.subtotalCents) problems.push('items');
+    if (['expired', 'payment_failed'].includes(o.paymentStatus)) problems.push('order had already been closed');
+    const refunded = Number((payment.refunded_money && payment.refunded_money.amount) || 0);
+    const data = { paymentStatus: 'paid', paidAt: nowIso(), squarePaymentId: payment.id, refundedCents: refunded };
+    if (refunded > 0) { data.paymentStatus = refunded >= o.totalCents ? 'refunded' : 'partially_refunded'; problems.push('payment was refunded'); }
     if (problems.length) { data.fulfillmentStatus = 'needs_review'; data.lastError = `Payment did not match the order (${problems.join(', ')}). Nothing was sent to production.`; }
     const paidRow = await updateRow(T.orders, o.$id, data);
-    if (problems.length) return paidRow;
+    if (problems.length || paidRow.paymentStatus !== 'paid') return paidRow;
     return fulfill(paidRow.$id);
+  }
+  async function reconcile(o) {
+    if (o.paymentProvider !== 'square' || !o.squareOrderId || !squareReady()) return o;
+    let sq;
+    try { sq = (await square.retrieveOrder(o.squareOrderId)).order; } catch (e) { if (notFound(e)) return o; throw e; }
+    if (!sq) return o;
+    let cur = o;
+    for (const t of sq.tenders || []) { const pid = t && (t.payment_id || t.id); if (pid) cur = (await applyPayment(String(pid), sq)) || cur; }
+    return cur;
+  }
+  /* ---------- refunds (made by the owner in Square; we only record them) ---------- */
+  async function recordRefund(o, payment, refund) {
+    const prior = Number(o.refundedCents || 0);
+    const total = Math.max(prior, Number((payment.refunded_money && payment.refunded_money.amount) || 0), refund ? Number((refund.amount_money && refund.amount_money.amount) || 0) : 0);
+    if (total <= prior && PAY_RANK[o.paymentStatus] >= PAY_RANK.partially_refunded) return o;
+    const next = total >= o.totalCents ? 'refunded' : 'partially_refunded';
+    const data = { refundedCents: total };
+    if (PAY_RANK[next] > PAY_RANK[o.paymentStatus]) data.paymentStatus = next;
+    if (next === 'refunded' && UNFULFILLED.includes(o.fulfillmentStatus)) { data.fulfillmentStatus = 'needs_review'; data.lastError = 'Refunded in Square. If production has not started, cancel the order at Printify.'; }
+    return updateRow(T.orders, o.$id, data);
+  }
+  async function applyRefund(refundId) {
+    let refund;
+    try { refund = (await square.retrieveRefund(refundId)).refund; } catch (e) { if (notFound(e)) return null; throw e; }
+    if (!refund || !refund.payment_id) return null;
+    const hit = await locate(String(refund.payment_id));
+    if (!hit) return null;
+    let { o } = hit;
+    if (PAY_RANK[o.paymentStatus] < PAY_RANK.paid) o = await applyPaymentToOrder(o, hit.payment, hit.sq);      // events can arrive out of order: payment first
+    if (String(refund.status) !== 'COMPLETED') return o;
+    return recordRefund(o, hit.payment, refund);
+  }
+  async function refreshRefunds(o) {
+    if (o.paymentProvider !== 'square' || !o.squarePaymentId || !squareReady()) return o;
+    const payment = (await square.retrievePayment(o.squarePaymentId)).payment;
+    return payment && Number((payment.refunded_money && payment.refunded_money.amount) || 0) > Number(o.refundedCents || 0) ? recordRefund(o, payment, null) : o;
   }
 
   /* ---------- fulfillment: only ever after verified payment ---------- */
@@ -489,7 +597,12 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
   }
   async function submitToProduction(o) {
     if (!o.printifyOrderId) throw conflict('no_printify_order', 'There is no Printify order to approve yet.');
-    if (o.paymentStatus !== 'paid') throw conflict('not_paid', 'This order has not been paid.');
+    if (o.paymentStatus !== 'paid') throw conflict('not_paid', 'This order has not been paid, or it was refunded.');
+    if (o.paymentProvider === 'square') {            // a refund made after payment must stop approval, so ask Square again right now
+      const cur = await refreshRefunds(o);
+      if (cur.paymentStatus !== 'paid') throw conflict('refunded', 'This order was refunded in Square, so it was not sent to production.');
+      o = cur;
+    }
     await printify.sendToProduction(o.printifyOrderId);
     return updateRow(T.orders, o.$id, { fulfillmentStatus: 'sending', lastError: '' });
   }
@@ -526,7 +639,7 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
     if (!o || o.ownerId !== user.$id) throw missing('Order not found.');     // not even other family members, or tree admins, can open it
     if (body.refresh === true) {
       try {
-        if (o.paymentStatus === 'pending_payment' || o.paymentStatus === 'processing') o = (await applyStripeSession(o.stripeSessionId, {})) || o;
+        if (o.paymentStatus === 'pending_payment' || o.paymentStatus === 'processing') o = await reconcile(o);
         else if (o.printifyOrderId && now() - new Date(o.$updatedAt).getTime() > 20000) o = await syncFromPrintify(o);
       } catch (e) { log('refresh failed', String(e && e.message)); }
     }
@@ -539,18 +652,30 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
     try { await createRow(T.events, rowId(source, eventId), { source, eventId: String(eventId).slice(0, 80), type: String(type).slice(0, 80), note: String(note || '').slice(0, 200) }, []); }
     catch (e) { if (sdkCode(e) !== 409) throw e; }
   }
-  async function stripeWebhook(raw, headers) {
-    if (!cfg.stripeWebhookSecret) return { status: 503, json: { ok: false, error: 'not_configured' } };
-    if (!verifyStripeSignature(raw, headers['stripe-signature'], cfg.stripeWebhookSecret, { nowSec: Math.floor(now() / 1000) })) return { status: 400, json: { ok: false, error: 'bad_signature' } };
+  let merchantOk = null;     // cached: does the event's merchant match the merchant that owns our location?
+  async function merchantMatches(merchantId) {
+    if (!merchantId) return true;
+    if (!merchantOk) { try { const loc = (await square.retrieveLocation(cfg.squareLocationId)).location; merchantOk = loc && loc.merchant_id ? loc.merchant_id : ''; } catch { return true; } }
+    return !merchantOk || merchantOk === merchantId;
+  }
+  async function squareWebhook(raw, headers) {
+    if (!cfg.squareWebhookSignatureKey || !notificationUrl() || !squareReady()) return { status: 503, json: { ok: false, error: 'not_configured' } };
+    if (!verifySquareSignature(raw, headers['x-square-hmacsha256-signature'], cfg.squareWebhookSignatureKey, notificationUrl())) return { status: 400, json: { ok: false, error: 'bad_signature' } };
     let ev; try { ev = JSON.parse(raw); } catch { return { status: 400, json: { ok: false, error: 'bad_json' } }; }
-    if (!ev || typeof ev.id !== 'string' || typeof ev.type !== 'string') return { status: 400, json: { ok: false, error: 'bad_event' } };
-    if (await seenEvent('stripe', ev.id)) return { status: 200, json: { ok: true, duplicate: true } };
-    const sess = ev.data && ev.data.object;
-    const handled = ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed', 'checkout.session.expired'];
-    if (handled.includes(ev.type) && sess && typeof sess.id === 'string') {
-      await applyStripeSession(sess.id, { failed: ev.type === 'checkout.session.async_payment_failed' });
+    if (!ev || typeof ev.event_id !== 'string' || typeof ev.type !== 'string') return { status: 400, json: { ok: false, error: 'bad_event' } };
+    if (await seenEvent('square', ev.event_id)) return { status: 200, json: { ok: true, duplicate: true } };
+    let note = 'ignored';
+    if (!(await merchantMatches(ev.merchant_id))) note = 'other merchant';
+    else {
+      // The event only says WHICH payment or refund changed. Square is asked for the facts.
+      const obj = ev.data && ev.data.object;
+      if ((ev.type === 'payment.created' || ev.type === 'payment.updated') && obj && obj.payment && typeof obj.payment.id === 'string') {
+        note = (await applyPayment(obj.payment.id)) ? '' : 'not one of our orders';
+      } else if ((ev.type === 'refund.created' || ev.type === 'refund.updated') && obj && obj.refund && typeof obj.refund.id === 'string') {
+        note = (await applyRefund(obj.refund.id)) ? '' : 'not one of our orders';
+      }
     }
-    await recordEvent('stripe', ev.id, ev.type, handled.includes(ev.type) ? '' : 'ignored');
+    await recordEvent('square', ev.event_id, ev.type, note);
     return { status: 200, json: { ok: true } };
   }
   async function printifyWebhook(raw, headers) {
@@ -580,16 +705,19 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
   }
 
   /* ---------- store owner only ---------- */
-  const adminOrderRow = (o) => ({ ...publicOrder(o), buyerId: o.ownerId, printifyOrderId: o.printifyOrderId || '', printifyStatus: o.printifyStatus || '', printifyCostCents: o.printifyCostCents || 0, lastError: o.lastError || '' });
+  const adminOrderRow = (o) => ({ ...publicOrder(o), buyerId: o.ownerId, printifyOrderId: o.printifyOrderId || '', printifyStatus: o.printifyStatus || '', printifyCostCents: o.printifyCostCents || 0, lastError: o.lastError || '', paymentProvider: o.paymentProvider || 'stripe (old order)', squareOrderId: o.squareOrderId || '', squarePaymentId: o.squarePaymentId || '', oldStripeRef: o.paymentProvider ? '' : (o.stripePaymentIntent || o.stripeSessionId || ''), refundedCents: o.refundedCents || 0 });
   async function adminCheck({ user }) {
     requireAdmin(user);
     let printifyShops = null, printifyShopsError = '';
     if (cfg.printifyConfigured) { try { const list = await printify.listShops(); printifyShops = (Array.isArray(list) ? list : []).map((x) => ({ id: x.id, title: String(x.title || '').slice(0, 80), channel: String(x.sales_channel || '') })); } catch (e) { printifyShopsError = 'Printify did not accept the token (or could not be reached).'; } }
+    let squareLocation = null;
+    if (squareReady()) { try { const l = (await square.retrieveLocation(cfg.squareLocationId)).location || {}; squareLocation = { name: String(l.name || '').slice(0, 80), status: String(l.status || ''), currency: String(l.currency || ''), country: String(l.country || '') }; } catch (e) { squareLocation = { error: e instanceof SquareError ? `Square said no (${e.status}${e.codes[0] ? ' ' + e.codes[0] : ''}). Check the access token, the environment and the location ID.` : 'Square could not be reached.' }; } }
     return {
       printifyShops, printifyShopsError,
-      configured: { stripeKey: !!cfg.stripeKeyPrefix, stripeWebhookSecret: !!cfg.stripeWebhookSecret, printifyToken: !!cfg.printifyConfigured, printifyShop: !!cfg.printifyShopId, printifyWebhookSecret: !!cfg.printifyWebhookSecret, webhookBase: !!cfg.webhookBase, supportEmail: !!cfg.supportEmail },
-      stripeMode: /^(sk|rk)_test_/.test(cfg.stripeKeyPrefix || '') ? 'test' : (/^(sk|rk)_live_/.test(cfg.stripeKeyPrefix || '') ? 'live' : 'unknown'),
-      autoSubmit: !!cfg.autoSubmit, automaticTax: !!cfg.automaticTax, countries, webhookBase: cfg.webhookBase || ''
+      configured: { squareToken: !!cfg.squareConfigured, squareLocation: !!cfg.squareLocationId, squareWebhookKey: !!cfg.squareWebhookSignatureKey, printifyToken: !!cfg.printifyConfigured, printifyShop: !!cfg.printifyShopId, printifyWebhookSecret: !!cfg.printifyWebhookSecret, webhookBase: !!cfg.webhookBase, supportEmail: !!cfg.supportEmail },
+      squareEnvironment: cfg.squareEnvironment === 'production' ? 'production' : 'sandbox', squareLocation,
+      squareNotificationUrl: notificationUrl(), taxPercent,
+      autoSubmit: !!cfg.autoSubmit, countries, webhookBase: cfg.webhookBase || ''
     };
   }
   async function adminOverview({ user }) {
@@ -667,6 +795,8 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
       } else if (act === 'approve') {
         o = await submitToProduction(o);
       } else if (act === 'refresh') {
+        o = await reconcile(o);
+        if (o.paymentProvider === 'square' && o.squarePaymentId) o = await refreshRefunds(o);
         o = await syncFromPrintify(o);
       } else if (act === 'cancel_printify') {
         if (!o.printifyOrderId) throw conflict('no_printify_order', 'There is no Printify order.');
@@ -675,6 +805,7 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
       } else throw bad('Unknown action.');
     } catch (e) {
       if (e instanceof ApiError) throw e;
+      if (e instanceof SquareError) throw new ApiError(502, 'provider_error', `Square did not answer that (error ${e.status}). Nothing changed here. Check the order in the Square dashboard.`);
       throw new ApiError(502, 'provider_error', `Printify did not accept that (${e instanceof PrintifyError ? 'error ' + e.status : 'no answer'}). Nothing changed here. Check the order in the Printify dashboard.`);
     }
     return { order: adminOrderRow(o) };
@@ -711,7 +842,8 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
   }
   async function handleWebhook(which, raw, headers) {
     try {
-      if (which === 'stripe') return await stripeWebhook(raw, headers);
+      if (which === 'square') return await squareWebhook(raw, headers);
+      if (which === 'stripe') return { status: 410, json: { ok: false, error: 'gone', message: 'Stripe is no longer used. Delete this webhook in Stripe.' } };
       if (which === 'printify') return await printifyWebhook(raw, headers);
       return { status: 404, json: { ok: false, error: 'not_found' } };
     } catch (e) {
@@ -719,5 +851,5 @@ export function createShop({ users, db, storage, stripe, printify, cfg, now = ()
       return { status: 500, json: { ok: false, error: 'server_error' }, cause: e };
     }
   }
-  return { handle, handleWebhook, actions, fulfill, applyStripeSession };
+  return { handle, handleWebhook, actions, fulfill, applyPayment };
 }

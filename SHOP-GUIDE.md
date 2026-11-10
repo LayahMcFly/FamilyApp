@@ -2,7 +2,7 @@
 
 Version 1.28.0. The shop is optional. If you skip all of this, the app works as before and the Shop icon simply shows a "not set up yet" message. To hide the icon entirely, set `shopEnabled: false` in `config.js`.
 
-**What is and is not tested.** The server code has 22 automated tests that run against fake versions of Appwrite, Stripe and Printify. The screens were tested in a headless browser at 320, 360 and 390 px wide against a fake server. Nothing has run against a real Printify account, a real Stripe account or your live Appwrite project, and I could not reach those services from where this was built. So the Printify catalog numbers (blueprint, provider, variant, print-area sizes) are **never guessed**: you pick them from Printify's live list inside the app, and the server re-checks every one against Printify before saving. Part E walks you through the first real tests with practice money and no real order.
+**What is and is not tested.** The server code has 33 automated tests that run against fake versions of Appwrite, Square and Printify. The screens were tested in a headless browser at 320, 360 and 390 px wide against a fake server. Nothing has run against a real Printify account, a real Square account or your live Appwrite project, and I could not reach those services from where this was built. So the Printify catalog numbers (blueprint, provider, variant, print-area sizes) are **never guessed**: you pick them from Printify's live list inside the app, and the server re-checks every one against Printify before saving. Part E walks you through the first real tests with practice money and no real order.
 
 ---
 
@@ -26,7 +26,7 @@ Routes: `#/shop`, `#/shop/product/:key`, `#/shop/product/:key/:postId`, `#/shop/
 | File | Change |
 |---|---|
 | `function/` (family-api) | The cleanup job skips gift-design files. New `family-api.tar.gz`. |
-| `index.html` | Adds `shop.css` and `shop.js`, bumps `?v=` to 1.28.0. The Content-Security-Policy is unchanged: Stripe's hosted page opens by normal navigation, so no new script or frame sources are needed. |
+| `index.html` | Adds `shop.css` and `shop.js`, bumps `?v=` to 1.29.0. The Content-Security-Policy is unchanged: Square's hosted page opens by normal navigation, so no new script or frame sources are needed. |
 | `config.js` | Adds `shopEnabled`, `shopFunctionId`, `shopBucketId` (public IDs). Version 1.28.0. |
 | `app.js` | `bag` icon; Shop pill in the top bar; "Make a gift" and "Allow gifts with this photo" in the photo ⋯ menu; "My orders" on your profile; a "Let family order gifts with this photo" checkbox (off by default) on the photo Create form; `fetchMedia` accepts an optional bucket; `S.shop` is cleared when you switch family or sign out; one call to `FCShop.install(...)` at startup. |
 | `shop.js`, `shop.css` | All shop screens (catalog, designer, cart, orders, owner screen). |
@@ -40,19 +40,19 @@ Phone (GitHub Pages)                    Appwrite Cloud                          
 shop.js  --JWT--> shop-api function --> database `family` (shop tables)
   | draws layout on a canvas            bucket `family-media` (file readable by buyer only)
   | uploads print-ready JPEG ---------> (only the buyer can read it)
-  | redirect  --------------------------------------------------------------> Stripe Checkout (card entry)
-                                         shop-api <---- webhook (signed) ----- Stripe
+  | redirect  --------------------------------------------------------------> Square-hosted payment page
+                                         shop-api <---- webhook (signed) ----- Square (then shop-api asks Square for the payment)
                                          shop-api ----- API (token) ---------> Printify (upload, order)
                                          shop-api <---- webhook (signed) ----- Printify (status, tracking)
 ```
 
 Rules the code enforces:
 
-- **Printify and Stripe secrets live only in the `shop-api` function's environment variables.** They are never in GitHub, `config.js`, the browser, or browser storage.
+- **Printify and Square secrets live only in the `shop-api` function's environment variables.** They are never in GitHub, `config.js`, the browser, or browser storage.
 - **Prices come from the shop owner's saved catalog.** The browser sends product, variant and quantity; it never sends a price.
-- **Shipping is asked of Printify before payment** and shown with the total. Stripe is charged exactly items plus that shipping.
+- **Shipping is asked of Printify before payment** and shown with the total. Square is charged exactly items plus that shipping (plus a flat tax if you set one).
 - **Permission to use a photo** belongs to the person who posted it. The server checks membership in the family, that the photo is in that family, and that the poster allowed gifts. It checks again when the design is saved, when payment is verified, and right before the photo is sent to Printify. If permission was removed in between, the order is held for the owner and nothing is sent.
-- **Nothing goes to Printify until Stripe confirms payment.** The Printify order is created only after the server has fetched the Checkout Session from Stripe's API and matched amount, currency and shipping to the saved order. The success redirect alone proves nothing.
+- **Nothing goes to Printify until Square confirms payment.** The Printify order is created only after the server has fetched the payment and its order from Square's API and seen status `COMPLETED`, our location, our order reference, and the saved amount and currency. The return redirect alone proves nothing, and neither does a webhook message by itself. Payments that do not belong to an order the app created are ignored. See `SQUARE-GUIDE.md`.
 - **The print file is frozen.** After the server accepts a design, the file can no longer be replaced or deleted by the buyer. Its SHA-256 is saved and compared again before upload to Printify.
 - **Order history belongs to the buyer.** Order rows are readable only by the buyer. Family owners and tree admins get no automatic access. Only user IDs listed in `SHOP_ADMIN_USER_IDS` see the owner screen.
 - **Manual approval by default** (`PRINTIFY_AUTO_SUBMIT=false`): the Printify order is created but not sent to production until the shop owner presses **Approve** on the owner screen. Even with auto-submit on, an order with a mismatch, a crop warning or a removed permission is held.
@@ -81,7 +81,7 @@ familycircle/
     package.json
     src/main.js         entry point, reads environment variables, routes webhooks
     src/shop.js         all shop rules (catalog, designs, checkout, fulfillment)
-    src/stripe.js       Stripe calls + webhook signature check
+    src/square.js       Square calls (payment links, payments, orders, refunds) + webhook signature check
     src/printify.js     Printify calls + webhook signature check
     src/images.js       reads JPEG/PNG sizes
     src/util.js
@@ -96,7 +96,7 @@ All tables are in database `family`, have **no table-level permissions** (the br
 |---|---|---|---|
 | `shopCatalog` (row id = product key: `framed-print`, `magnet`, `mug`, `blanket`, `puzzle`) | title, blurb, enabled, blueprintId, providerId, position, variants (text JSON: id, label, options, priceCents, width, height), verifiedAt | none | none (function only) |
 | `shopDesigns` | ownerId, familyId, postId, productKey, variantId, fileId, fileSha, width, height, spec (text), quantity, orderId | ownerId, familyId, orderId | read: the buyer |
-| `shopOrders` | ownerId, familyId, paymentStatus, fulfillmentStatus, items (text), address (text), subtotalCents, shippingCents, taxCents, totalCents, currency, stripeSessionId, stripePaymentIntent, checkoutUrl, printifyOrderId, printifyStatus, printifyCostCents, tracking, lastError, consentAt, consentVersion, needsReview, paidAt | ownerId, printifyOrderId | read: the buyer |
+| `shopOrders` | ownerId, familyId, paymentStatus, fulfillmentStatus, items (text), address (text), subtotalCents, shippingCents, taxCents, totalCents, currency, paymentProvider, squarePaymentLinkId, squareOrderId, squarePaymentId, refundedCents, checkoutUrl, printifyOrderId, printifyStatus, printifyCostCents, tracking, lastError, consentAt, consentVersion, needsReview, paidAt | ownerId, printifyOrderId | read: the buyer |
 | `shopEvents` (row id = hash of provider + event id; used to ignore duplicate webhooks) | source, eventId, type, note | none | none |
 | `giftPermissions` (row id = post id) | familyId, postId, ownerId, allowed | familyId, postId | read: the family team |
 
@@ -112,55 +112,53 @@ Appwrite limits to be aware of on the free plan: the shop adds 1 function (you w
 
 | Variable | Required | Meaning |
 |---|---|---|
-| `STRIPE_SECRET_KEY` | yes | Secret or restricted key. `sk_test_…`/`rk_test_…` for practice, `sk_live_…`/`rk_live_…` for real money. **Secret.** |
-| `STRIPE_WEBHOOK_SECRET` | yes | `whsec_…` for the Stripe webhook endpoint. **Secret.** |
+| `SQUARE_ACCESS_TOKEN`, `SQUARE_WEBHOOK_SIGNATURE_KEY` | yes | **Secret.** `SQUARE_ENVIRONMENT`, `SQUARE_LOCATION_ID`, `SQUARE_TAX_PERCENT`, `SQUARE_NOTIFICATION_URL` are also set here. The full table is in `SQUARE-GUIDE.md`. |
 | `PRINTIFY_API_TOKEN` | yes | Personal access token. **Secret.** |
 | `PRINTIFY_SHOP_ID` | yes | Number of your Printify store. Not secret, but not needed by the browser. |
 | `PRINTIFY_WEBHOOK_SECRET` | yes | A long random string you make up (32+ characters). **Secret.** |
 | `SHOP_ADMIN_USER_IDS` | yes | Your Appwrite user ID. Comma-separate to add people. |
 | `WEBHOOK_BASE_URL` | yes | The function's domain, no trailing slash. Used to register Printify webhooks. |
-| `SITE_URL` | default `https://layahmcfly.github.io/FamilyCircle/` | Where Stripe sends people back. |
+| `SITE_URL` | default `https://layahmcfly.github.io/FamilyCircle/` | Where Square sends people back. |
 | `SHOP_SUPPORT_EMAIL` | recommended | Shown to buyers for problems. |
 | `SHOP_COUNTRIES` | default `US` | Delivery countries. Start with US only. |
 | `PRINTIFY_AUTO_SUBMIT` | default `false` | `true` sends paid orders to production without your approval. |
-| `STRIPE_AUTOMATIC_TAX` | default `false` | `true` turns on Stripe Tax (see step 18). |
 | `DATABASE_ID`, `SHOP_DESIGN_BUCKET_ID` | defaults `family`, `family-media` | Only change if you renamed them. |
 
 ## 7. Order states and retries
 
 Two separate fields, so a payment problem is never confused with a production problem.
 
-- **Payment:** `pending_payment` → `processing` (bank debit still clearing) → `paid`; or `expired`, `payment_failed`. `refunded` is a recorded outcome. A paid order never moves back to an earlier payment state, so late or out-of-order Stripe events cannot undo it.
+- **Payment:** `pending_payment` → `processing` (Square has approved it but not completed it) → `paid` → `partially_refunded` or `refunded` (recorded from Square); or `expired`, `payment_failed`. A paid order never moves back to an earlier payment state, so late or out-of-order Square events cannot undo it. Orders paid with Stripe before version 1.29.0 keep their old state and are never changed by Square events.
 - **Fulfillment:** `not_started` → `creating` → `created` (Printify order exists, waiting) → `sending` → `in_production` → `shipped` → `delivered`. Side states: `needs_review`, `failed`, `has_issues`, `canceled`. Printify statuses only move forward.
 
 Safety behavior:
 
-- **Double taps and retries.** The browser makes one request ID per cart; the order row ID is derived from it, so a second tap returns the same order and the same Stripe page instead of making another. Stripe is called with an idempotency key. The Printify order uses the app's order ID as its `external_id`; a repeat gets Printify's 409 and the server adopts the existing order.
-- **Webhooks.** Stripe and Printify signatures are verified against the raw request body (Stripe also rejects timestamps more than 5 minutes old). Each event is recorded once in `shopEvents`. Stripe is also asked directly for the session, so a forged or replayed event cannot mark an order paid.
+- **Double taps and retries.** The browser makes one request ID per cart; the order row ID is derived from it, so a second tap returns the same order and the same Square page instead of making another. Square is called with an idempotency key (the order ID). The Printify order uses the app's order ID as its `external_id`; a repeat gets Printify's 409 and the server adopts the existing order.
+- **Webhooks.** Square and Printify signatures are verified against the raw request body (Square's also covers the notification URL). Each event is recorded once in `shopEvents`. Square is also asked directly for the payment and its order, so a forged or replayed event cannot mark an order paid.
 - **Paid, then Printify fails.** The order stays `paid`, fulfillment becomes `failed`, the buyer sees "we're sorting something out", and the owner screen shows the reason and a **Retry** button. There is no automatic refund and no automatic resubmission loop. Printify may retry or block webhook delivery for an hour after three failures, so **Refresh from Printify** on the owner screen is the catch-up button.
-- **Cancellations and refunds.** An unpaid order can be canceled by the buyer (the Stripe page is expired). After payment, only the owner decides: **Cancel at Printify** works only before production starts, and it does **not** refund the buyer. Refunds are done by you in the Stripe dashboard. The buyer sees "contact the shop owner" with the support email. Decide your own refund policy and write it down before going live.
+- **Cancellations and refunds.** An unpaid order can be canceled by the buyer (the Square link is deleted after Square is asked one last time whether it was paid). After payment, only the owner decides: **Cancel at Printify** works only before production starts, and it does **not** refund the buyer. Refunds are done by you in the Square Dashboard and recorded here. The buyer sees "contact the shop owner" with the support email. Decide your own refund policy and write it down before going live.
 - **Raw provider errors are never shown to buyers.**
 
 ## 8. Honest limitations and unfinished work
 
-1. Untested against live Stripe, Printify and Appwrite. Expect to fix small things in Part E.
+1. Untested against live Square, Printify and Appwrite. Expect to fix small things in Part E.
 2. No Printify mockups. Layout preview only.
 3. One photo per product, one product line per design. No collages, no text-only products.
 4. US delivery, USD, one shipping method (Printify's standard rate). Other countries need `SHOP_COUNTRIES` and a check of tax and customs rules first.
-5. Taxes are off by default. Stripe Tax is supported but needs setup and you are responsible for registrations (step 18).
-6. No refund button. Refunds are manual in Stripe. The app records `refunded` only if the owner extends it later.
+5. Taxes are off by default. You can set one flat percentage (`SQUARE_TAX_PERCENT`); it is not worked out per destination and you are responsible for registrations.
+6. No refund button. Refunds are manual in Square. The app records them when Square reports them complete.
 7. Photos are stored at 1600 px, so large products will warn about resolution.
 8. "Framed photo print": the app designs the picture only; frame and size are variant choices from Printify. The frame itself is never edited.
-9. Cached shop data is held in memory only and cleared on sign-out or family switch. The Stripe redirect leaves the app, so after paying, the buyer returns by Stripe's link to `#/orders/<id>/done`.
+9. Cached shop data is held in memory only and cleared on sign-out or family switch. The Square page leaves the app, so after paying, the buyer returns by Square's redirect to `#/orders/<id>/done`. How Square treats that address is unconfirmed; My orders re-checks unpaid orders as a fallback.
 10. Money is stored in cents and assumed to be USD. Printify returns amounts in cents; confirm with your first test order.
-11. The tests use fake Stripe, Printify and Appwrite. Passing them shows the logic is consistent, not that the live services behave identically.
+11. The tests use fake Square, Printify and Appwrite. Passing them shows the logic is consistent, not that the live services behave identically.
 
 ## 9. What it really costs
 
 - **Appwrite, GitHub Pages:** free tiers cover this at family scale.
-- **Stripe:** no monthly fee. A fee on each payment (check the current US card rate at stripe.com/pricing; as of this writing it is a percentage plus a fixed amount per charge). Stripe Tax, if you use it, has its own extra fee. Refunds may not return Stripe's fee.
+- **Square:** no monthly fee for online payments through payment links, as far as the public fee page shows. A fee on each payment (the public page lists 2.9% + 30¢ for online payments; check the rate in your own Square dashboard, because the same page shows another rate without saying who gets it). Refund and dispute fees: check your account.
 - **Printify:** the free plan has no monthly fee. You pay Printify the production cost plus shipping for each order, charged to the payment method or balance on your Printify account when the order goes to production. Paid Printify plans give discounts but are optional. Check printify.com/pricing.
-- **You are the merchant.** Customers pay Stripe; Stripe pays you later on its payout schedule (new accounts often wait longer for the first payout); Printify charges you separately. If you price too low, you lose money on every order. Set each price above Printify's cost for that variant, plus shipping you do not pass on, plus Stripe's fee, plus a margin. Sales tax, returns and misprints are yours to handle.
+- **You are the merchant.** Customers pay Square; Square pays you later on its payout schedule (check your account for first-payout timing); Printify charges you separately when you approve an order. Square never pays Printify. If you price too low, you lose money on every order. Set each price above Printify's cost for that variant, plus shipping you do not pass on, plus Square's fee, plus a margin. Sales tax, returns and misprints are yours to handle.
 
 ---
 
@@ -190,25 +188,27 @@ Do the parts in order. Every step says **Where**, **Do**, **Copy** (what to save
 
 **10. Order a sample the normal way (optional but wise).** *Where:* Printify dashboard. *Do:* order one real mug or magnet with a family photo to see the real quality and delivery time. *Check:* the product matches what you will describe to family.
 
-## Part B. Payments with Stripe (steps 11–19)
+## Part B. Payments with Square (steps 11–19)
 
-**11. Create the account.** *Where:* stripe.com. *Do:* sign up, confirm email. *Check:* you reach the dashboard.
+Square replaced Stripe in version 1.29.0. The full, current instructions are in **`SQUARE-GUIDE.md`**, Steps 1 to 16. This part only says which of the old step numbers it covers.
 
-**12. Use test mode first.** *Where:* the Stripe dashboard; look for the Test mode (or Sandbox) switch. *Do:* switch it on. Test and live have separate keys and separate webhooks, so you will repeat steps 13–14 later for live (step 52). *Check:* the dashboard shows a test banner.
+**11. Create the account.** `SQUARE-GUIDE.md`, Step 1.
 
-**13. Create a key.** *Where:* Developers, API keys. *Do:* the simplest is the **Secret key** (`sk_test_…`). Better: **Create restricted key**, and give it write access to **Checkout Sessions** only. *Copy:* the key. *Secret?* **Yes.** *Check:* it begins with `sk_test_` or `rk_test_`. *If you use a restricted key and checkout fails with a permission message,* the message names the missing permission; add exactly that.
+**12. Use the sandbox first.** Steps 2 and 3. The sandbox has its own token, location and webhook.
 
-**14. Webhook endpoint (do this after step 24, when you have the function address).** *Where:* Developers, Webhooks, Add endpoint. *Do:* URL = `<function address>/webhooks/stripe`. Select events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`. *Copy:* the **Signing secret** (`whsec_…`). *Secret?* **Yes.** *Check:* the endpoint shows as enabled.
+**13. Credentials.** Steps 3 and 4. The access token is **secret**: it goes only into the `shop-api` function settings.
 
-**15. Business details for live mode.** *Where:* Stripe, Activate account. *Do:* later, in step 51. Test mode needs none of it.
+**14. Webhook subscription (do this after step 24, when you have the function address).** Step 6. The notification URL is `<function address>/webhooks/square`, and the events are `payment.created`, `payment.updated`, `refund.created`, `refund.updated`.
 
-**16. Understand the money flow.** Customers pay on Stripe's page. Stripe keeps its fee and pays the rest to your bank on its schedule. Separately, Printify charges you for production and shipping when you approve an order. The app shows the buyer items plus shipping. Taxes are separate (step 18).
+**15. Business details for live payments.** Step 13 of `SQUARE-GUIDE.md`. Sandbox needs none.
 
-**17. Decide on prices.** For each variant: price ≥ Printify cost + shipping you absorb + Stripe fee + margin. Prices are entered in step 29.
+**16. Understand the money flow.** Customers pay on Square's page. Square keeps its fee and pays the rest to your bank on its schedule. Separately, Printify charges you when you approve an order. Square does not pay Printify. See Step 14 of `SQUARE-GUIDE.md`.
 
-**18. Decide on sales tax.** By default the app adds no tax. If you are required to collect sales tax, you can switch on Stripe Tax: in Stripe, Tax, set your business address and registrations, then set `STRIPE_AUTOMATIC_TAX=true` in step 25. With it on, Stripe asks for the delivery address on its page and the server checks it matches the address the buyer typed; a mismatch holds the order. I cannot tell you whether you owe tax; ask a tax professional or your state's revenue department, because family-run shops can still be sellers.
+**17. Decide on prices.** For each variant: price ≥ Printify cost + shipping you absorb + Square fee + margin. Prices are entered in step 29.
 
-**19. Save what you need.** You should now have in your password manager: Stripe test key, (later) Stripe signing secret, Printify token.
+**18. Decide on sales tax.** By default the app adds no tax. `SQUARE_TAX_PERCENT` adds one flat percentage to the whole order. It is not calculated per destination. Ask a tax professional whether you must collect and file.
+
+**19. Save what you need.** In your password manager: the Square sandbox access token, (later) the signature key, the production token, and the Printify token.
 
 ## Part C. Appwrite (steps 20–30)
 
@@ -218,11 +218,11 @@ Do the parts in order. Every step says **Where**, **Do**, **Copy** (what to save
 
 **22. Add one index and update family-api (no new bucket).** *Why:* the free plan allows 1 bucket, so gift designs live in `family-media`, in files only their owner can read. The family-api cleanup job deletes unattached files after an hour, so it must be taught to skip gift designs. *Do:* paste Block 6 in `SHOP-CONSOLE-COMMANDS.md`, then upload the new `family-api.tar.gz` to the `family-api` function (Deployments, Create deployment, Manual, activate). *Check:* the index says Available and the new deployment is active. Do this before saving any gift design.
 
-**23. Create the function.** *Where:* Console, Functions, Create function, Manual. *Do:* Name `shop-api`, **Function ID `shop-api`** (type it exactly), Runtime Node.js 22 or newest, Entrypoint `src/main.js`, Build command `npm install`. *Settings:* **Timeout 30 seconds**. **Execute access:** add **Any**. (Stripe and Printify have no login. The function refuses every request that has neither a valid signature nor a signed-in verified family member.) **Scopes:** `users.read`, `rows.read`, `rows.write`, `files.read`, `files.write`. Nothing else. *Check:* the function is listed.
+**23. Create the function.** *Where:* Console, Functions, Create function, Manual. *Do:* Name `shop-api`, **Function ID `shop-api`** (type it exactly), Runtime Node.js 22 or newest, Entrypoint `src/main.js`, Build command `npm install`. *Settings:* **Timeout 30 seconds**. **Execute access:** add **Any**. (Square and Printify have no login. The function refuses every request that has neither a valid signature nor a signed-in verified family member.) **Scopes:** `users.read`, `rows.read`, `rows.write`, `files.read`, `files.write`. Nothing else. *Check:* the function is listed.
 
 **24. Upload the code.** *Where:* shop-api, Deployments, Create deployment, Manual. *Do:* upload `shop-api.tar.gz` (sent with this update), activate after the build finishes. Then open the **Domains** tab and copy the function's address (it ends in `.appwrite.run` or similar). *Copy:* that address. *Secret?* No. *Check:* deployment status "Ready". Now go back and do step 14.
 
-**25. Add the variables.** *Where:* shop-api, Settings, Environment variables. *Do:* add every variable in section 6. For the first run: `STRIPE_SECRET_KEY` (test), `STRIPE_WEBHOOK_SECRET` (test), `PRINTIFY_API_TOKEN`, `PRINTIFY_SHOP_ID` (leave a placeholder `0` until step 28), `PRINTIFY_WEBHOOK_SECRET` (a long random string you make up), `SHOP_ADMIN_USER_IDS`, `WEBHOOK_BASE_URL` (step 24 address), `SHOP_SUPPORT_EMAIL`, `PRINTIFY_AUTO_SUBMIT=false`. *Where to find your user ID:* Console, Auth, Users, click your name, User ID. *Secret?* Mark secret ones as secret if the Console offers it. *After changing variables, redeploy* (Deployments, redeploy) so they apply.
+**25. Add the variables.** *Where:* shop-api, Settings, Environment variables. *Do:* add every variable in section 6. For the first run: `SQUARE_ENVIRONMENT=sandbox`, `SQUARE_ACCESS_TOKEN` (sandbox), `SQUARE_LOCATION_ID` (sandbox), `SQUARE_WEBHOOK_SIGNATURE_KEY` (after `SQUARE-GUIDE.md` Step 6), `PRINTIFY_API_TOKEN`, `PRINTIFY_SHOP_ID` (leave a placeholder `0` until step 28), `PRINTIFY_WEBHOOK_SECRET` (a long random string you make up), `SHOP_ADMIN_USER_IDS`, `WEBHOOK_BASE_URL` (step 24 address), `SHOP_SUPPORT_EMAIL`, `PRINTIFY_AUTO_SUBMIT=false`. *Where to find your user ID:* Console, Auth, Users, click your name, User ID. *Secret?* Mark secret ones as secret if the Console offers it. *After changing variables, redeploy* (Deployments, redeploy) so they apply.
 
 **26. Push the site update.** See Part D.
 
@@ -254,7 +254,7 @@ Do the parts in order. Every step says **Where**, **Do**, **Copy** (what to save
 
 ## Part E. Safe testing (steps 39–49)
 
-Everything here uses Stripe test mode and `PRINTIFY_AUTO_SUBMIT=false`. Printify has no sandbox. The only Printify protection is that you do not approve test orders, and that orders you create are cancelled at Printify before production. Know the four levels: (a) automated tests with fake services (already passing), (b) Stripe test mode with fake cards, (c) a real Printify order that exists but is not approved, (d) real production.
+Everything here uses the Square sandbox and `PRINTIFY_AUTO_SUBMIT=false`. Printify has no sandbox. The only Printify protection is that you do not approve test orders, and that orders you create are cancelled at Printify before production. Know the four levels: (a) automated tests with fake services (already passing), (b) Square sandbox with test cards, (c) a real Printify order that exists but is not approved, (d) real production.
 
 **39. Allow a photo.** Post a photo, tick "Let family order gifts with this photo", or use ⋯, Allow gifts. *Check:* a second family member sees "Make a gift" work; a third photo you did not allow shows "has not allowed it".
 
@@ -264,17 +264,17 @@ Everything here uses Stripe test mode and `PRINTIFY_AUTO_SUBMIT=false`. Printify
 
 **42. Enter a US address and press Calculate.** *Check:* a shipping line from Printify and a total appear. *If it says shipping is unavailable:* the provider may not ship to that state, or the Printify token scope is wrong.
 
-**43. Pay with a test card.** Tick both permission boxes, press Pay. On Stripe's page use card `4242 4242 4242 4242`, any future date, any 3 digits. *Check:* you return to the app on "Payment confirmed". The page refreshes itself for up to about 40 seconds.
+**43. Pay with a test card.** Tick both permission boxes, press Pay. On Square's page use Visa `4111 1111 1111 1111`, CVV `111`, any future date and a valid postal code (see `SQUARE-GUIDE.md`, Step 9). *Check:* you return to the app on "Payment confirmed". The page refreshes itself for up to about 40 seconds.
 
 **44. Look at the owner screen.** *Check:* the order shows `paid` and a fulfillment of `created`, with the Printify cost. In the Printify dashboard the order appears, on hold. **Do not approve it.**
 
-**45. Test failures.** Stripe test card `4000 0000 0000 0002` (declined) should leave the order unpaid and show nothing sent. Close the Stripe page without paying, then **Cancel this unpaid order**.
+**45. Test failures.** Square lists `4000 0000 0000 0002` as a declined test card for its payment APIs; whether the hosted page treats it the same way is unconfirmed. Either way an unpaid order must show nothing sent. Close the Square page without paying, then **Cancel this unpaid order**.
 
-**46. Test duplicates.** Double-tap Pay. *Check:* only one order. In Stripe, Developers, Webhooks, open your endpoint and use **Resend** on an event. *Check:* no second Printify order.
+**46. Test duplicates.** Double-tap Pay. *Check:* only one order. Open the order and press **Refresh status** five times. *Check:* still one Printify order, and each event ID appears once in `shopEvents` (`SQUARE-GUIDE.md`, Step 10).
 
 **47. Test permission removal.** Pay for a second test order, then (as the poster) turn off gifts for that photo before pressing Approve. *Check:* the order is held with a clear note and nothing is sent.
 
-**48. Clean up.** In the owner screen use **Cancel at Printify** for each test order (works before production). Cancelling does not refund; test-mode Stripe payments are not real money.
+**48. Clean up.** In the owner screen use **Cancel at Printify** for each test order (works before production). Cancelling does not refund; sandbox Square payments are not real money, but the Printify order you cancel is real.
 
 **49. Try an iPhone and an Android phone, and dark mode.** Look especially at the designer: dragging should move the photo and not scroll the page.
 
@@ -282,9 +282,9 @@ Everything here uses Stripe test mode and `PRINTIFY_AUTO_SUBMIT=false`. Printify
 
 **50. Decide policies.** Write down: who handles refunds, how long you will wait for a reply, what you do when a print is bad. Put the support email in `SHOP_SUPPORT_EMAIL`.
 
-**51. Activate Stripe.** *Where:* Stripe, Activate account. *Do:* give the business and bank details Stripe asks for. *Check:* the dashboard allows live mode.
+**51. Get your Square account ready for live payments.** *Where:* your Square Dashboard. *Do:* complete whatever verification and payout details it asks for. *Check:* it lets you take live payments. See `SQUARE-GUIDE.md`, Steps 1 and 13.
 
-**52. Live keys.** Turn Test mode off. Repeat steps 13 and 14 for live: a live key and a **new** webhook endpoint (same URL, same four events) with its own signing secret. Replace `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in the function, then redeploy. *Check:* the owner screen says "Stripe mode: LIVE".
+**52. Live credentials.** Follow `SQUARE-GUIDE.md`, Step 13: production token, production location, a new production webhook subscription with its own signature key, `SQUARE_ENVIRONMENT=production`. *Check:* the owner screen says "Square mode: PRODUCTION" and shows your real location.
 
 **53. Check Printify billing.** Confirm the card on your Printify account is current and that approval is still manual.
 
@@ -292,7 +292,7 @@ Everything here uses Stripe test mode and `PRINTIFY_AUTO_SUBMIT=false`. Printify
 
 **55. Open the shop to the family.** Tell them it is optional, and that nothing is shared until they order and that photos are only usable if the poster allowed it.
 
-**56. Review weekly at first.** Open the owner screen: look for orders marked failed or held, check your Printify balance against Stripe payouts, and put your Printify token expiry date on your calendar. Turn `PRINTIFY_AUTO_SUBMIT` on only after several clean orders, and only if you are comfortable that held orders will still wait for you.
+**56. Review weekly at first.** Open the owner screen: look for orders marked failed or held, check your Printify balance against Square payouts, and put your Printify token expiry date on your calendar. Turn `PRINTIFY_AUTO_SUBMIT` on only after several clean orders, and only if you are comfortable that held orders will still wait for you.
 
 ## Common errors
 
@@ -300,10 +300,10 @@ Everything here uses Stripe test mode and `PRINTIFY_AUTO_SUBMIT=false`. Printify
 |---|---|---|
 | "The shop did not answer" | Function not deployed, wrong ID, or still building | Steps 23–24; `shopFunctionId` must equal the Function ID |
 | "Only the shop owner can open this page" | `SHOP_ADMIN_USER_IDS` wrong | Step 25 |
-| Pay button says Stripe could not start | Stripe key missing/wrong mode | Steps 13, 25, redeploy |
+| Pay button says payments are not set up or could not be started | Square token or location missing or from the wrong environment | `SQUARE-GUIDE.md` Steps 4 and 16, redeploy |
 | Paid but stays on "confirming" | Webhook not reaching the function | Step 14 URL and events, signing secret; use **Refresh status** |
 | Paid, fulfillment `failed` | Printify rejected the order | Read the note on the owner screen, fix, press **Retry** |
 | "does not match the print area" | Product size changed in Printify after the design was made | Remake the design |
 | No tracking after shipping | Printify webhooks not registered | Step 30, then **Refresh from Printify** |
 
-Sources: [Printify developer documentation](https://developers.printify.com/) (token scopes, one-year token life) and [Printify help: orders submitted through the API](https://help.printify.com/hc/en-us/articles/4483629894289-How-do-orders-and-products-submitted-through-API-look-like-inside-my-account) (API orders arrive on hold, then follow your approval settings). Stripe Checkout and webhook behavior is from Stripe's documentation as checked earlier in this project, and the signature code was compared with Stripe's official library in a test.
+Sources: [Printify developer documentation](https://developers.printify.com/) (token scopes, one-year token life) and [Printify help: orders submitted through the API](https://help.printify.com/hc/en-us/articles/4483629894289-How-do-orders-and-products-submitted-through-API-look-like-inside-my-account) (API orders arrive on hold, then follow your approval settings). Square payment link, webhook and signature behavior is from Square's documentation (see `SQUARE-GUIDE.md`), and the signature code was compared with Square's official Node library in a test.

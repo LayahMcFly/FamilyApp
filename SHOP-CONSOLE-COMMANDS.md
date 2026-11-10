@@ -125,6 +125,20 @@ appwrite tablesdb create-index --database-id family --table-id shopDesigns --key
 
 Then update the family-api function with the new `family-api.tar.gz` (Deployments, Create deployment, Manual, upload, activate). Do this **before** anyone saves a gift design. Until it is live, the old cleanup could remove design files after an hour.
 
+## Block 7: Square columns (run this once, for the Square version)
+
+The shop used Stripe in version 1.28.0, so your `shopOrders` table already has two columns named `stripeSessionId` and `stripePaymentIntent`. Leave them alone. They keep the payment references of any old orders. Paste these five lines to add the Square columns:
+
+```
+appwrite tablesdb create-string-column --database-id family --table-id shopOrders --key paymentProvider --size 12 --required false
+appwrite tablesdb create-string-column --database-id family --table-id shopOrders --key squarePaymentLinkId --size 60 --required false
+appwrite tablesdb create-string-column --database-id family --table-id shopOrders --key squareOrderId --size 60 --required false
+appwrite tablesdb create-string-column --database-id family --table-id shopOrders --key squarePaymentId --size 60 --required false
+appwrite tablesdb create-integer-column --database-id family --table-id shopOrders --key refundedCents --required false
+```
+
+Pasting several lines at once can drop the last one, so wait about 30 seconds, then open Databases, family, shopOrders, Columns. All five should say Available (28 columns in total) before you deploy the new shop-api. If `refundedCents` is missing, paste that last line again by itself. No new index is needed.
+
 ## Check
 
 In the Console, open Databases, family. You should see five new tables, and and no new bucket (the shop uses family-media). Table permissions must be empty and Row security on for each table.
@@ -145,4 +159,4 @@ appwrite tablesdb create-boolean-column --database-id family --table-id giftPerm
 appwrite tablesdb create-index --database-id family --table-id giftPermissions --key idx_postId --type key --columns postId
 ```
 
-Expected counts in Databases, family: shopCatalog 8 columns; shopDesigns 12 columns and 4 indexes (including idx_fileId); shopOrders 23 columns and 2 indexes; shopEvents 4 columns; giftPermissions 4 columns and 2 indexes. Every column and index should say Available.
+Expected counts in Databases, family: shopCatalog 8 columns; shopDesigns 12 columns and 4 indexes (including idx_fileId); shopOrders 23 columns and 2 indexes (28 columns after Block 7); shopEvents 4 columns; giftPermissions 4 columns and 2 indexes. Every column and index should say Available.
