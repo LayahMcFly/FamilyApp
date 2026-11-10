@@ -2420,10 +2420,10 @@
       clear(panel);
       var prof = p.userId ? S.profiles.get(p.userId) : null;
       var actions = [];
-      if (prof) actions.push(h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Open profile' }));
       actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Suggest a change', onclick: function () { sendSuggestion(p.$id); } }));
-      if (canEditTree() || p.userId === S.user.$id) actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Edit', onclick: function () { personDialog(p, tree, function (nid) { S.tree = null; route(false); }); } }));
-      panel.appendChild(h('div', { class: 'tree-who' }, avatarEl(prof || { displayName: p.name }), h('div', { class: 'grow' }, h('h2', { text: p.name }), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null)));
+      if (canEditTree() || p.userId === S.user.$id) actions.push(h('button', { class: 'edit-pencil', type: 'button', 'aria-label': 'Edit ' + p.name, title: 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (nid) { S.tree = null; route(false); }); } }, icon('edit')));
+      var pLink = p.userId ? '#/profile/' + p.userId : null, pAv = avatarEl(prof || { displayName: p.name });
+      panel.appendChild(h('div', { class: 'tree-who' }, pLink ? h('a', { class: 'avatar-link', href: pLink, 'aria-label': 'Open ' + p.name + '’s profile' }, pAv) : pAv, h('div', { class: 'grow' }, h('h2', null, pLink ? h('a', { class: 'name-link', href: pLink, text: p.name }) : p.name), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null)));
       panel.appendChild(h('div', { class: 'row' }, actions));
       function group(label, items) {
         if (!items.length) return;

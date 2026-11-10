@@ -1170,8 +1170,55 @@ body.ve-open { overflow: hidden; }
 .ve-confirm-card { background: var(--surface); color: var(--text); border-radius: var(--radius); padding: 16px; max-width: 380px; display: grid; gap: 12px; }
 .ve-confirm-card .row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .ve.busy .ve-body { opacity: .85; }
-.ve button, .ve input[type=range] { min-height: 40px; }
+.ve button { min-height: 40px; }
 .ve .small { min-height: 34px; }
 
 .ve-h-in, .ve-h-out { top: 50%; bottom: -14px; }
 .ve-h-a, .ve-h-b { top: -14px; bottom: 50%; }
+
+/* v1.24.1 */
+/* The comment "Post" button: white text on the gradient, readable when it is waiting for text too */
+.comment-row .comment-send, .comment-row .comment-send.btn { background: var(--grad) !important; color: var(--on-accent) !important; padding: 0 16px; box-shadow: 0 8px 16px -8px var(--accent); text-shadow: 0 1px 2px #0003; }
+.btn:not(.secondary):not(.ghost):not(.danger), .btn:not(.secondary):not(.ghost):not(.danger)[disabled] { color: var(--on-accent); text-shadow: 0 1px 2px #0003; }
+.btn[disabled], .btn[aria-busy="true"] { opacity: .75; }
+
+/* Space between text and buttons */
+.card > :is(p, .hint, .muted, .small, h1, h2, h3, label, ul, ol, output, .alert, .rel-group, .tree-who) + :is(.btn, button, .link-btn, .row, .stack, form, .actions),
+form > :is(p, .hint, .muted, .small, label, ul, .alert) + :is(.btn, button, .link-btn, .row, .stack),
+.ve-sec > :is(p, .hint, .muted, .small, ul, label) + :is(.btn, button, .row, select) { margin-top: 14px; }
+.card > :is(.btn, button, .link-btn, .row, .stack, form, .actions) + :is(p, .hint, .muted, .small, ul, ol, .alert, .rel-group),
+form > :is(.btn, button, .link-btn, .row, .stack) + :is(p, .hint, .muted, .small, .alert),
+.ve-sec > :is(.btn, button, .row) + :is(p, .hint, .muted, .small) { margin-top: 14px; }
+.row, .tree-who + .row { gap: 10px; align-items: center; }
+.tree-who { margin-bottom: 14px; }
+.tree-panel .row { margin-bottom: 14px; }
+.avatar-link { display: inline-flex; border-radius: 50%; }
+.name-link { color: inherit; text-decoration: none; }
+.name-link:hover { text-decoration: underline; }
+
+/* The pencil that floats next to "Suggest a change" */
+.edit-pencil { position: relative; width: 44px; height: 44px; display: inline-grid; place-items: center; border: 2px solid var(--accent); border-radius: 50%; background: var(--surface); color: var(--accent); cursor: pointer; box-shadow: 0 8px 14px -8px var(--accent), 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); animation: pencil-float 2.8s ease-in-out infinite; }
+.edit-pencil svg { width: 22px; height: 22px; transform-origin: 20% 85%; animation: pencil-write 2.8s ease-in-out infinite; }
+.edit-pencil:hover, .edit-pencil:focus-visible { animation-play-state: paused; background: var(--accent); color: var(--on-accent); }
+@keyframes pencil-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes pencil-write { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg); } 50% { transform: rotate(6deg) translateX(1px); } 75% { transform: rotate(-8deg); } }
+@media (prefers-reduced-motion: reduce) { .edit-pencil, .edit-pencil svg { animation: none; } }
+
+/* Video editor sliders: roomy rounded track that shows what the slider does, big round handle */
+.ve input[type=range] { -webkit-appearance: none; appearance: none; height: 32px; min-height: 32px; padding: 0; margin: 0; background: transparent; cursor: pointer; }
+.ve input[type=range]:focus { outline: none; }
+.ve input[type=range]::-webkit-slider-runnable-track { height: 14px; border-radius: 999px; background: var(--rtrack, var(--surface-2)); box-shadow: inset 0 1px 3px #0004, 0 0 0 1px var(--border); }
+.ve input[type=range]::-moz-range-track { height: 14px; border-radius: 999px; background: var(--rtrack, var(--surface-2)); box-shadow: inset 0 1px 3px #0004, 0 0 0 1px var(--border); }
+.ve input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 30px; height: 30px; margin-top: -8px; border-radius: 50%; background: #fff; border: 5px solid var(--accent); box-shadow: 0 3px 8px #0005; transition: transform .12s; }
+.ve input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 5px solid var(--accent); box-shadow: 0 3px 8px #0005; transition: transform .12s; }
+.ve input[type=range]:active::-webkit-slider-thumb { transform: scale(1.18); }
+.ve input[type=range]:active::-moz-range-thumb { transform: scale(1.18); }
+.ve input[type=range]:focus-visible::-webkit-slider-thumb { outline: 3px solid var(--text); outline-offset: 2px; }
+.ve input[type=range]:focus-visible::-moz-range-thumb { outline: 3px solid var(--text); outline-offset: 2px; }
+.ve input[type=range]:disabled { opacity: .5; cursor: not-allowed; }
+.ve-r-brightness { --rtrack: linear-gradient(90deg, #151515, #8a8a8a 50%, #ffffff); }
+.ve-r-contrast { --rtrack: linear-gradient(90deg, #8d8d8d, #2b2b2b 50%, #f6f6f6); }
+.ve-r-saturation { --rtrack: linear-gradient(90deg, #9a9a9a, #ff6b6b 25%, #ffd93d 45%, #3ddc84 65%, #4dabf7 82%, #b266ff); }
+.ve-r-warmth { --rtrack: linear-gradient(90deg, #4aa3ff, #dfe9f5 50%, #ffb347 75%, #ff7a1a); }
+.ve .ve-seek { --rtrack: linear-gradient(90deg, var(--accent) var(--pct, 0%), var(--surface-2) var(--pct, 0%)); }
+.ve-adjrow { row-gap: 6px; margin-bottom: 6px; }

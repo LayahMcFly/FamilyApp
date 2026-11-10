@@ -464,7 +464,7 @@
       var adjBox = h('div', { class: 've-adj' });
       ADJ.forEach(function (a) {
         var out = h('output', { class: 've-val', 'aria-live': 'off' });
-        var rng = h('input', { type: 'range', min: '-100', max: '100', step: '1', value: '0', id: 've-' + a[0], 'aria-label': a[1] });
+        var rng = h('input', { type: 'range', class: 've-r-' + a[0], min: '-100', max: '100', step: '1', value: '0', id: 've-' + a[0], 'aria-label': a[1] });
         rng.addEventListener('input', function () { adj[a[0]] = Number(rng.value); paintAdj(); redraw(); });
         var reset = h('button', { class: 'btn ghost small', type: 'button', text: 'Reset', 'aria-label': 'Reset ' + a[1], onclick: function () { adj[a[0]] = 0; paintAdj(); redraw(); } });
         ctl(rng); ctl(reset); adjUI[a[0]] = { rng: rng, out: out, reset: reset };
@@ -495,6 +495,7 @@
         p = clamp(p, 0, total()); timeOut.textContent = fmtTime(p) + ' / ' + fmtTime(total());
         seek.max = String(Math.max(0.05, r3(total()))); if (document.activeElement !== seek) seek.value = String(r3(p));
         playhead.style.left = pct(toSource(segs(), p));
+        seek.style.setProperty('--pct', (total() ? p / total() * 100 : 0) + '%');
       }
       async function togglePlay() {
         if (!eng || busy) return;
