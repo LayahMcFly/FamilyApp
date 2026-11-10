@@ -1007,7 +1007,6 @@
     { id: 'create', label: 'Create', icon: 'plus' },
     { id: 'shorts', label: 'Shorts', icon: 'shorts' },
     { id: 'saved', label: 'Saved', icon: 'bookmark' },
-    { id: 'family', label: 'Family', icon: 'users' },
     { id: 'profile', label: 'Profile', icon: 'user' }
   ];
   var VIEWS = {};
@@ -1061,7 +1060,7 @@
       return;
     }
     var segs = (location.hash.replace(/^#\/?/, '') || 'home').split('?')[0].split('/');
-    var name = segs[0], param = segs[1] || '', param2 = segs[2] || '';
+    var name = segs[0], param = segs[1] || '', param2 = segs[2] || '', param3 = segs[3] || '';
     if (!VIEWS[name]) name = 'home';
     S.nav++;
     var token = S.nav;
@@ -1073,7 +1072,7 @@
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
     document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
-    Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2); }).catch(function (e) {
+    Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2, param3); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });
     if (!first) { S.main.focus({ preventScroll: true }); window.scrollTo(0, 0); }
@@ -1962,15 +1961,22 @@
     main.appendChild(familyCreateCard('Name your new family', 'You become its owner. It has its own members, posts and photos, completely separate from your other families.'));
   };
 
-  VIEWS.family = async function (main, token, tab, personId) {
-    var fam = currentFamily(), onTree = tab === 'tree';
-    main.appendChild(h('h1', { text: fam ? fam.name : 'Family' }));
-    main.appendChild(h('nav', { class: 'tabs fam-tabs', 'aria-label': 'Family sections' },
-      h('a', { class: 'tab', href: '#/family', 'aria-current': onTree ? null : 'page', text: 'Members' }),
-      h('a', { class: 'tab', href: '#/family/tree', 'aria-current': onTree ? 'page' : null, text: 'Family Tree' })));
-    if (onTree) return familyTree(main, token, personId);
-    return familyMembers(main, token);
+  // The Family screen now lives in Settings. Old links and bookmarks still land in the right place.
+  VIEWS.family = function (main, token, tab, personId) {
+    location.replace('#/settings/family' + (tab === 'tree' ? '/tree' + (personId ? '/' + personId : '') : ''));
   };
+
+  // Settings > Family and members: two tabs, Members and Family Tree.
+  async function settingsFamilyHub(main, token, tab, personId) {
+    var onTree = tab === 'tree';
+    main.appendChild(h('nav', { class: 'tabs fam-tabs', 'aria-label': 'Family sections' },
+      h('a', { class: 'tab', href: '#/settings/family', 'aria-current': onTree ? null : 'page', text: 'Members' }),
+      h('a', { class: 'tab', href: '#/settings/family/tree', 'aria-current': onTree ? 'page' : null, text: 'Family Tree' })));
+    if (onTree) return familyTree(main, token, personId);
+    await familyMembers(main, token);
+    if (token !== S.nav) return;
+    return settingsFamily(main, token);
+  }
 
   async function familyMembers(main, token) {
     var listBox = h('div', { class: 'card' }, spinnerLine('Loading…'));
@@ -1983,9 +1989,6 @@
     var me = joined.filter(function (m) { return m.userId === S.user.$id; })[0];
     if (!me) { S.validatedAt = 0; return route(false); }           // not a member any more: re-check with the server
     clear(listBox);
-    var storageBox = h('div');
-    main.appendChild(h('div', { class: 'card' }, h('h2', { text: 'Photo and video space' }), storageBox));
-    renderUsage(storageBox, true);
     listBox.appendChild(h('h2', { text: joined.length + (joined.length === 1 ? ' member' : ' members') }));
     joined.forEach(function (m) {
       var p = S.profiles.get(m.userId) || null;
@@ -1997,8 +2000,6 @@
           isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null,
           isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null)));
     });
-    main.appendChild(h('p', { class: 'muted small' }, S.isOwner ? 'Inviting people, removing members, tree admins, and leaving or deleting this family are in ' : 'To add a relative, ask a family owner to invite their email address. Leaving this family is in ',
-      h('a', { href: '#/settings/family', text: 'Settings \u2192 Family and members' }), '.'));
   }
 
   // Settings > Family and members: everything about managing who belongs to the active family.
@@ -2336,7 +2337,7 @@
     if (token !== S.nav) return;
     var prof = S.profiles.get(uid);
     if (!prof) {
-      main.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That profile is not available in this family.' }), h('a', { class: 'btn', href: '#/family', text: 'Back to Family' })));
+      main.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That profile is not available in this family.' }), h('a', { class: 'btn', href: '#/settings/family', text: 'Back to Family' })));
       return;
     }
     var tree = null;
@@ -2350,7 +2351,7 @@
         h('a', { class: 'btn small', href: '#/profile', text: 'Exit preview' })));
     }
     var top = h('div', { class: 'profile-top' });
-    if (!own) top.appendChild(h('a', { class: 'link-btn', href: '#/family', text: '← Family' }));
+    if (!own) top.appendChild(h('a', { class: 'link-btn', href: '#/settings/family', text: '← Family' }));
     top.appendChild(h('span', { class: 'grow' }));
     if (mine) {
       top.appendChild(h('a', { class: 'icon-btn', href: '#/profile/preview', 'aria-label': 'View as family', title: 'View as family' }, icon('eye')));
@@ -2385,7 +2386,7 @@
     if (!tree) box.appendChild(h('p', { class: 'muted', text: 'The family tree is not set up yet.' }));
     else if (person) {
       box.appendChild(h('p', null, own ? 'You appear in the tree as ' : firstName(prof) + ' appears in the tree as ', h('strong', { text: person.name }), person.confirmed ? '.' : '. This link is waiting for confirmation.'));
-      box.appendChild(h('a', { class: 'btn secondary', href: '#/family/tree/' + person.$id, text: 'View in family tree' }));
+      box.appendChild(h('a', { class: 'btn secondary', href: '#/settings/family/tree/' + person.$id, text: 'View in family tree' }));
       if (mine && !person.confirmed) box.appendChild(confirmCard(person, function () { route(false); }));
     } else {
       box.appendChild(h('p', { class: 'muted', text: 'Not connected to this family’s tree yet.' }));
@@ -2393,7 +2394,7 @@
         if (canEditTree()) {
           box.appendChild(h('button', { class: 'btn secondary', type: 'button', text: 'Add to the family tree', onclick: function (ev) {
             busy(ev.currentTarget, async function () {
-              try { var r = await api('treeAddPerson', { familyId: S.familyId, name: prof.displayName, userId: uid }); S.tree = null; location.hash = '#/family/tree/' + r.personId; }
+              try { var r = await api('treeAddPerson', { familyId: S.familyId, name: prof.displayName, userId: uid }); S.tree = null; location.hash = '#/settings/family/tree/' + r.personId; }
               catch (e) { toast(errText(e)); }
             });
           } }));
@@ -2491,13 +2492,13 @@
 
   /* ---------- SETTINGS (opened from the gear on my profile) ---------- */
   var SETTING_SECTIONS = [
+    { id: 'family', label: 'Family and members', note: 'Members, family tree, invites, leave' },
     { id: 'account', label: 'Account and security', note: 'Email, password' },
-    { id: 'family', label: 'Family and members', note: 'Invite, remove, tree admins, leave' },
     { id: 'appearance', label: 'Appearance', note: 'Light or dark, style, accent color' },
     { id: 'storage', label: 'Storage and downloads', note: 'My uploads, family space, data use' },
     { id: 'privacy', label: 'Privacy and data', note: 'Who can see what' }
   ];
-  VIEWS.settings = async function (main, token, section) {
+  VIEWS.settings = async function (main, token, section, p2, p3) {
     var sec = SETTING_SECTIONS.filter(function (s) { return s.id === section; })[0];
     if (!sec) {
       main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/profile', text: '← Profile' })));
@@ -2511,7 +2512,7 @@
     main.appendChild(h('p', null, h('a', { class: 'link-btn', href: '#/settings', text: '← Settings' })));
     main.appendChild(h('h1', { text: sec.label }));
     if (sec.id === 'account') settingsAccount(main);
-    else if (sec.id === 'family') await settingsFamily(main, token);
+    else if (sec.id === 'family') await settingsFamilyHub(main, token, p2, p3);
     else if (sec.id === 'appearance') settingsAppearance(main);
     else if (sec.id === 'storage') await settingsStorage(main, token);
     else settingsPrivacy(main);
