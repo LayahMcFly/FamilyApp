@@ -972,3 +972,22 @@ dialog input[type="date"] { border-color: transparent; }
 .sheet-backdrop { animation: fade-in .3s ease; }
 .sheet-backdrop.closing { animation: fade-out .23s ease forwards; }
 @media (prefers-reduced-motion: reduce) { .sheet, .sheet.closing, .sheet-backdrop, .sheet-backdrop.closing { animation: none; } }
+
+/* v1.19.0 — desktop: full-width top bar, roomier pages, proper Shorts */
+@media (min-width: 900px) {
+  .topbar-inner { max-width: none; padding-inline: 32px; gap: 14px; }
+  .topbar-inner #bell { margin-left: auto; }
+  .topbar-inner .fam-select, .topbar-inner .fam-name { flex: 0 0 auto; min-width: 180px; max-width: 280px; }
+  .main[data-view="settings"], .main[data-view="profile"], .main[data-view="create"], .main[data-view="saved"], .main[data-view="activity"], .main[data-view="family"], .main[data-view="post"] { max-width: 640px; }
+  .main[data-view="tree"] { max-width: 1000px; }
+  .main[data-view="tree"] .tree-view { height: calc(100vh - 300px); min-height: 480px; margin-inline: 0; }
+  .main[data-view="tree"] .tree-panel, .main[data-view="tree"] .tree-box > .tree-panel { margin-inline: 0; }
+  .main[data-view="tree"] h1, .main[data-view="tree"] .hint { margin-inline: 0; }
+  .main[data-view="home"] { padding-top: 8px; }
+  /* Shorts: a centered phone-shaped column, no leftover bar at the bottom */
+  .main.reels-main { inset: 0 0 0 244px; background: #0b0b0d; }
+  .reel { height: 100dvh; max-width: 440px; border-radius: 0; }
+  .reels-top { left: calc(244px + (100vw - 244px - 440px) / 2); right: auto; width: 440px; }
+  .reel .media video { border-radius: 0; }
+  .sheet { left: 244px; right: 0; }
+}

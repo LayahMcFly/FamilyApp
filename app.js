@@ -1127,6 +1127,7 @@
     revokeBlobs();
     clear(S.main);
     S.main.classList.toggle('reels-main', name === 'shorts');
+    S.main.setAttribute('data-view', name || '');
     document.body.classList.remove('sheet-open');
     var navName = name === 'settings' ? 'profile' : name;
     var savedBtn = document.getElementById('saved-btn');
