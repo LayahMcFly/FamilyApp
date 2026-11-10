@@ -75,7 +75,9 @@
     heart: ['M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z'],
     comment: ['M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z'],
     edit: ['M4 20h4L19 9l-4-4L4 16z'],
-    trash: ['M4 7h16', 'M9 7V4h6v3', 'M6 7l1 13h10l1-13']
+    trash: ['M4 7h16', 'M9 7V4h6v3', 'M6 7l1 13h10l1-13'],
+    volume: ['M4 9v6h4l5 4V5L8 9z', 'M16.5 9a4 4 0 0 1 0 6', 'M19 6.5a8 8 0 0 1 0 11'],
+    mute: ['M4 9v6h4l5 4V5L8 9z', 'M17 9.5l5 5', 'M22 9.5l-5 5']
   };
   function icon(name) {
     var s = document.createElementNS(SVG_NS, 'svg');
@@ -412,6 +414,9 @@
     S.blobs.forEach(function (u) { URL.revokeObjectURL(u); });
     S.blobs = [];
     if (S.io) { S.io.disconnect(); S.io = null; }
+    if (S.reelIO) { S.reelIO.disconnect(); S.reelIO = null; }
+    if (S.sentinelIO) { S.sentinelIO.disconnect(); S.sentinelIO = null; }
+    S.reelLoaded = [];
   }
   // Calls fn() when el scrolls near the screen (so we do not download photos nobody sees).
   function lazy(el, fn) {
@@ -451,9 +456,109 @@
     return box;
   }
 
+  // ----- Shorts: videos start by themselves when they fill the screen, like a scrolling video feed -----
+  S.muted = false;                       // sound is tried first; if the browser refuses, we fall back to muted
+  function syncSound() {
+    Array.prototype.forEach.call(document.querySelectorAll('.reel-media'), function (b) {
+      var v = b.querySelector('video'); if (v) v.muted = S.muted;
+      if (b.__paintSound) b.__paintSound();
+    });
+  }
+  function observeReel(box) {
+    if (!('IntersectionObserver' in window)) { box.__activate(); return; }
+    if (!S.reelIO) {
+      S.reelIO = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { if (en.intersectionRatio >= 0.6) en.target.__activate(); else en.target.__deactivate(); });
+      }, { root: S.main, threshold: [0, 0.6, 1] });
+    }
+    S.reelIO.observe(box);
+  }
+  function reelVideo(post, mime) {
+    var token = S.nav;
+    var box = h('div', { class: 'media placeholder reel-media' });
+    var st = { v: null, url: null, loading: null, active: false, wantPlay: false };
+    var fill = h('div', { class: 'fill' });
+    var bar = h('div', { class: 'reel-progress' }, fill);
+    var snd = h('button', { class: 'reel-sound', type: 'button', onclick: function (ev) { ev.stopPropagation(); S.muted = !S.muted; syncSound(); } });
+    box.__paintSound = function () {
+      clear(snd); snd.appendChild(icon(S.muted ? 'mute' : 'volume'));
+      snd.setAttribute('aria-label', S.muted ? 'Sound is off. Turn sound on' : 'Sound is on. Turn sound off');
+    };
+    function playNow() {
+      var v = st.v; if (!v) return;
+      v.muted = S.muted;
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {
+        if (v.muted) return;               // the person can tap to play
+        S.muted = true; syncSound();       // the browser blocks sound before a tap: start silent
+        var q = v.play(); if (q && q.catch) q.catch(function () {});
+      });
+    }
+    function wait(text) { clear(box); box.className = 'media placeholder reel-media'; box.appendChild(spinnerLine(text)); }
+    function fail(e) {
+      clear(box); box.className = 'media placeholder reel-media';
+      box.appendChild(h('div', null, h('p', { text: "Couldn't load this video. " + (e && e.code === 401 ? 'You may not have access.' : 'Please try again.') }),
+        h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function (ev) { ev.stopPropagation(); load(true); } })));
+    }
+    function trackLoaded() {
+      S.reelLoaded = (S.reelLoaded || []).filter(function (b) { return b !== box; });
+      S.reelLoaded.push(box);
+      if (S.reelLoaded.length > 4) {        // keep memory small: let go of the oldest video that is not on screen
+        for (var i = 0; i < S.reelLoaded.length - 1; i++) { if (S.reelLoaded[i].__unload()) { S.reelLoaded.splice(i, 1); break; } }
+      }
+    }
+    function load(play) {
+      if (st.v) { if (play) playNow(); return; }
+      if (st.loading) { st.wantPlay = st.wantPlay || play; return; }
+      st.wantPlay = play; wait('Loading…');
+      st.loading = fetchMedia(post.mediaFileId).then(function (blob) {
+        st.loading = null;
+        if (token !== S.nav) return;
+        st.url = URL.createObjectURL(new Blob([blob], { type: mime }));
+        clear(box); box.className = 'media reel-media';
+        var v = h('video', { src: st.url, loop: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
+        v.muted = S.muted;
+        v.addEventListener('timeupdate', function () { if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%'; });
+        box.appendChild(v); box.appendChild(snd); box.appendChild(bar); box.__paintSound();
+        st.v = v; trackLoaded();
+        if (st.wantPlay && st.active) playNow();
+      }).catch(function (e) { st.loading = null; if (token === S.nav) fail(e); });
+    }
+    box.addEventListener('click', function () { if (!st.v) return; if (st.v.paused) playNow(); else st.v.pause(); });
+    box.__activate = function () {
+      st.active = true;
+      if (st.v) playNow(); else load(true);
+      var card = box.closest ? box.closest('.reel') : null, nx = card && card.nextElementSibling;
+      var m = nx && nx.querySelector ? nx.querySelector('.reel-media') : null;
+      if (m && m.__prefetch) m.__prefetch();          // get the next video ready so the swipe feels instant
+    };
+    box.__deactivate = function () { st.active = false; if (st.v) st.v.pause(); };
+    box.__prefetch = function () { load(false); };
+    box.__unload = function () {
+      if (st.active) return false;
+      if (st.v) { st.v.pause(); st.v.removeAttribute('src'); st.v.load(); }
+      if (st.url) URL.revokeObjectURL(st.url);
+      st.url = null; st.v = null; wait('Loading…');
+      return true;
+    };
+    wait('Loading…');
+    observeReel(box);
+    return box;
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) Array.prototype.forEach.call(document.querySelectorAll('video'), function (v) { v.pause(); });
+  });
+  document.addEventListener('keydown', function (ev) {          // arrow keys move between Shorts on a computer
+    if (!S.main || !S.main.classList.contains('reels-main')) return;
+    var t = ev.target && ev.target.tagName; if (t === 'TEXTAREA' || t === 'INPUT' || t === 'SELECT') return;
+    var r = S.main.querySelector('.reel'); if (!r) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); S.main.scrollBy({ top: (ev.key === 'ArrowDown' ? 1 : -1) * r.offsetHeight, behavior: 'smooth' }); }
+  });
+
   function videoBlock(post, vertical) {
     var token = S.nav;
     var mime = OK_VIDEO.indexOf(post.mediaMime) >= 0 ? post.mediaMime : 'video/mp4';
+    if (vertical) return reelVideo(post, mime);
     var box = h('div', { class: 'media' + (vertical ? ' vertical' : '') });
     function showButton(errText) {
       clear(box); box.className = 'media placeholder' + (vertical ? ' vertical' : '');
@@ -506,7 +611,7 @@
     var rows = await listAllRows('bookmarks', [Query.equal('userId', [S.user.$id]), Query.equal('familyId', [fid]), Query.orderAsc('$createdAt')], 1000);
     if (fid !== S.familyId) return;
     S.saved = new Map();
-    rows.forEach(function (r) { S.saved.set(r.postId, r.$id); });
+    rows.forEach(function (r) { S.saved.set(r.postId, r.collectionId || ''); });   // value = which library ('' = Saved for later)
   }
 
   // Everyone's profile in the ACTIVE family (names and pictures). Rows from other families are never requested.
@@ -978,6 +1083,84 @@
     });
   }
 
+  /* ---- Saved libraries: names live in my own account settings, each saved post points to one ---- */
+  var LATER_NAME = 'Saved for later';
+  function libs() { var all = S.user && S.user.prefs && S.user.prefs.libraries; return all && all[S.familyId] ? all[S.familyId].slice() : []; }
+  function libOf(postId) { var c = S.saved.get(postId) || ''; return libs().some(function (l) { return l.id === c; }) ? c : ''; }   // a deleted library falls back to Saved for later
+  function libName(id) { var l = libs().filter(function (x) { return x.id === id; })[0]; return l ? l.name : LATER_NAME; }
+  async function writeLibs(list) {
+    var all = Object.assign({}, (S.user.prefs && S.user.prefs.libraries) || {});
+    all[S.familyId] = list;
+    S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { libraries: all }) });
+  }
+  function cleanLibName(raw, exceptId) {
+    var n = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!n) throw new Error('Give the library a name.');
+    if (n.length > 30) throw new Error('Library names can be up to 30 characters.');
+    if (n.toLowerCase() === LATER_NAME.toLowerCase() || libs().some(function (l) { return l.id !== exceptId && l.name.toLowerCase() === n.toLowerCase(); })) throw new Error('You already have a library with that name.');
+    return n;
+  }
+  async function addLibrary(name) {
+    var list = libs();
+    if (list.length >= 20) throw new Error('You can have up to 20 libraries.');
+    var l = { id: 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: cleanLibName(name) };
+    list.push(l); await writeLibs(list); return l;
+  }
+  function nameDialog(title, value, label, onSubmit) {
+    return new Promise(function (resolve) {
+      var dlg = h('dialog', { 'aria-labelledby': 'dlg-title' });
+      var inp = h('input', { type: 'text', maxlength: 30, 'aria-label': 'Library name', placeholder: 'For example: Recipes' });
+      inp.value = value || '';
+      var msg = h('div'), ok = h('button', { class: 'btn', type: 'submit', text: label }), cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel' });
+      function done(v) { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); resolve(v); }
+      cancel.addEventListener('click', function () { done(false); });
+      dlg.addEventListener('cancel', function (e) { e.preventDefault(); done(false); });
+      dlg.appendChild(h('form', { novalidate: true, onsubmit: function (ev) {
+        ev.preventDefault();
+        busy(ok, async function () { try { await onSubmit(inp.value); done(true); } catch (e) { showAlert(msg, 'error', e.message && !e.type ? e.message : friendly(e)); } }, 'Saving…');
+      } }, h('h2', { id: 'dlg-title', text: title }), inp, msg, h('div', { class: 'row' }, cancel, ok)));
+      document.body.appendChild(dlg); dlg.showModal(); inp.focus(); inp.select();
+    });
+  }
+  // The sheet that opens when you tap the bookmark on a post you already saved.
+  function savePicker(post, card, hooks, repaint) {
+    var dlg = h('dialog', { class: 'sheet-dialog', 'aria-labelledby': 'dlg-title' });
+    var list = h('div', { class: 'lib-list' }), msg = h('div');
+    function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    async function moveTo(id) {
+      await api('setBookmarkCollection', { familyId: S.familyId, postId: post.$id, collectionId: id });
+      S.saved.set(post.$id, id); repaint();
+      if (hooks.onSaveChange) hooks.onSaveChange(card, id);
+      toast('Saved to ' + libName(id) + '.');
+    }
+    function row(id, name) {
+      var here = libOf(post.$id) === id;
+      return h('button', { class: 'lib-row', type: 'button', 'aria-pressed': here ? 'true' : 'false', onclick: async function () {
+        if (here) return close();
+        try { await moveTo(id); close(); } catch (e) { showAlert(msg, 'error', e.message && !e.type && !e.apiCode ? e.message : friendly(e)); }
+      } }, h('span', { text: name }), here ? h('span', { class: 'lib-here', text: 'Saved here' }) : null);
+    }
+    list.appendChild(row('', LATER_NAME));
+    libs().forEach(function (l) { list.appendChild(row(l.id, l.name)); });
+    var add = h('button', { class: 'btn secondary block', type: 'button', text: 'New library', onclick: function () {
+      close();
+      nameDialog('New library', '', 'Create and save here', async function (name) { var l = await addLibrary(name); await moveTo(l.id); });
+    } });
+    var remove = h('button', { class: 'btn danger block', type: 'button', text: 'Remove from saved', onclick: async function () {
+      try {
+        var r = await api('toggleBookmark', { familyId: S.familyId, postId: post.$id });
+        if (!r.saved) { S.saved.delete(post.$id); repaint(); if (hooks.onUnsave) hooks.onUnsave(card); toast('Removed from saved.'); }
+        close();
+      } catch (e) { showAlert(msg, 'error', friendly(e)); }
+    } });
+    var closeBtn = h('button', { class: 'btn secondary block', type: 'button', text: 'Close', onclick: close });
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    dlg.appendChild(h('h2', { id: 'dlg-title', text: 'Save to' }));
+    dlg.appendChild(list); dlg.appendChild(msg);
+    dlg.appendChild(h('div', { class: 'stack' }, add, remove, closeBtn));
+    document.body.appendChild(dlg); dlg.showModal();
+  }
+
   async function ensureProfiles(ids) {
     var missing = ids.some(function (id) { return !S.profiles.has(id); });
     if (missing && Date.now() - S.profilesAt > 30000) await loadProfiles();   // a new member may have joined
@@ -1009,20 +1192,21 @@
     return { posts: rows, cursor: rows.length ? rows[rows.length - 1].$id : cursor, done: rows.length < pageSize() };
   }
 
-  async function fetchSavedPage(cursor) {
-    var q = [Query.equal('userId', [S.user.$id]), Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt'), Query.limit(pageSize())];
-    if (cursor) q.push(Query.cursorAfter(cursor));
-    var rows = (await listRows('bookmarks', q)).rows;
-    if (!rows.length) return { posts: [], cursor: cursor, done: true };
-    var ids = rows.map(function (b) { return b.postId; });
-    var found = (await listRows('posts', [Query.equal('$id', ids), Query.limit(ids.length)])).rows;
+  // One library at a time. The list of what I saved is already in memory (S.saved), newest first.
+  async function fetchSavedPage(cursor, lib) {
+    var ids = [];
+    S.saved.forEach(function (c, pid) { if (libOf(pid) === (lib || '')) ids.push(pid); });
+    ids.reverse();
+    var start = cursor ? Number(cursor) : 0, slice = ids.slice(start, start + pageSize());
+    if (!slice.length) return { posts: [], cursor: cursor, done: true };
+    var found = (await listRows('posts', [Query.equal('$id', slice), Query.limit(slice.length)])).rows;
     var byId = {}; found.forEach(function (p) { byId[p.$id] = p; });
     var posts = [];
-    rows.forEach(function (b) {
-      if (byId[b.postId] && byId[b.postId].familyId === S.familyId) posts.push(byId[b.postId]);
-      else S.saved.delete(b.postId);          // the post is gone (the server removes bookmarks with it)
+    slice.forEach(function (pid) {
+      if (byId[pid] && byId[pid].familyId === S.familyId) posts.push(byId[pid]);
+      else S.saved.delete(pid);          // the post is gone (the server removes bookmarks with it)
     });
-    return { posts: posts, cursor: rows[rows.length - 1].$id, done: rows.length < pageSize() };
+    return { posts: posts, cursor: String(start + slice.length), done: start + slice.length >= ids.length };
   }
 
   // Shows posts in pages with a "Load more" button.
@@ -1030,8 +1214,10 @@
     var list = h('div', { class: opts.className || '' });
     var status = h('div', { 'aria-live': 'polite' });
     var more = h('button', { class: 'btn secondary block', type: 'button', text: 'Load more', hidden: true });
-    container.appendChild(list); container.appendChild(status); container.appendChild(h('div', { class: 'stack' }, more));
+    var sentinel = opts.infinite ? h('div', { class: 'sentinel', 'aria-hidden': 'true' }) : null;
+    container.appendChild(list); if (sentinel) container.appendChild(sentinel); container.appendChild(status); container.appendChild(h('div', { class: 'stack' }, more));
     var st = { cursor: null, done: false, loading: false, count: 0 };
+    var sio = null;
 
     async function load() {
       if (st.loading || st.done) return;
@@ -1050,16 +1236,23 @@
         st.count += page.posts.length;
         clear(status);
         if (!st.count) status.appendChild(h('div', { class: 'empty' }, h('p', { text: opts.emptyTitle }), h('p', { class: 'small', text: opts.emptyHint || '' }), opts.emptyAction || null));
+        else if (opts.infinite && st.done) status.appendChild(h('div', { class: 'reels-end' }, h('p', { text: "You're all caught up." }),
+          h('button', { class: 'btn secondary small', type: 'button', text: 'Back to the top', onclick: function () { container.scrollTo({ top: 0, behavior: 'smooth' }); } })));
       } catch (e) {
         if (token !== S.nav) return;
         clear(status);
         status.appendChild(alertBox('error', friendly(e)));
         status.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Try again', onclick: function () { st.loading = false; load(); } }));
       } finally {
-        st.loading = false; more.disabled = false; more.hidden = st.done;
+        st.loading = false; more.disabled = false; more.hidden = st.done || !!opts.infinite;
+        if (sio && !st.done) { sio.unobserve(sentinel); sio.observe(sentinel); }      // check again whether the end is still close
       }
     }
     more.addEventListener('click', load);
+    if (sentinel && 'IntersectionObserver' in window) {
+      sio = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) load(); }, { rootMargin: '900px' });
+      sio.observe(sentinel); S.sentinelIO = sio;
+    }
     return load();
   }
 
@@ -1081,18 +1274,55 @@
     main.appendChild(h('h1', { class: 'sr-only', text: 'Shorts' }));
     main.appendChild(h('div', { class: 'reels-top' }, h('span', { text: 'Shorts' })));
     return pagedFeed(token, main, function (c) { return fetchPostsPage('short', c); }, {
-      className: 'shorts', variant: 'short', emptyTitle: 'No Shorts yet.', emptyHint: 'Record a short vertical video (up to ' + (L.shortMaxSeconds || 60) + ' seconds) and share it.',
+      className: 'shorts', variant: 'short', infinite: true, emptyTitle: 'No Shorts yet.', emptyHint: 'Record a short vertical video (up to ' + (L.shortMaxSeconds || 60) + ' seconds) and share it.',
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a Short' })
     });
   };
   VIEWS.saved = function (main, token) {
+    var sel = S.savedTab || '';
+    if (sel && !libs().some(function (l) { return l.id === sel; })) sel = '';
     main.appendChild(h('h1', { text: 'Saved' }));
-    main.appendChild(h('p', { class: 'muted small', text: 'Only you can see what you save.' }));
-    return pagedFeed(token, main, fetchSavedPage, {
-      emptyTitle: 'Nothing saved yet.', emptyHint: 'Tap the bookmark on any post to keep it here.',
-      onUnsave: function (card) { if (card.parentNode) card.parentNode.removeChild(card); }
-    });
+    main.appendChild(h('p', { class: 'muted small', text: 'Only you can see what you save, and what you name your libraries.' }));
+    var chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Libraries' }), manage = h('div', { class: 'row' }), holder = h('div');
+    main.appendChild(chips); main.appendChild(manage); main.appendChild(holder);
+
+    function drawChips() {
+      clear(chips); clear(manage);
+      function chip(id, name) {
+        chips.appendChild(h('button', { class: 'chip', type: 'button', 'aria-pressed': id === sel ? 'true' : 'false', text: name, onclick: function () { sel = id; S.savedTab = id; show(); } }));
+      }
+      chip('', LATER_NAME);
+      libs().forEach(function (l) { chip(l.id, l.name); });
+      chips.appendChild(h('button', { class: 'chip add', type: 'button', text: '+ New library', onclick: function () {
+        nameDialog('New library', '', 'Create', async function (n) { var l = await addLibrary(n); sel = l.id; S.savedTab = l.id; }).then(function (ok) { if (ok) show(); });
+      } }));
+      if (sel) {
+        manage.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Rename', onclick: function () {
+          nameDialog('Rename library', libName(sel), 'Rename', async function (n) {
+            var list = libs(), l = list.filter(function (x) { return x.id === sel; })[0];
+            l.name = cleanLibName(n, sel); await writeLibs(list);
+          }).then(function (ok) { if (ok) show(); });
+        } }));
+        manage.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Delete library', onclick: async function () {
+          var ok = await confirmDialog('Delete "' + libName(sel) + '"?', 'The posts inside are not deleted. They move back to ' + LATER_NAME + '.', 'Delete library');
+          if (!ok) return;
+          try { await writeLibs(libs().filter(function (l) { return l.id !== sel; })); sel = ''; S.savedTab = ''; show(); } catch (e) { toast(friendly(e)); }
+        } }));
+      }
+    }
+    function dropCard(card) { if (card.parentNode) card.parentNode.removeChild(card); }
+    function show() {
+      clear(holder); drawChips();
+      return pagedFeed(token, holder, function (c) { return fetchSavedPage(c, sel); }, {
+        emptyTitle: sel ? 'Nothing in this library yet.' : 'Nothing saved yet.',
+        emptyHint: sel ? 'Tap the bookmark on a saved post and choose this library.' : 'Tap the bookmark on any post to keep it here.',
+        onUnsave: dropCard,
+        onSaveChange: function (card, id) { if (id !== sel) dropCard(card); }
+      });
+    }
+    return show();
   };
+
 
   function compact(n) {
     if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
@@ -1150,7 +1380,7 @@
     save.className = 'act save';
     function paintLike() { like.setCount(st.likes, (st.liked ? 'Remove your like. ' : 'Like. ') + st.likes + ' likes', !!st.liked); }
     function paintCmt() { cmt.setCount(st.comments, 'Comments. ' + st.comments + ' so far', undefined); cmt.setAttribute('aria-expanded', commentsEl ? 'true' : 'false'); }
-    function paintSave() { save.setCount(null, S.saved.has(post.$id) ? 'Remove from saved' : 'Save for later', S.saved.has(post.$id)); }
+    function paintSave() { save.setCount(null, S.saved.has(post.$id) ? 'Saved in ' + libName(libOf(post.$id)) + '. Change library or remove' : 'Save for later', S.saved.has(post.$id)); }
     var actions = h('div', { class: 'actions' }, like, cmt, save);
     if (isMine) {
       actions.appendChild(h('button', { class: 'act', type: 'button', 'aria-label': 'Edit your post text', onclick: startEdit }, icon('edit')));
@@ -1179,10 +1409,12 @@
     }
 
     async function toggleSave() {
-      if (st.busy) return; st.busy = true;
+      if (st.busy) return;
+      if (S.saved.has(post.$id)) { savePicker(post, card, hooks, paintSave); return; }   // already saved: choose a library or remove
+      st.busy = true;
       try {
         var r = await api('toggleBookmark', { familyId: S.familyId, postId: post.$id });
-        if (r.saved) S.saved.set(post.$id, true);
+        if (r.saved) { S.saved.set(post.$id, ''); toast('Saved to ' + LATER_NAME + '. Tap the bookmark again to choose a library.'); }
         else { S.saved.delete(post.$id); if (hooks.onUnsave) hooks.onUnsave(card); }
       } catch (e) { toast(friendly(e)); }
       st.busy = false; paintSave();
