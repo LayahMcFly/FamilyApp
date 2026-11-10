@@ -79,3 +79,5 @@
 .shop-search-row { margin: 10px 0; }
 .shop-search { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; }
 .shop-grid[hidden], .shop-card[hidden], .shop-section[hidden] { display: none; }
+.bulk-bar { align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+.admin-prod.imported > input[type=checkbox] { margin-top: 4px; flex: none; width: 20px; height: 20px; }

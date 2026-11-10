@@ -598,12 +598,31 @@
       sc.appendChild(h('div', { class: 'row' }, syncBtn, checkBtn)); sc.appendChild(progress); sc.appendChild(report);
       var imp = ov.imported || [];
       if (!imp.length) sc.appendChild(h('p', { class: 'muted', text: 'Nothing synced yet. Press “Sync from Printify”.' }));
+      var picked = {}, boxes = [];
+      var pickInfo = h('span', { class: 'small muted', text: '0 selected' });
+      function eligible(p) { return p.supported && !p.missing; }
+      function refreshPicked() { var n = Object.keys(picked).length; pickInfo.textContent = n + ' selected'; allCb.checked = n > 0 && n === imp.filter(eligible).length; showSel.disabled = hideSel.disabled = !n; }
+      var allCb = h('input', { type: 'checkbox', 'aria-label': 'Select all products', onchange: function () {
+        picked = {}; boxes.forEach(function (b) { b.cb.checked = allCb.checked && !b.cb.disabled; if (b.cb.checked) picked[b.key] = true; }); refreshPicked(); } });
+      function bulk(on) {
+        return async function () {
+          var keys = Object.keys(picked), failed = 0;
+          for (var i = 0; i < keys.length; i++) { try { await shopApi('shopAdminToggle', { key: keys[i], enabled: on }); } catch (e) { failed++; } }
+          toast((on ? 'Shown: ' : 'Hidden: ') + (keys.length - failed) + (failed ? ' (' + failed + ' could not be changed)' : '')); await reload();
+        };
+      }
+      var showSel = h('button', { class: 'btn small', type: 'button', text: 'Show selected to customers', disabled: true, onclick: function () { X.busy(showSel, bulk(true), 'Working…'); } });
+      var hideSel = h('button', { class: 'btn secondary small', type: 'button', text: 'Hide selected', disabled: true, onclick: function () { X.busy(hideSel, bulk(false), 'Working…'); } });
+      if (imp.length) sc.appendChild(h('div', { class: 'row bulk-bar' }, h('label', { class: 'check' }, allCb, h('span', { text: ' Select all' })), showSel, hideSel, pickInfo));
       imp.forEach(function (p) {
         var info = [p.enabled ? 'ON' : 'hidden', p.variantCount + ' variant' + (p.variantCount === 1 ? '' : 's'), p.variantCount ? (p.minCents === p.maxCents ? money(p.minCents) : money(p.minCents) + ' to ' + money(p.maxCents)) : '', 'Printify: ' + (p.visible ? 'published' : 'draft')].filter(Boolean).join(' · ');
         var sel = h('select', { 'aria-label': 'Section for ' + p.title, onchange: async function () { try { await shopApi('shopAdminToggle', { key: p.key, enabled: p.enabled, section: sel.value }); toast('Moved.'); await reload(); } catch (e) { toast(msgOf(e)); } } },
           SECTIONS.map(function (x) { return h('option', { value: x.id, text: x.title }); }));
         sel.value = p.section;
+        var pcb = h('input', { type: 'checkbox', 'aria-label': 'Select ' + p.title, disabled: !eligible(p), onchange: function () { if (pcb.checked) picked[p.key] = true; else delete picked[p.key]; refreshPicked(); } });
+        boxes.push({ key: p.key, cb: pcb });
         var line = h('div', { class: 'admin-prod imported' },
+          pcb,
           p.image ? h('img', { class: 'shop-thumb small', src: p.image, alt: '' }) : null,
           h('div', null, h('strong', { text: p.title }), h('div', { class: 'small muted', text: info }),
             p.missing ? h('div', { class: 'small danger-text', text: 'No longer in your Printify shop, so it is hidden.' }) : null,
