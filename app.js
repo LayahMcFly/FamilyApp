@@ -1607,15 +1607,28 @@
     function paintCmt() { cmt.setCount(st.comments, 'Comments. ' + st.comments + ' so far', undefined); cmt.setAttribute('aria-expanded', commentsEl ? 'true' : 'false'); }
     function paintSave() { save.setCount(null, S.saved.has(post.$id) ? 'Saved in ' + libName(libOf(post.$id)) + '. Change library or remove' : 'Save for later', S.saved.has(post.$id)); }
     var actions = h('div', { class: 'actions' }, like, cmt, save);
+    async function downloadMedia() {
+      try {
+        toast('Getting your file…');
+        var blob = await fetchMedia(post.mediaFileId);
+        var mime = post.mediaMime || blob.type || (post.kind === 'photo' ? 'image/jpeg' : 'video/mp4');
+        var ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }[mime] || 'bin';
+        var u = URL.createObjectURL(new Blob([blob], { type: mime }));
+        var a = h('a', { href: u, download: 'family-circle-' + String(post.$createdAt || '').slice(0, 10) + '.' + ext });
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+      } catch (e) { toast(friendly(e)); }
+    }
     function openMore() {
       var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
+        post.mediaFileId ? h('button', { class: 'btn secondary block', type: 'button', text: post.kind === 'photo' ? 'Download photo' : 'Download video', onclick: function () { dlg.close(); downloadMedia(); } }) : null,
         isMine ? h('button', { class: 'btn secondary block', type: 'button', text: 'Edit caption', onclick: function () { dlg.close(); startEdit(); } }) : null,
-        h('button', { class: 'btn secondary block danger-text', type: 'button', text: isMine ? 'Delete' : 'Remove as family admin', onclick: function () { dlg.close(); removePost(); } }),
+        (isMine || S.isOwner) ? h('button', { class: 'btn secondary block danger-text', type: 'button', text: isMine ? 'Delete' : 'Remove as family admin', onclick: function () { dlg.close(); removePost(); } }) : null,
         h('button', { class: 'btn ghost block', type: 'button', text: 'Cancel', onclick: function () { dlg.close(); } })));
       dlg.addEventListener('close', function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
       document.body.appendChild(dlg); dlg.showModal();
     }
-    if (isMine || S.isOwner) {
+    if (isMine || S.isOwner || post.mediaFileId) {
       var moreBtn = h('button', { class: isReel ? 'act' : 'more-btn', type: 'button', 'aria-label': 'More options for this post', onclick: openMore }, icon('more'));
       if (isReel) actions.appendChild(moreBtn); else headEl.appendChild(moreBtn);
     }
@@ -1709,8 +1722,9 @@
   function commentsPanel(post, st, onCount) {
     var uid = S.user.$id;
     var list = h('div'), status = h('div'), msg = h('div');
-    var ta = h('textarea', { rows: 2, maxlength: L.commentMax || 500, 'aria-label': 'Write a comment', placeholder: 'Write a comment…' });
-    var send = h('button', { class: 'btn small', type: 'submit', text: 'Comment' });
+    var ta = h('textarea', { rows: 1, class: 'comment-input', maxlength: L.commentMax || 500, 'aria-label': 'Write a comment', placeholder: 'Add a comment…' });
+    ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 110) + 'px'; });
+    var send = h('button', { class: 'btn small comment-send', type: 'submit', text: 'Post' });
     var wrap = h('div', { class: 'comments' }, list, status);
 
     function pinnedIds() { return String(post.pinnedCommentIds || '').split(',').filter(Boolean); }
@@ -1801,11 +1815,12 @@
           var row = { $id: made.commentId, authorId: uid, body: text, likedBy: [], $createdAt: new Date().toISOString() };
           S.profiles.set(uid, S.profile);
           clear(status); loaded.push(row); list.appendChild(commentItem(row, loaded));
-          ta.value = ''; showAlert(msg, 'error', '');
+          ta.value = ''; ta.style.height = 'auto'; showAlert(msg, 'error', '');
           st.comments++; onCount();
         } catch (e) { showAlert(msg, 'error', friendly(e)); }
       }, 'Posting…');
-    } }, ta, msg, h('div', { class: 'row' }, send));
+    } }, h('div', { class: 'comment-row' }, ta, send), msg);
+    form.className = 'comment-form';
     wrap.appendChild(form);
     return wrap;
   }
