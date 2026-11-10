@@ -535,3 +535,17 @@ body:has(.reels-main) .topbar, body:has(.reels-main) .site-footer { display: non
 .shorts { display: block; }
 .main.reels-main { z-index: 40; }
 .nav a, .nav a[aria-current="page"] { background: transparent; }
+
+/* anything marked hidden stays hidden (the empty upload bar was showing above the Post button) */
+[hidden], progress[hidden] { display: none !important; }
+.preview:empty { display: none; }
+
+/* upload explainer, storage meter, tagline */
+.limits { margin-top: 10px; padding: 12px 14px; border-radius: 16px; background: var(--bg); }
+.limits:empty { display: none; }
+.limits p { margin: 0 0 6px; }
+progress.meter { display: block; width: 100%; height: 10px; margin: 6px 0 8px; }
+.tagline { text-align: center; color: var(--muted); font-size: .9rem; margin: 0 0 14px; }
+.site-footer .tagline { margin: 0 0 8px; font-weight: 600; }
+.member .badge { margin-left: 6px; padding: 2px 8px; background: var(--bg); color: var(--muted); }
+progress.meter, progress.meter::-webkit-progress-bar { background: color-mix(in srgb, var(--text) 14%, transparent); }
