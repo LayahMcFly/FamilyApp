@@ -65,3 +65,6 @@
 .cart-count { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent, #e1306c); color: #fff; font-size: 11px; line-height: 18px; text-align: center; font-weight: 700; }
 
 .shop-section { margin: 18px 0 6px; font-size: 1.05rem; }
+
+.check[hidden], .shop-sources input[hidden] { display: none !important; }
+.shop-sources { gap: 8px; flex-wrap: wrap; margin: 8px 0; }

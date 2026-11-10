@@ -336,6 +336,17 @@ test('old Stripe orders are left alone and never touched by Square events', asyn
   await hook(w, 'e1', 'payment.updated', 'pay_old'); assert.equal(w.pcalls.length, 0); assert.equal(w.db.tab(T.orders).get(oldId).fulfillmentStatus, 'shipped');
 });
 
+test("a photo from the buyer's own phone can be used without a family post, but only with the confirmation", async () => {
+  const w = world(); await seed(w);
+  w.storage.add('own1', { owner: 'alice', buf: jpeg(1200, 1600) });
+  const base = { familyId: 'fam1', postId: 'own-upload', productKey: 'framed-print', variantId: 101, fileId: 'own1', quantity: 1, spec: { zoom: 1 } };
+  assert.equal((await w.call(w.A, 'shopSaveDesign', base)).status, 400, 'no confirmation, no design');
+  await w.ok(w.A, 'shopSaveDesign', { ...base, ownPhoto: true });
+  const rows = [...w.db.tab(T.designs).values()]; assert.equal(rows.length, 1); assert.equal(rows[0].postId, 'own-upload');
+  const cart = await w.ok(w.A, 'shopQuote', { familyId: 'fam1', designIds: [rows[0].$id], address: ADDR });
+  assert.ok(cart.totalCents > 0, 'an own-photo design can be quoted');
+});
+
 test('payment succeeds then Printify fails: paid, fulfillment failed, no auto refund, admin retry works', async () => {
   const w = world(); await seed(w); const d = await design(w);
   const { orderId } = await w.ok(w.A, 'shopCheckout', { familyId: 'fam1', designIds: [d.design.id], address: ADDR, requestId: 'req-cccccccc', consentImage: true, consentDelivery: true });

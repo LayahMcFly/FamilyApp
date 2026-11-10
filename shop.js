@@ -174,7 +174,7 @@
     var groups = optionGroups(prod.variants), chosen = {}, variant = prod.variants[0];
     groups.forEach(function (g) { chosen[g] = (variant.options || {})[g]; });
     var spec = { fit: 'cover', zoom: 1, ox: 0, oy: 0, caption: '' };
-    var photo = { postId: postId || '', bmp: null };
+    var photo = { postId: postId || '', bmp: null, own: false };
     var quality = h('div', { class: 'shop-quality', role: 'status' });
     var priceEl = h('div', { class: 'shop-price big' });
     var optsEl = h('div', { class: 'shop-opts' });
@@ -266,6 +266,8 @@
     var checks = ['I checked the spelling of any words.', 'I checked the crop and everyone who is in the photo.', 'I understand this layout preview is not a picture of the finished product.'].map(function (t) {
       var cb = h('input', { type: 'checkbox' }); return { cb: cb, row: h('label', { class: 'check' }, cb, ' ', t) };
     });
+    var ownCb = h('input', { type: 'checkbox' }), ownRow = h('label', { class: 'check', hidden: true }, ownCb, ' This photo is mine, or the person who took it and everyone in it agreed to this gift.');
+    checks.push({ cb: ownCb, row: ownRow, ownOnly: true });
     var addBtn = h('button', { class: 'btn block', type: 'button', text: 'Add to cart', onclick: function () { addToCart(); } });
     controls.appendChild(h('div', { class: 'shop-ctl-row' }, h('label', { text: 'Zoom' }), zoomEl));
     controls.appendChild(h('div', { class: 'shop-ctl-row' }, fitBtn, resetBtn));
@@ -277,7 +279,7 @@
 
     async function addToCart() {
       if (!photo.bmp) return;
-      if (!checks.every(function (c) { return c.cb.checked; })) return X.showAlert(msg, 'error', 'Please tick all three boxes after checking your design.');
+      if (!checks.every(function (c) { return c.cb.checked || (c.ownOnly && !photo.own); })) return X.showAlert(msg, 'error', 'Please tick every box after checking your design.');
       X.showAlert(msg, 'error', '');
       await X.busy(addBtn, async function () {
         var fid = X.S.familyId, uploaded = null;
@@ -300,7 +302,7 @@
           uploaded = await X.storage.createFile({ bucketId: X.CFG.shopBucketId || 'family-media', fileId: X.ID.unique(), file: new File([blob], 'design.jpg', { type: 'image/jpeg' }),
             permissions: [X.Permission.read(X.Role.user(uid)), X.Permission.update(X.Role.user(uid)), X.Permission.delete(X.Role.user(uid))] });
           if (fid !== X.S.familyId) throw new Error('You switched families. Nothing was added.');
-          await shopApi('shopSaveDesign', { familyId: fid, postId: photo.postId, productKey: prod.key, variantId: variant.id, fileId: uploaded.$id, quantity: Number(qtyEl.value),
+          await shopApi('shopSaveDesign', { familyId: fid, postId: photo.postId, ownPhoto: photo.own ? true : undefined, productKey: prod.key, variantId: variant.id, fileId: uploaded.$id, quantity: Number(qtyEl.value),
             spec: { fit: spec.fit, zoom: spec.zoom, ox: spec.ox, oy: spec.oy, caption: spec.caption, srcW: photo.bmp.width, srcH: photo.bmp.height } });
           st().designs = null; toast('Added to your cart.'); location.hash = '#/shop/cart';
         } catch (e) {
@@ -316,10 +318,35 @@
         var blob = await X.fetchMedia(post.mediaFileId, true);
         var bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
         if (token !== X.S.nav) return;
-        photo.postId = post.$id; photo.bmp = bmp; spec.ox = 0; spec.oy = 0; spec.zoom = 1; zoomEl.value = '1';
+        photo.postId = post.$id; photo.own = false; ownRow.hidden = true; ownCb.checked = false; photo.bmp = bmp; spec.ox = 0; spec.oy = 0; spec.zoom = 1; zoomEl.value = '1';
         clear(pickEl); pickEl.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Choose a different photo', onclick: function () { photo.bmp = null; controls.hidden = true; clear(stage); showPicker(); } }));
         clear(stage); stage.appendChild(canvas); controls.hidden = false; repaint();
       } catch (e) { clear(pickEl); X.showAlert(pickEl, 'error', "That photo couldn't be opened. " + msgOf(e)); }
+    }
+    // A photo from this phone: the gallery, or the camera. It is never posted to the family. Only the finished print image is kept, in your private area.
+    async function useFile(file) {
+      if (!file) return;
+      if (!/^image\//.test(file.type || '')) return X.showAlert(pickEl, 'error', 'Please choose a picture (JPEG, PNG or WebP).');
+      if (file.size > 40 * 1048576) return X.showAlert(pickEl, 'error', 'That picture is too large (over 40 MB). Try a smaller one.');
+      clear(pickEl); pickEl.appendChild(X.spinnerLine('Opening your photo…'));
+      try {
+        var bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        if (Math.max(bmp.width, bmp.height) > 4096) {
+          var k = 4096 / Math.max(bmp.width, bmp.height), small = await createImageBitmap(bmp, { resizeWidth: Math.round(bmp.width * k), resizeHeight: Math.round(bmp.height * k), resizeQuality: 'high' });
+          bmp.close && bmp.close(); bmp = small;
+        }
+        if (token !== X.S.nav) return;
+        photo.postId = 'own-upload'; photo.own = true; ownRow.hidden = false; ownCb.checked = false; photo.bmp = bmp; spec.ox = 0; spec.oy = 0; spec.zoom = 1; zoomEl.value = '1';
+        clear(pickEl); pickEl.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Choose a different photo', onclick: function () { photo.bmp = null; controls.hidden = true; clear(stage); showPicker(); } }));
+        clear(stage); stage.appendChild(canvas); controls.hidden = false; repaint();
+      } catch (e) { clear(pickEl); X.showAlert(pickEl, 'error', "That picture couldn't be opened. Photos in HEIC format may not work in this browser. Try a JPEG or PNG."); pickEl.appendChild(sourceButtons()); }
+    }
+    function sourceButtons() {
+      var up = h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: function () { useFile(up.files && up.files[0]); } });
+      var cam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: function () { useFile(cam.files && cam.files[0]); } });
+      return h('div', { class: 'row shop-sources' }, up, cam,
+        h('button', { class: 'btn secondary', type: 'button', text: 'Upload a photo', onclick: function () { up.click(); } }),
+        h('button', { class: 'btn secondary', type: 'button', text: 'Take a photo', onclick: function () { cam.click(); } }));
     }
     async function showPicker() {
       clear(pickEl); pickEl.appendChild(X.spinnerLine('Finding photos you can use…'));
@@ -330,9 +357,11 @@
         if (token !== X.S.nav) return;
         clear(pickEl);
         pickEl.appendChild(h('h2', { text: 'Choose a photo' }));
+        pickEl.appendChild(sourceButtons());
         if (!usable.length) { pickEl.appendChild(h('p', { class: 'muted', text: 'No photos can be used yet. Photos you post can always be used by you. For other photos, the person who posted them turns on "Allow gifts" from the ⋯ menu.' })); return; }
         var grid = h('div', { class: 'shop-photos' });
-        usable.slice(0, 12).forEach(function (p) {
+        pickEl.appendChild(h('p', { class: 'small muted', text: 'Or pick one of the photos in Family Circle:' }));
+        usable.slice(0, 24).forEach(function (p) {
           var b = h('button', { class: 'shop-photo', type: 'button', 'aria-label': 'Use this photo' + (p.body ? ': ' + p.body.slice(0, 40) : ''), onclick: function () { usePhoto(p); } });
           grid.appendChild(b);
           X.fetchMedia(p.mediaFileId, true).then(function (bl) { var im = h('img', { alt: '', src: X.blobUrl(bl, bl.type || 'image/jpeg') }); b.appendChild(im); }).catch(function () { b.textContent = 'Photo'; });

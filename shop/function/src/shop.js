@@ -33,6 +33,9 @@ export const SLOTS = {
   bracelet: { title: 'Photo bracelet', hint: 'bracelet', section: 'jewelry' }
 };
 
+/** A design made from a photo the buyer picked or took on their own phone, not from a family post. */
+export const OWN_PHOTO = 'own-upload';
+
 export const LIMITS = { maxDesignsOpen: 20, maxQty: 10, maxLines: 10, minPrint: 600, maxDesignBytes: 5 * 1024 * 1024, specMax: 3500 };
 
 // Payment and fulfillment are tracked separately.
@@ -190,8 +193,14 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   }
   async function saveDesign({ user, body }) {
     const { familyId } = await requireMember(user, body.familyId);
-    const post = await loadPhoto(familyId, body.postId);
-    if (!(await giftAllowed(post, user.$id))) throw forbidden('The person who posted this photo has not allowed it to be used for gifts.');
+    const own = body.postId === OWN_PHOTO;
+    let post = null;
+    if (own) {
+      if (body.ownPhoto !== true) throw bad('Please confirm the photo is yours to use.');
+    } else {
+      post = await loadPhoto(familyId, body.postId);
+      if (!(await giftAllowed(post, user.$id))) throw forbidden('The person who posted this photo has not allowed it to be used for gifts.');
+    }
     const { row, variants } = await productByKey(String(body.productKey || ''));
     const variant = variants.find((v) => v.id === Number(body.variantId));
     if (!variant) throw conflict('unavailable', 'That size or style is not available.');
@@ -219,7 +228,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     // Freeze the file: from now on the buyer can read it but can no longer replace or delete it, so what they approved is what is printed.
     await storage.updateFile({ bucketId: cfg.designBucketId, fileId, permissions: ownerRead(user.$id) });
     const id = rowId('design', user.$id, fileId);
-    const data = { ownerId: user.$id, familyId, postId: post.$id, productKey: row.$id, variantId: variant.id, fileId, fileSha, width: size.width, height: size.height, spec, quantity, orderId: '' };
+    const data = { ownerId: user.$id, familyId, postId: own ? OWN_PHOTO : post.$id, productKey: row.$id, variantId: variant.id, fileId, fileSha, width: size.width, height: size.height, spec, quantity, orderId: '' };
     const created = await createRow(T.designs, id, data, ownerRead(user.$id));
     return { design: publicDesign(created, { row, variants }) };
   }
@@ -292,8 +301,8 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       const prod = await productByKey(d.productKey);
       const variant = prod.variants.find((v) => v.id === d.variantId);
       if (!variant) throw conflict('unavailable', `${prod.row.title || SLOTS[d.productKey].title}: that size or style is no longer available.`);
-      const post = await loadPhoto(familyId, d.postId).catch(() => null);
-      if (!post || !(await giftAllowed(post, user.$id))) throw conflict('photo_not_allowed', 'One of the photos can no longer be used for gifts. Remove that design from your cart.');
+      const post = d.postId === OWN_PHOTO ? OWN_PHOTO : await loadPhoto(familyId, d.postId).catch(() => null);
+      if (!post || (post !== OWN_PHOTO && !(await giftAllowed(post, user.$id)))) throw conflict('photo_not_allowed', 'One of the photos can no longer be used for gifts. Remove that design from your cart.');
       lines.push({
         designId: d.$id, postId: d.postId, productKey: d.productKey, title: prod.row.title || SLOTS[d.productKey].title, variantId: variant.id, variantLabel: variant.label,
         blueprintId: prod.row.blueprintId, providerId: prod.row.providerId, position: prod.row.position, quantity: d.quantity,
@@ -554,8 +563,8 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     try {
       for (const it of items) {
         // Rechecked now, not just when the cart was built: the uploader may have turned gifts off, or deleted the photo.
-        const post = await loadPhoto(o.familyId, it.postId).catch(() => null);
-        if (!post || !(await giftAllowed(post, o.ownerId))) {
+        const post = it.postId === OWN_PHOTO ? OWN_PHOTO : await loadPhoto(o.familyId, it.postId).catch(() => null);
+        if (!post || (post !== OWN_PHOTO && !(await giftAllowed(post, o.ownerId)))) {
           return await updateRow(T.orders, o.$id, { fulfillmentStatus: 'needs_review', lastError: 'A photo in this order is no longer allowed for gifts. Nothing was sent to production.' });
         }
         if (!it.printifyImageUrl) {
