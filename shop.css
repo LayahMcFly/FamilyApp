@@ -63,3 +63,5 @@
 .cart-icon-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; }
 .cart-icon-btn svg { width: 20px; height: 20px; }
 .cart-count { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent, #e1306c); color: #fff; font-size: 11px; line-height: 18px; text-align: center; font-weight: 700; }
+
+.shop-section { margin: 18px 0 6px; font-size: 1.05rem; }

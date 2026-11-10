@@ -24,12 +24,13 @@ export const T = {
 /** The only product slots that can ever be sold. The Printify blueprint/provider/variant IDs for each are saved by the owner
  *  through the admin screen after the server has checked them against Printify's live catalog. No ID is hard-coded here. */
 export const SLOTS = {
-  'framed-print': { title: 'Framed photo print', hint: 'framed', frameNote: true },
-  magnet: { title: 'Photo magnet', hint: 'magnet' },
-  mug: { title: 'Photo mug', hint: 'mug' },
-  blanket: { title: 'Photo blanket', hint: 'blanket' },
-  puzzle: { title: 'Photo puzzle', hint: 'puzzle' },
-  necklace: { title: 'Photo necklace', hint: 'necklace' }
+  'framed-print': { title: 'Framed photo print', hint: 'framed', frameNote: true, section: 'gifts' },
+  magnet: { title: 'Photo magnet', hint: 'magnet', section: 'gifts' },
+  mug: { title: 'Photo mug', hint: 'mug', section: 'gifts' },
+  blanket: { title: 'Photo blanket', hint: 'blanket', section: 'gifts' },
+  puzzle: { title: 'Photo puzzle', hint: 'puzzle', section: 'gifts' },
+  necklace: { title: 'Photo necklace', hint: 'necklace', section: 'jewelry' },
+  bracelet: { title: 'Photo bracelet', hint: 'bracelet', section: 'jewelry' }
 };
 
 export const LIMITS = { maxDesignsOpen: 20, maxQty: 10, maxLines: 10, minPrint: 600, maxDesignBytes: 5 * 1024 * 1024, specMax: 3500 };
@@ -163,7 +164,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     const products = (await enabledProducts()).map(publicProduct);
     return {
       products,
-      slots: Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, available: products.some((p) => p.key === key) })),
+      slots: Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, section: s.section || 'gifts', available: products.some((p) => p.key === key) })),
       config: { countries, currency, maxQty: LIMITS.maxQty, supportEmail: cfg.supportEmail || '', taxPercent, testMode: cfg.squareEnvironment !== 'production', paymentsReady: squareReady() },
       isAdmin: isAdmin(user)
     };
@@ -725,7 +726,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     requireAdmin(user);
     const rows = (await listRows(T.orders, [Query.orderDesc('$createdAt'), Query.limit(50)])).rows;
     const catalog = (await listRows(T.catalog, [Query.limit(50)])).rows;
-    return { orders: rows.map(adminOrderRow), products: Object.entries(SLOTS).map(([key, s]) => { const r = catalog.find((c) => c.$id === key); return { key, title: s.title, saved: !!r, enabled: !!(r && r.enabled), blueprintId: r ? r.blueprintId : null, providerId: r ? r.providerId : null, variantCount: r ? parseVariants(r).length : 0, verifiedAt: r ? r.verifiedAt : '' }; }) };
+    return { orders: rows.map(adminOrderRow), products: Object.entries(SLOTS).map(([key, s]) => { const r = catalog.find((c) => c.$id === key); return { key, title: s.title, section: s.section || 'gifts', saved: !!r, enabled: !!(r && r.enabled), blueprintId: r ? r.blueprintId : null, providerId: r ? r.providerId : null, variantCount: r ? parseVariants(r).length : 0, verifiedAt: r ? r.verifiedAt : '' }; }) };
   }
   async function adminOrder({ user, body }) {
     requireAdmin(user);

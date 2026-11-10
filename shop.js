@@ -73,13 +73,19 @@
     main.appendChild(h('p', { class: 'muted', text: 'Turn a family photo into a gift. You choose the photo and the crop, and you see a layout preview before you pay. Shopping is optional and there are no ads or subscriptions.' }));
     main.appendChild(shopLinks());
     if (cat.config.testMode) main.appendChild(X.alertBox('warn', 'Test mode: payments here are practice payments and no real order is made.'));
+    var SECTIONS = [{ id: 'gifts', title: 'Photo gifts' }, { id: 'jewelry', title: 'Jewelry' }];
+    SECTIONS.forEach(function (sec) {
+    var slots = cat.slots.filter(function (x) { return (x.section || 'gifts') === sec.id; });
+    if (!slots.length) return;
+    main.appendChild(h('h2', { class: 'shop-section', text: sec.title }));
     var grid = h('div', { class: 'shop-grid' });
-    cat.slots.forEach(function (slot) {
+    slots.forEach(function (slot) {
       var p = productByKey(cat, slot.key);
       if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key }, h('strong', { text: p.title }), p.blurb ? h('span', { class: 'small', text: p.blurb }) : null, h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
       else grid.appendChild(h('div', { class: 'shop-card off', 'aria-disabled': 'true' }, h('strong', { text: slot.title }), h('span', { class: 'small', text: 'Not available yet' })));
     });
     main.appendChild(grid);
+    });
     if (!cat.products.length) main.appendChild(h('p', { class: 'hint', text: 'No products are switched on yet.' }));
     main.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'How it works' }),
       h('ol', { class: 'steps' },
@@ -507,7 +513,9 @@
       holder.appendChild(h('p', null, wh));
       // products
       var pc = h('div', { class: 'card inner' }, h('h2', { text: 'Products' }));
-      ov.products.forEach(function (p) {
+      var lastSection = '';
+      ov.products.slice().sort(function (x, y) { return (x.section === 'jewelry') - (y.section === 'jewelry'); }).forEach(function (p) {
+        if (p.section !== lastSection) { lastSection = p.section; pc.appendChild(h('h3', { class: 'shop-section', text: p.section === 'jewelry' ? 'Jewelry' : 'Photo gifts' })); }
         var row = h('div', { class: 'admin-prod' }, h('strong', { text: p.title }), h('span', { class: 'small muted', text: p.saved ? (p.enabled ? 'ON' : 'saved, OFF') + ' · ' + p.variantCount + ' variants · blueprint ' + p.blueprintId + ' / provider ' + p.providerId : 'not set up' }));
         var btns = h('div', { class: 'row' });
         btns.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: p.saved ? 'Change' : 'Set up', onclick: function () { productWizard(p); } }));
