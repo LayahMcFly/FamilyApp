@@ -30,7 +30,7 @@ Routes: `#/shop`, `#/shop/product/:key`, `#/shop/product/:key/:postId`, `#/shop/
 | `app.js` | `bag` icon; Shop pill in the top bar; "Make a gift" and "Allow gifts with this photo" in the photo ⋯ menu; "My orders" on your profile; a "Let family order gifts with this photo" checkbox (off by default) on the photo Create form; `fetchMedia` accepts an optional bucket; `S.shop` is cleared when you switch family or sign out; one call to `FCShop.install(...)` at startup. |
 | `shop.js`, `shop.css` | All shop screens (catalog, designer, cart, orders, owner screen). |
 | `shop/function/` | The `shop-api` Appwrite Function. |
-| `setup/setup-shop.mjs` | Creates the shop tables and the private design bucket. |
+| `SHOP-CONSOLE-COMMANDS.md`, `setup/setup-shop.mjs` | Create the shop tables and the private design bucket (Console terminal commands, or the same thing as a script). |
 
 ## 3. Architecture
 
@@ -87,7 +87,7 @@ familycircle/
     test/               22 tests
 ```
 
-## 5. Database (created by `setup/setup-shop.mjs`)
+## 5. Database (created in step 21)
 
 All tables are in database `family`, have **no table-level permissions** (the browser can never read or write them directly) and Row security on.
 
@@ -211,15 +211,11 @@ Do the parts in order. Every step says **Where**, **Do**, **Copy** (what to save
 
 ## Part C. Appwrite (steps 20–30)
 
-**20. Sign in to your computer's terminal.** Open the same terminal you used for the family-media setup (`SETUP-SCRIPT.md`). If you no longer have it set up, follow that file's first steps.
+**20. Open the Appwrite Console terminal.** *Where:* the same Terminal in the Console you used for the earlier column commands (it greets you with "This is the Appwrite CLI"). Only text inside a gray code box is a command. The diagrams in this guide are pictures, so never paste those.
 
-**21. Create a temporary API key.** *Where:* Appwrite Console, your project, Overview, Integrations, API keys, Create. *Name:* `shop-temp`. *Scopes:* `databases.read`, `databases.write`, `tables.read`, `tables.write`, `columns.read`, `columns.write`, `indexes.read`, `indexes.write`, `buckets.read`, `buckets.write`. *Copy:* the key. *Secret?* **Yes.** Delete this key after step 22. In your terminal, from the `setup` folder:
+**21. Create the tables.** *Where:* that terminal. *Do:* open `SHOP-CONSOLE-COMMANDS.md` and paste Blocks 1 to 5 one at a time, waiting for the prompt after each. Where a block says to wait 30 seconds, do that before pasting the index lines. *Secret?* No. No API key is needed, because the Console terminal is already signed in as you. *Check:* Databases, family, lists shopCatalog, shopDesigns, shopOrders, shopEvents and giftPermissions. *If it fails:* "already exists" is fine. A message about a flag name means to add `--help` to that command and tell me what it prints.
 
-```
-APPWRITE_ENDPOINT=https://nyc.cloud.appwrite.io/v1 APPWRITE_PROJECT=6aef6a03002636be44c2 APPWRITE_KEY=<paste the key here in your terminal only> node setup-shop.mjs
-```
-
-**22. Run it.** *Check:* each line says `created` or `exists`, and the last line says `Done`. Then delete `shop-temp` in the Console. *If it fails:* a 401 means a scope is missing (add it and run again; the script is safe to repeat). A "column limit" message should not appear because large fields use text columns.
+**22. Create the private bucket.** *Do:* paste Block 6. *Check:* Storage shows `shop-designs`. (The optional `setup/setup-shop.mjs` does steps 21 and 22 for people who can run Node on their own computer; you do not need it.)
 
 **23. Create the function.** *Where:* Console, Functions, Create function, Manual. *Do:* Name `shop-api`, **Function ID `shop-api`** (type it exactly), Runtime Node.js 22 or newest, Entrypoint `src/main.js`, Build command `npm install`. *Settings:* **Timeout 30 seconds**. **Execute access:** add **Any**. (Stripe and Printify have no login. The function refuses every request that has neither a valid signature nor a signed-in verified family member.) **Scopes:** `users.read`, `rows.read`, `rows.write`, `files.read`, `files.write`. Nothing else. *Check:* the function is listed.
 
