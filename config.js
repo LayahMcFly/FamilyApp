@@ -10,7 +10,7 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.2.0",
+  version: "1.4.0",
 
   // One-line promise shown on the sign-in screens and in the footer. Only say what is true today.
   tagline: "A private place for your family. No ads. No subscriptions.",
