@@ -1650,6 +1650,23 @@
       head.addEventListener('pointerup', function (ev) { if (ev.pointerType !== 'touch') end(); });
     }
   }
+  // A quick burst of confetti (after posting). Skipped for people who asked their device for less motion.
+  function confetti() {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var colors = ['#ff3b6b', '#ff8a1f', '#ffd60a', '#3ddc84', '#22b8ff', '#7c4dff', '#e040fb'];
+    var box = h('div', { class: 'confetti', 'aria-hidden': 'true' });
+    for (var i = 0; i < 36; i++) {
+      var bit = h('i'), a = (Math.random() - 0.5) * Math.PI * 1.1, v = 180 + Math.random() * 260;
+      bit.style.background = colors[i % colors.length];
+      bit.style.setProperty('--dx', Math.round(Math.sin(a) * v) + 'px');
+      bit.style.setProperty('--dy', Math.round(-Math.cos(a) * v * 0.9) + 'px');
+      bit.style.setProperty('--rot', Math.round(Math.random() * 720 - 360) + 'deg');
+      bit.style.animationDelay = Math.round(Math.random() * 120) + 'ms';
+      box.appendChild(bit);
+    }
+    document.body.appendChild(box);
+    setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 1900);
+  }
   // The big heart that pops up where you double-tapped.
   function heartBurst(box, x, y) {
     var b = h('div', { class: 'heart-burst', 'aria-hidden': 'true' }, icon('heart'));
@@ -2195,7 +2212,7 @@
             if (fid !== S.familyId) throw new Error('You switched families while uploading. Nothing was posted.');
             await api('createPost', payload);
             S.profiles.set(uid, S.profile); S.usage = null;
-            toast('Posted!');
+            toast('Posted!'); confetti();
             location.hash = kind === 'short' ? '#/shorts' : '#/home';
           } catch (e) {
             if (uploaded) storage.deleteFile({ bucketId: CFG.bucketId, fileId: uploaded.$id }).catch(function () {});   // best effort; the server also sweeps leftovers

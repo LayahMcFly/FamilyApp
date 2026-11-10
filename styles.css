@@ -1061,7 +1061,7 @@ dialog input[type="date"] { border-color: transparent; }
   :root[data-ring="married"] .nav a[data-route="create"] { --plus-grad: linear-gradient(90deg, #f7d774, #c98a14, #fff0b0, #b87a10, #f7d774); }
   :root[data-ring="grand"] .nav a[data-route="create"] { --plus-grad: linear-gradient(90deg, #8fa7d8, #f4f8ff, #6f8fd0, #a28bdc, #8fa7d8); }
   .nav a[data-route="create"]::before, .nav a[data-route="create"][aria-current="page"]::before {
-    content: ""; position: absolute; z-index: -2; top: 50%; left: 50%; width: 300%; height: 300%; margin: 0; border-radius: 0;
+    content: ""; display: block !important; position: absolute; z-index: -2; top: 50%; left: 50%; width: 300%; height: 300%; margin: 0; border-radius: 0;
     background: var(--plus-grad); transform: translate(-50%, -50%); animation: plus-spin 7s linear infinite;
   }
   .nav a[data-route="create"]::after {
@@ -1075,3 +1075,32 @@ dialog input[type="date"] { border-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .nav a[data-route="create"]::before, .nav a[data-route="create"][aria-current="page"]::before, .nav a[data-route="create"]::after { animation: none; }
 }
+
+/* v1.22.0 — a more playful look: colorful glow under buttons, soft color in the background, bouncy taps, confetti */
+:root { --fun-a: #ff6bb5; --fun-b: #ffb347; --fun-c: #5ad1ff; }
+@media (min-width: 0px) {
+  /* buttons: a glow that fades from one color to another (three colored shadows side by side) */
+  .btn:not(.ghost):not(.danger) { box-shadow: -7px 9px 14px -9px var(--fun-a), 7px 9px 14px -9px var(--accent), 0 12px 16px -10px var(--fun-b); }
+  .btn:not(.ghost):not(.danger):hover { box-shadow: -8px 11px 16px -9px var(--fun-a), 8px 11px 16px -9px var(--accent), 0 14px 18px -10px var(--fun-b); transform: translateY(-1px); }
+  .btn.secondary { box-shadow: -6px 8px 12px -9px color-mix(in srgb, var(--fun-a) 70%, transparent), 6px 8px 12px -9px color-mix(in srgb, var(--fun-c) 70%, transparent); }
+  .btn.danger { box-shadow: -6px 8px 12px -8px #ff9a62, 6px 8px 12px -8px var(--danger); }
+  .btn { background-image: none; transition: transform .14s cubic-bezier(.3, 1.6, .5, 1), box-shadow .14s, filter .14s; }
+  .btn:not(.secondary):not(.ghost):not(.danger) { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--fun-a))); }
+  .btn:active { transform: translateY(1px) scale(.93); }
+  .chip, .tab, .act { transition: transform .14s cubic-bezier(.3, 1.6, .5, 1); }
+  .chip:active, .tab:active, .act:active { transform: scale(.9); }
+  /* soft color in the corners of every page */
+  body { background-image: radial-gradient(60vmax 40vmax at -10% -8%, color-mix(in srgb, var(--fun-a) 14%, transparent), transparent 60%), radial-gradient(55vmax 40vmax at 110% 108%, color-mix(in srgb, var(--fun-c) 14%, transparent), transparent 60%), radial-gradient(40vmax 30vmax at 105% 10%, color-mix(in srgb, var(--fun-b) 10%, transparent), transparent 60%); background-attachment: fixed; }
+  /* cards get a rainbow ribbon on top; headings a splash of color */
+  .card:not(article) { background-image: linear-gradient(90deg, var(--fun-a), var(--fun-b), var(--accent), var(--fun-c)); background-size: 100% 4px; background-repeat: no-repeat; background-position: top; border-radius: 22px; }
+  .main > h1:not(.sr-only):not(.family-title) { background: linear-gradient(90deg, var(--accent), var(--fun-a)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  /* little bounces */
+  .nav a:active svg { animation: fun-bounce .35s cubic-bezier(.3, 1.6, .5, 1); }
+  .story:active .ring { animation: fun-bounce .35s cubic-bezier(.3, 1.6, .5, 1); }
+}
+:root[data-theme="dark"] { --fun-a: #d65aa0; --fun-b: #d99a3e; --fun-c: #3fa9d8; }
+@keyframes fun-bounce { 0% { transform: scale(1); } 40% { transform: scale(1.28) rotate(-6deg); } 100% { transform: scale(1); } }
+.confetti { position: fixed; left: 50%; bottom: 120px; z-index: 90; pointer-events: none; }
+.confetti i { position: absolute; width: 9px; height: 14px; border-radius: 2px; opacity: 0; animation: confetti-pop 1.5s cubic-bezier(.15, .7, .4, 1) forwards; }
+@keyframes confetti-pop { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(var(--dx), calc(var(--dy) + 220px)) rotate(var(--rot)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .btn, .chip, .tab, .act { transition: none; } .nav a:active svg, .story:active .ring { animation: none; } .confetti { display: none; } }
