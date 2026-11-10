@@ -188,7 +188,8 @@
     if (!prod) { clear(holder); holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That product is not available right now.' }), h('a', { class: 'btn', href: '#/shop', text: 'Back to the shop' }))); return; }
     main.firstChild.querySelector('h1') && (main.firstChild.querySelector('h1').textContent = prod.title);
     clear(holder);
-    if (prod.image) holder.appendChild(h('img', { class: 'shop-hero', src: prod.image, alt: prod.title + ' (sample product picture)' }));
+    var hero = prod.image ? h('img', { class: 'shop-hero', src: prod.image, alt: prod.title + ' (sample product picture)' }) : null;
+    if (hero) holder.appendChild(hero);
 
     var groups = optionGroups(prod.variants), chosen = {}, variant = prod.variants[0];
     groups.forEach(function (g) { chosen[g] = (variant.options || {})[g]; });
@@ -229,6 +230,7 @@
     var PAD = 0.14;
     function size() { var box = Math.min(main.clientWidth || 340, 420); var W = variant.width, H = variant.height; var s = box / (W * (1 + 2 * PAD)); return { s: s, cw: Math.round(W * (1 + 2 * PAD) * s), ch: Math.round(H * (1 + 2 * PAD) * s), pad: PAD }; }
     function repaint() {
+      if (hero) { var pic = (prod.images && Number.isInteger(variant.img) && prod.images[variant.img]) || prod.image; if (hero.getAttribute('src') !== pic) hero.src = pic; }   // each size or style can have its own picture
       priceEl.textContent = money(variant.priceCents) + ' each';
       if (!photo.bmp) { canvas.width = canvas.height = 1; return; }
       var W = variant.width, H = variant.height, z = size();

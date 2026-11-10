@@ -445,7 +445,7 @@ const mkProduct = (over = {}) => ({
   id: PID, title: 'Personalized Photo Mug', description: '<p>Hello &amp; welcome</p>', blueprint_id: 68, print_provider_id: 5, visible: false,
   options: [{ name: 'Size', type: 'size', values: [{ id: 1, title: '11oz' }, { id: 2, title: '15oz' }] }],
   variants: [{ id: 501, title: '11oz', price: 1999, is_enabled: true, is_available: true, options: [1] }, { id: 502, title: '15oz', price: 2299, is_enabled: true, is_available: true, options: [2] }, { id: 503, title: '20oz', price: 2599, is_enabled: false, is_available: true, options: [] }],
-  images: [{ src: 'https://images-api.printify.com/mockup/a.jpg', is_default: false }, { src: 'https://images-api.printify.com/mockup/b.jpg', is_default: true }],
+  images: [{ src: 'https://images-api.printify.com/mockup/a.jpg', is_default: false, variant_ids: [501], position: 'front' }, { src: 'https://images-api.printify.com/mockup/b.jpg', is_default: true, variant_ids: [502], position: 'front' }, { src: 'http://evil.test/c.jpg', variant_ids: [501], is_default: true }],
   print_areas: [{ variant_ids: [501, 502], placeholders: [{ position: 'front', images: [] }] }], ...over
 });
 const MUG_CAT = { variants: [{ id: 501, options: {}, placeholders: [{ position: 'front', width: 2700, height: 1100 }] }, { id: 502, options: {}, placeholders: [{ position: 'front', width: 2700, height: 1100 }] }, { id: 503, options: {}, placeholders: [{ position: 'front', width: 2700, height: 1100 }] }] };
@@ -497,6 +497,8 @@ test('imported product: title, text, picture, enabled variants, prices and IDs a
   const pub = c.products.find((x) => x.key === 'pf_' + PID);
   assert.equal(pub.blurb, 'Hello & welcome'); assert.deepEqual(pub.variants.map((v) => [v.id, v.label, v.priceCents, v.width, v.height, v.options.Size]), [[501, '11oz', 1999, 2700, 1100, '11oz'], [502, '15oz', 2299, 2700, 1100, '15oz']]);
   assert.equal(pub.image, 'https://images-api.printify.com/mockup/b.jpg');
+  assert.deepEqual(pub.images, ['https://images-api.printify.com/mockup/a.jpg', 'https://images-api.printify.com/mockup/b.jpg']);
+  assert.deepEqual(pub.variants.map((v) => pub.images[v.img]), ['https://images-api.printify.com/mockup/a.jpg', 'https://images-api.printify.com/mockup/b.jpg'], 'each variant gets its own picture; non-Printify addresses are dropped');
   assert.ok(c.slots.some((s) => s.key === 'pf_' + PID && s.available));
   assert.equal(JSON.stringify(c).includes('cost'), false);
 });

@@ -9,7 +9,8 @@
 
 export const IMPORT_PREFIX = 'pf_';
 const ID_RE = /^[A-Za-z0-9]{8,30}$/;
-export const MAX_VARIANT_JSON = 15000;
+export const MAX_VARIANT_JSON = 13000;      // the text column holds about 16,000 characters in all; the rest is room for pictures and notes
+export const MAX_ROW_JSON = 15800;
 
 export const importedKey = (printifyId) => (ID_RE.test(String(printifyId || '')) ? IMPORT_PREFIX + printifyId : '');
 export const isImportedKey = (key) => /^pf_[A-Za-z0-9]{8,30}$/.test(String(key || ''));
@@ -89,6 +90,14 @@ export function planImport(product, catalog, blueprintTitle = '') {
 
   const live = new Map(((catalog && catalog.variants) || []).map((v) => [v.id, v]));
   const variants = [];
+  // Each size or style can have its own picture (a red mug looks different from a blue one). Keep one picture per variant, as an index into a short list of web addresses.
+  const urls = [];
+  const imageFor = (id) => {
+    const cands = (Array.isArray(product.images) ? product.images : []).filter((i) => i && safeImage(i.src) && Array.isArray(i.variant_ids) && i.variant_ids.includes(id));
+    const best = cands.find((i) => i.is_default) || cands.find((i) => i.position === 'front') || cands[0];
+    if (!best) return -1;
+    const u = safeImage(best.src); let k = urls.indexOf(u); if (k < 0) { urls.push(u); k = urls.length - 1; } return k;
+  };
   for (const v of enabled) {
     const id = Number(v.id);
     if (v.is_available === false) { notes.push(`"${clean(v.title, 40)}" is switched on but Printify says it is currently unavailable, so it is left out.`); continue; }
@@ -99,22 +108,25 @@ export function planImport(product, catalog, blueprintTitle = '') {
     if (!Number.isInteger(price) || price < 100 || price > 100000) { notes.push(`"${clean(v.title, 40)}" has a price of ${v.price} cents in Printify (allowed here: 100 to 100000), so it is left out.`); continue; }
     let options = optionMap(product, v);
     if (!Object.keys(options).length) options = (cat && cat.options) || {};
-    variants.push({ id, label: clean(v.title, 80), options, priceCents: price, width: ph.width, height: ph.height });
+    const img = imageFor(id);
+    variants.push({ id, label: clean(v.title, 80), options, priceCents: price, width: ph.width, height: ph.height, ...(img >= 0 ? { img } : {}) });
   }
   if (!variants.length) return { ...base, position, support: { ok: false, reason: 'None of the enabled variants could be used (see notes).' } };
   if (JSON.stringify(variants).length > MAX_VARIANT_JSON) return { ...base, position, support: { ok: false, reason: `Too many variants (${variants.length}) to store. Switch some off in Printify and sync again.` } };
-  return { ...base, position, variants, support: { ok: true, reason: '' } };
+  return { ...base, position, variants, imageUrls: urls, support: { ok: true, reason: '' } };
 }
 
 /** Packs the variants and the small amount of sync information into the existing text column, so no new database column is needed. */
 export function packVariants(plan, extra = {}) {
-  return JSON.stringify({
-    v: plan.variants,
+  const pack = (withImages) => JSON.stringify({
+    v: withImages ? plan.variants : plan.variants.map(({ img, ...rest }) => rest),
     m: {
-      pid: plan.printifyId, image: plan.image, visible: plan.visible, section: plan.section, sectionLocal: !!extra.sectionLocal, shopId: extra.shopId || '',
+      pid: plan.printifyId, image: plan.image, u: withImages ? (plan.imageUrls || []) : [], visible: plan.visible, section: plan.section, sectionLocal: !!extra.sectionLocal, shopId: extra.shopId || '',
       ok: plan.support.ok, reason: plan.support.reason, notes: plan.notes.slice(0, 6), syncedAt: extra.syncedAt || '', missing: false
     }
   });
+  const full = pack(true);
+  return full.length <= MAX_ROW_JSON ? full : pack(false);   // too big for one text column: keep the main picture only
 }
 
 export function unpack(text) {

@@ -151,7 +151,8 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   const publicProduct = ({ row, variants }) => ({
     key: row.$id, title: titleOf(row, row.$id), blurb: row.blurb || '', frameNote: !!(SLOTS[row.$id] && SLOTS[row.$id].frameNote),
     position: row.position,
-    variants: variants.map((v) => ({ id: v.id, label: v.label, options: v.options || {}, priceCents: v.priceCents, width: v.width, height: v.height }))
+    images: (((metaOf(row) || {}).u) || []).filter((u) => typeof u === 'string' && u.startsWith('https://')).slice(0, 40),
+    variants: variants.map((v) => ({ id: v.id, label: v.label, options: v.options || {}, priceCents: v.priceCents, width: v.width, height: v.height, ...(Number.isInteger(v.img) ? { img: v.img } : {}) }))
   });
 
   /* ---------- gift permission ---------- */
