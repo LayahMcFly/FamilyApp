@@ -659,9 +659,40 @@
     }
     return S.avatarUrls.get(fileId);
   }
+  // No picture: one cursive letter on a gradient of the person's favorite color. Without a favorite color, the theme's own colors are used.
+  function firstLetter(name) { var t = String(name || '?').trim(); return (t ? Array.from(t)[0] : '?').toUpperCase(); }
+  var colorProbe = null;
+  function rgbOf(c) {
+    try {
+      if (!colorProbe) { var cv = document.createElement('canvas'); cv.width = cv.height = 1; colorProbe = cv.getContext('2d', { willReadFrequently: true }); }
+      colorProbe.clearRect(0, 0, 1, 1); colorProbe.fillStyle = '#000'; colorProbe.fillStyle = c; colorProbe.fillRect(0, 0, 1, 1);
+      var d = colorProbe.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]];
+    } catch (e) { return null; }
+  }
+  function favoriteColors(profile) {
+    var out = [];
+    aboutOf(profile).forEach(function (c) {
+      if (c.key !== 'colors') return;
+      (c.items || []).forEach(function (it) {
+        var t = String(it || '').trim().toLowerCase().replace(/\s+/g, '');
+        if (t && out.length < 2 && window.CSS && CSS.supports('color', t) && t !== 'inherit' && t !== 'initial' && t !== 'unset' && t !== 'currentcolor') out.push(t);
+      });
+    });
+    return out;
+  }
+  function paintInitialAvatar(el, profile) {
+    var cols = profile ? favoriteColors(profile) : [];
+    if (!cols.length) return;   // theme gradient from the stylesheet
+    var a = cols[0], b = cols[1] || 'color-mix(in srgb, ' + a + ' 65%, #000)';
+    el.style.background = 'linear-gradient(135deg, ' + a + ', ' + b + ')';
+    var rgb = rgbOf(a), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0;
+    el.style.color = lum > 170 ? '#2a1a3a' : '#fff';
+  }
   function avatarEl(profile, extraClass) {
     var role = profile && S.ringRole ? S.ringRole.get(profile.userId) : '';   // 'grand' or 'married' (from the family tree); everyone else keeps the rainbow
-    var el = h('div', { class: 'avatar ' + (extraClass || '') + (role ? ' ring-' + role : ''), 'aria-hidden': 'true' }, initials(profile ? profile.displayName : '?'));
+    var noPic = !(profile && profile.avatarFileId);
+    var el = h('div', { class: 'avatar ' + (extraClass || '') + (role ? ' ring-' + role : '') + (noPic ? ' initial' : ''), 'aria-hidden': 'true' }, noPic ? firstLetter(profile ? profile.displayName : '?') : initials(profile ? profile.displayName : '?'));
+    if (noPic) paintInitialAvatar(el, profile);
     if (profile && profile.avatarFileId) {
       avatarUrl(profile.avatarFileId).then(function (u) { clear(el); el.appendChild(h('img', { src: u, alt: '' })); }).catch(function () { /* keep initials */ });
     }
