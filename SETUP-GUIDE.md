@@ -162,7 +162,7 @@ If a screen reports a missing index, the message names the column. Add a Key ind
 1. **Storage > Create bucket.** Bucket ID `family-media`.
 2. **Settings > Permissions:** add one permission, **Create** for the **Label** role `family`. Add no Read, Update or Delete permission here.
 3. Turn **File security ON**. Files then use their own permissions, which the Function sets to `read(team:<familyId>)`.
-4. **Maximum file size:** 26214400 bytes (25 MB).
+4. **Maximum file size:** 15728640 bytes (15 MB).
 5. **Allowed file extensions:** `jpg`, `jpeg`, `png`, `webp`, `mp4`, `mov`, `m4v`, `webm`.
 6. Leave encryption on if it is offered. Do not enable a public or "any" permission anywhere.
 

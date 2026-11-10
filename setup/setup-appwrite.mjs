@@ -124,7 +124,7 @@ await step('bucket "family-media"', () =>
     name: 'family-media',
     permissions: [Permission.create(Role.label('family'))],
     fileSecurity: true,
-    maximumFileSize: 26214400,
+    maximumFileSize: 15728640,
     allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'mov', 'm4v', 'webm'],
     encryption: true
   })

@@ -10,7 +10,7 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.36.0",
+  version: "1.36.1",
 
   // Automatic captions are made on the phone with this speech model (English only). "Xenova/whisper-tiny.en" is about 40 MB;
   // "Xenova/whisper-base.en" is more accurate but about 3 times bigger and slower.
@@ -68,7 +68,7 @@ window.FAMILY_CONFIG = {
     imageMaxEdge: 1600,      // photos are shrunk so the longest side is at most this many pixels
     imageQuality: 0.82,      // JPEG quality used when shrinking photos (0 to 1)
     avatarEdge: 256,         // profile pictures are shrunk to this size
-    videoMaxMB: 25,          // keep this at or below the bucket "Maximum file size"
+    videoMaxMB: 15,          // keep this at or below the bucket "Maximum file size"
     shortMaxSeconds: 60,     // Shorts must be this long or shorter, and vertical
     bodyMax: 2000,           // max characters in a post
     commentMax: 500,         // max characters in a comment

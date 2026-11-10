@@ -2461,7 +2461,7 @@
       function openEditor(f) {
         if (!window.VideoEditor) return Promise.resolve({ kind: 'original', file: f });
         return window.VideoEditor.open(f, {
-          maxBytes: (L.videoMaxMB || 25) * 1048576, maxInputBytes: (CFG.editorMaxInputMB || 300) * 1048576, maxSeconds: CFG.editorMaxSeconds || 300,
+          maxBytes: (L.videoMaxMB || 15) * 1048576, maxInputBytes: (CFG.editorMaxInputMB || 300) * 1048576, maxSeconds: CFG.editorMaxSeconds || 300,
           shortMaxSeconds: kind === 'short' ? (L.shortMaxSeconds || 60) : 0, requireVertical: kind === 'short', initial: editState, fileName: 'video'
         });
       }
@@ -2477,7 +2477,7 @@
         renderUsage(limitsBox, true);
         info.textContent = kind === 'photo'
           ? 'Photos are shrunk to ' + (L.imageMaxEdge || 1600) + ' pixels on the long side before upload, which saves space.'
-          : 'Up to ' + (L.videoMaxMB || 25) + ' MB' + (kind === 'short' ? ', ' + (L.shortMaxSeconds || 60) + ' seconds or less, and vertical (taller than wide)' : '') + '. When you choose a video, an editor opens on your device (trim, cut sections out, adjust colors). Nothing is uploaded until you finish editing and tap Export and post, and only the edited video is uploaded and posted.';
+          : 'Up to ' + (L.videoMaxMB || 15) + ' MB' + (kind === 'short' ? ', ' + (L.shortMaxSeconds || 60) + ' seconds or less, and vertical (taller than wide)' : '') + '. When you choose a video, an editor opens on your device (trim, cut sections out, adjust colors). Nothing is uploaded until you finish editing and tap Export and post, and only the edited video is uploaded and posted.';
         fileInput.addEventListener('change', async function (ev) {
           var autoPost = false;
           var again = ev && ev.isTrusted === false && origFile, keep = again ? { file: file, orig: origFile, state: editState } : null;
@@ -2505,7 +2505,7 @@
                 prev.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Edit again', onclick: function () { fileInput.dispatchEvent(new Event('change')); } }));
                 if (res.state && !keep) autoPost = true;                 // fresh export: upload and post right away
               } else {
-                if (f.size > (L.videoMaxMB || 25) * 1048576) throw new Error('That video is ' + fmtMB(f.size) + '. The limit is ' + (L.videoMaxMB || 25) + ' MB.');
+                if (f.size > (L.videoMaxMB || 15) * 1048576) throw new Error('That video is ' + fmtMB(f.size) + '. The limit is ' + (L.videoMaxMB || 15) + ' MB.');
                 var meta = await probeVideo(f);
                 if (kind === 'short') {
                   if (meta.duration > (L.shortMaxSeconds || 60) + 0.5) throw new Error('Shorts must be ' + (L.shortMaxSeconds || 60) + ' seconds or less. This one is ' + Math.round(meta.duration) + ' seconds.');
@@ -2533,6 +2533,7 @@
         var text = ta.value.trim(), uid = S.user.$id;
         if (kind === 'text' && !text) return showAlert(msg, 'error', 'Write something first.');
         if (kind !== 'text' && !file) return showAlert(msg, 'error', 'Please choose a ' + (kind === 'photo' ? 'photo' : 'video') + ' first.');
+        if ((kind === 'video' || kind === 'short') && file.size > (L.videoMaxMB || 15) * 1048576) return showAlert(msg, 'error', 'This video is ' + fmtMB(file.size) + ', over the ' + (L.videoMaxMB || 15) + ' MB limit, so it cannot be posted. Edit it smaller or cut it shorter.');
         if (text.length > (L.bodyMax || 2000)) return showAlert(msg, 'error', 'That is too long. The limit is ' + (L.bodyMax || 2000) + ' characters.');
         showAlert(msg, 'error', '');
         var fid = S.familyId;
