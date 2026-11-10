@@ -806,3 +806,24 @@ label:first-child { margin-top: 0; }
 .reel .sheet::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 4px; background: #5b5b60; margin: -4px auto 10px; }
 .reel .sheet-head { justify-content: center; position: relative; }
 .reel .sheet-head .btn { position: absolute; right: 0; }
+
+/* v1.11.0 — home feed posts and videos look like Instagram */
+article.card .media-wrap { position: relative; margin: 0 -0px; }
+article.card .media-wrap .media { margin: 0; border-radius: 0; }
+article.card .post-head.overlay { position: absolute; z-index: 4; top: 0; left: 0; right: 0; margin: 0; padding: 12px 12px 36px; background: linear-gradient(#0008, transparent); color: #fff; pointer-events: none; }
+article.card .post-head.overlay > * { pointer-events: auto; }
+article.card .post-head.overlay .who { pointer-events: none; }
+article.card .post-head.overlay .who a, article.card .post-head.overlay .name { color: #fff; pointer-events: auto; text-shadow: 0 1px 3px #0006; }
+article.card .post-head.overlay .small, article.card .post-head.overlay time, article.card .post-head.overlay .edited { color: #ffffffd9; text-shadow: 0 1px 3px #0006; }
+article.card .post-head.overlay .badge { background: #00000066; color: #fff; border: 0; }
+article.card .post-head.overlay .kind-badge, article.card .post-head.overlay .badge:not(.hot) { display: none; }
+.more-btn { flex: none; margin-left: auto; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--text); cursor: pointer; }
+.more-btn svg { width: 24px; height: 24px; stroke-width: 3; }
+.post-head.overlay .more-btn { color: #fff; filter: drop-shadow(0 1px 3px #0008); }
+article.card .actions { gap: 2px; padding: 10px 12px 2px; }
+article.card .actions .act { padding: 6px 10px 6px 6px; gap: 6px; color: var(--text); font-size: .95rem; }
+article.card .actions .act svg { width: 26px; height: 26px; stroke-width: 1.8; }
+article.card .actions .act.save { margin-left: auto; padding-right: 6px; }
+.post-date { padding: 0 14px 6px; font-size: .85rem; color: var(--muted); }
+article.card .reel-sound { top: auto; bottom: 12px; right: 12px; width: 36px; height: 36px; }
+article.card .reel-sound svg { width: 20px; height: 20px; }

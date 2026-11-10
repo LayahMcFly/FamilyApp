@@ -1563,11 +1563,13 @@
     var editedEl = h('span', { class: 'edited', text: ' \u00B7 edited', hidden: !isEdited() });
     function paintEdited() { editedEl.hidden = !isEdited(); }
     var kindLabel = { photo: 'Photo', video: 'Video', short: 'Short' }[post.kind];
-    (isReel ? info : card).appendChild(h('div', { class: 'post-head' }, avatarEl(prof),
+    var wrap = (!isReel && post.mediaFileId) ? h('div', { class: 'media-wrap' }) : null;   // photo/video posts: the name sits on top of the picture, like Instagram
+    var headEl = h('div', { class: 'post-head' + (wrap ? ' overlay' : '') }, avatarEl(prof),
       h('div', { class: 'who' }, h('div', { class: 'name' }, h('a', { class: 'member-link', href: '#/profile/' + post.authorId, text: name })),
         h('div', { class: 'small muted' }, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), editedEl)),
       S.trend && S.trend.ids.has(post.$id) ? h('span', { class: 'badge hot' }, icon('flame'), ' Trending') : null,
-      kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null));
+      kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null);
+    if (wrap) wrap.appendChild(headEl); else (isReel ? info : card).appendChild(headEl);
 
     // text (can be swapped for an editor)
     var bodyHolder = h('div');
@@ -1578,8 +1580,10 @@
 
     // media
     if (post.mediaFileId) {
-      if (post.kind === 'photo') card.appendChild(imageBlock(post));
-      else if (post.kind === 'video' || post.kind === 'short') card.appendChild(videoBlock(post, post.kind === 'short'));
+      var tgt = wrap || card;
+      if (post.kind === 'photo') tgt.appendChild(imageBlock(post));
+      else if (post.kind === 'video' || post.kind === 'short') tgt.appendChild(videoBlock(post, post.kind === 'short'));
+      if (wrap) card.appendChild(wrap);
     }
     // double tap the picture or the Short to like it (it only ever adds a like, like Instagram)
     function doubleTapLike(x, y, box) { heartBurst(box, x, y); if (!st.liked) toggleLike(); }
@@ -1603,24 +1607,23 @@
     function paintCmt() { cmt.setCount(st.comments, 'Comments. ' + st.comments + ' so far', undefined); cmt.setAttribute('aria-expanded', commentsEl ? 'true' : 'false'); }
     function paintSave() { save.setCount(null, S.saved.has(post.$id) ? 'Saved in ' + libName(libOf(post.$id)) + '. Change library or remove' : 'Save for later', S.saved.has(post.$id)); }
     var actions = h('div', { class: 'actions' }, like, cmt, save);
-    if (isReel && (isMine || S.isOwner)) {
-      actions.appendChild(h('button', { class: 'act', type: 'button', 'aria-label': 'More options', onclick: function () {
-        var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
-          isMine ? h('button', { class: 'btn secondary block', type: 'button', text: 'Edit caption', onclick: function () { dlg.close(); startEdit(); } }) : null,
-          h('button', { class: 'btn secondary block danger-text', type: 'button', text: isMine ? 'Delete' : 'Remove as family admin', onclick: function () { dlg.close(); removePost(); } }),
-          h('button', { class: 'btn ghost block', type: 'button', text: 'Cancel', onclick: function () { dlg.close(); } })));
-        dlg.addEventListener('close', function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
-        document.body.appendChild(dlg); dlg.showModal();
-      } }, icon('more')));
-    } else {
-      if (isMine) actions.appendChild(h('button', { class: 'act', type: 'button', 'aria-label': 'Edit your post text', onclick: startEdit }, icon('edit')));
-      if (isMine || S.isOwner) actions.appendChild(h('button', { class: 'act', type: 'button', 'aria-label': isMine ? 'Delete your post' : 'Remove this post as family admin', onclick: removePost }, icon('trash')));
+    function openMore() {
+      var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
+        isMine ? h('button', { class: 'btn secondary block', type: 'button', text: 'Edit caption', onclick: function () { dlg.close(); startEdit(); } }) : null,
+        h('button', { class: 'btn secondary block danger-text', type: 'button', text: isMine ? 'Delete' : 'Remove as family admin', onclick: function () { dlg.close(); removePost(); } }),
+        h('button', { class: 'btn ghost block', type: 'button', text: 'Cancel', onclick: function () { dlg.close(); } })));
+      dlg.addEventListener('close', function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
+      document.body.appendChild(dlg); dlg.showModal();
+    }
+    if (isMine || S.isOwner) {
+      var moreBtn = h('button', { class: isReel ? 'act' : 'more-btn', type: 'button', 'aria-label': 'More options for this post', onclick: openMore }, icon('more'));
+      if (isReel) actions.appendChild(moreBtn); else headEl.appendChild(moreBtn);
     }
     card.appendChild(actions);
     if (isReel) {
       info.appendChild(h('button', { class: 'reel-comment', type: 'button', text: 'Add comment…', onclick: function () { toggleComments(); } }));
       card.appendChild(info);
-    } else if (post.mediaFileId) card.appendChild(bodyHolder);
+    } else if (post.mediaFileId) { card.appendChild(bodyHolder); card.appendChild(h('div', { class: 'post-date', text: new Date(post.$createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) })); }
     var commentsEl = null;
     paintLike(); paintCmt(); paintSave();
 
