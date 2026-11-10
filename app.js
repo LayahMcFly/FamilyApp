@@ -2154,7 +2154,24 @@
     var uid = S.user.$id;
     var list = h('div'), status = h('div'), msg = h('div');
     var ta = h('textarea', { rows: 1, class: 'comment-input', maxlength: L.commentMax || 500, 'aria-label': 'Write a comment', placeholder: 'Join the conversation…' });
-    ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 110) + 'px'; });
+    // Keep what is typed (or the hint) on one line by making the letters smaller, down to 12 px. Past that, the box grows taller instead.
+    var fitCtx = document.createElement('canvas').getContext('2d'), fitBase = 0;
+    function fitComment() {
+      var cs = getComputedStyle(ta), avail = ta.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      if (!(avail > 0)) return;
+      if (!fitBase) { ta.style.fontSize = ''; fitBase = parseFloat(getComputedStyle(ta).fontSize) || 16; }
+      var lines = String(ta.value || ta.placeholder).split('\n'), size = fitBase;
+      for (; size > 12; size -= 0.5) {
+        fitCtx.font = cs.fontWeight + ' ' + size + 'px ' + cs.fontFamily;
+        if (lines.every(function (l) { return fitCtx.measureText(l).width <= avail; })) break;
+      }
+      ta.style.fontSize = size + 'px';
+      ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 110) + 'px';
+    }
+    ta.addEventListener('input', fitComment);
+    ta.addEventListener('focus', fitComment);
+    if (window.ResizeObserver) { var fitRO = new ResizeObserver(function () { fitComment(); }); fitRO.observe(ta); }
+    else setTimeout(fitComment, 50);
     var send = h('button', { class: 'btn small comment-send', type: 'submit', text: 'Post' });
     var scroller = h('div', { class: 'c-scroll' }, list, status);
     var wrap = h('div', { class: 'comments' }, scroller);
@@ -2297,7 +2314,7 @@
           S.profiles.set(uid, S.profile);
           if (!row.parentId && replyTo) row.__parent = parentOf(replyTo) || replyTo.$id;
           clear(status); loaded.push(row); guessParents(loaded); if (parentOf(row)) open[parentOf(row)] = true; redraw(loaded);
-          setReply(null); ta.value = ''; ta.style.height = 'auto'; showAlert(msg, 'error', '');
+          setReply(null); ta.value = ''; ta.style.height = 'auto'; fitComment(); showAlert(msg, 'error', '');
           st.comments++; onCount();
         } catch (e) { showAlert(msg, 'error', friendly(e)); }
       }, 'Posting…');
