@@ -340,7 +340,7 @@
     S.avatarUrls.forEach(function (p) { p.then(function (u) { URL.revokeObjectURL(u); }).catch(function () {}); });
     S.avatarUrls = new Map();
     S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.saved = new Map(); S.usage = null;
-    S.familyId = null; S.role = null; S.isOwner = false;
+    S.familyId = null; S.role = null; S.isOwner = false; S.ringRole = new Map();
     if (S.main) clear(S.main);
   }
 
@@ -655,7 +655,8 @@
     return S.avatarUrls.get(fileId);
   }
   function avatarEl(profile, extraClass) {
-    var el = h('div', { class: 'avatar ' + (extraClass || ''), 'aria-hidden': 'true' }, initials(profile ? profile.displayName : '?'));
+    var role = profile && S.ringRole ? S.ringRole.get(profile.userId) : '';   // 'grand' or 'married' (from the family tree); everyone else keeps the rainbow
+    var el = h('div', { class: 'avatar ' + (extraClass || '') + (role ? ' ring-' + role : ''), 'aria-hidden': 'true' }, initials(profile ? profile.displayName : '?'));
     if (profile && profile.avatarFileId) {
       avatarUrl(profile.avatarFileId).then(function (u) { clear(el); el.appendChild(h('img', { src: u, alt: '' })); }).catch(function () { /* keep initials */ });
     }
@@ -710,6 +711,7 @@
     if (!f) return false;
     S.familyId = id; S.role = f.role; S.isOwner = f.role === 'owner';
     try { localStorage.setItem(FAM_KEY, id); } catch (e) {}
+    try { await loadTree(false); } catch (e) { S.ringRole = new Map(); }   // the tree decides ring colors
     await loadProfiles();
     if (S.familyId !== id) return false;
     if (S.profile) await loadSaved();
@@ -2702,8 +2704,20 @@
     var sug = [];
     try { sug = await listAllRows('suggestions', [Query.equal('familyId', [fid]), Query.orderDesc('$createdAt')], 200); } catch (e) { sug = []; }
     var out = { fid: fid, at: Date.now(), people: people, suggestions: sug };
-    if (fid === S.familyId) S.tree = out;
+    if (fid === S.familyId) { S.tree = out; S.ringRole = ringRoles(people); }
     return out;
+  }
+  // Ring colors come from the family tree: a grandparent has a child who has a child; married means a partner is linked in the tree.
+  function ringRoles(people) {
+    var m = new Map();
+    people.forEach(function (p) {
+      if (!p.userId) return;
+      var kids = people.filter(function (c) { return (c.parentIds || []).indexOf(p.$id) !== -1; });
+      var grand = kids.some(function (k) { return people.some(function (g) { return (g.parentIds || []).indexOf(k.$id) !== -1; }); });
+      var married = (p.partnerIds || []).some(function (q) { return people.some(function (x) { return x.$id === q; }); });
+      if (grand) m.set(p.userId, 'grand'); else if (married) m.set(p.userId, 'married');
+    });
+    return m;
   }
   function personFor(tree, uid) { return tree ? tree.people.filter(function (p) { return p.userId === uid; })[0] || null : null; }
 
@@ -2902,7 +2916,8 @@
     main.appendChild(h('h1', { text: sec.label }));
     if (sec.id === 'account') settingsAccount(main);
     else if (sec.id === 'family') await settingsFamilyHub(main, token, p2, p3);
-    else if (sec.id === 'tree') { main.appendChild(h('p', { class: 'muted small' }, 'Adjust who is who here. To just look at the tree, use the ', h('a', { class: 'inline-btn', href: '#/tree', text: 'Family Tree' }), ' button in the bottom bar.')); await familyTree(main, token, p2); }
+    else if (sec.id === 'tree') { main.appendChild(h('p', { class: 'muted small' }, 'Adjust who is who here. To just look at the tree, use the ', h('a', { class: 'inline-btn', href: '#/tree', text: 'Family Tree' }), ' button in the bottom bar.')); main.appendChild(h('ul', { class: 'ring-key', 'aria-label': 'What the circle colors mean' },
+        h('li', null, h('i', { class: 'k-rainbow' }), 'Rainbow: everyone'), h('li', null, h('i', { class: 'k-married' }), 'Gold: has a partner in the tree'), h('li', null, h('i', { class: 'k-grand' }), 'Double ring: grandparent'))); await familyTree(main, token, p2); }
     else if (sec.id === 'appearance') settingsAppearance(main);
     else if (sec.id === 'storage') await settingsStorage(main, token);
     else settingsPrivacy(main);

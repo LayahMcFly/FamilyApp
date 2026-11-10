@@ -868,3 +868,14 @@ article.card.tile { flex: 0 0 min(78vw, 300px); display: flex; flex-direction: c
 .comment.reply .avatar { width: 26px; height: 26px; font-size: .7rem; }
 .reply-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--surface-2); color: var(--muted); }
 .reply-bar[hidden] { display: none; }
+
+/* v1.15.0 — ring colors: rainbow for everyone, gold when married, a sparkling double ring for grandparents */
+.ring:has(.avatar.ring-married), .post-head .avatar.ring-married { --rb: #f7d774, #c98a14, #fff0b0, #b87a10, #f7d774, #ffe9a0, #c98a14, #f7d774; }
+.ring:has(.avatar.ring-grand), .post-head .avatar.ring-grand { --rb: #8fa7d8, #f4f8ff, #6f8fd0, #d9e4ff, #a28bdc, #f4f8ff, #8fa7d8, #8fa7d8; }
+.ring:has(.avatar.ring-grand) { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #9db2e0; }
+.post-head .avatar.ring-grand { box-shadow: 0 0 0 1.5px var(--bg), 0 0 0 3px #9db2e0; }
+.ring-key { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 0; padding: 0; list-style: none; }
+.ring-key li { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); }
+.ring-key i { width: 22px; height: 22px; border-radius: 50%; display: inline-block; background: conic-gradient(var(--rb)); -webkit-mask: radial-gradient(circle, transparent 5px, #000 6px); mask: radial-gradient(circle, transparent 5px, #000 6px); }
+.ring-key .k-married { --rb: #f7d774, #c98a14, #fff0b0, #b87a10, #f7d774; }
+.ring-key .k-grand { --rb: #8fa7d8, #f4f8ff, #6f8fd0, #d9e4ff, #a28bdc, #8fa7d8; box-shadow: 0 0 0 2px #9db2e0; }
