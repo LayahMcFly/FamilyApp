@@ -391,11 +391,14 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     }
     return '';
   }
-  async function failCheckout(orderId, lines, why, e) {
-    log('square checkout failed', why, e instanceof SquareError ? `${e.status} ${e.codes.join(',')}` : String(e && e.message));
-    await updateRow(T.orders, orderId, { paymentStatus: 'payment_failed', lastError: 'Checkout could not be started.' });
+  async function failCheckout(orderId, lines, why, e, user) {
+    const sq = e instanceof SquareError ? `Square said HTTP ${e.status}${e.errors.length ? ': ' + e.errors.map((x) => [x.category, x.code, x.field].filter(Boolean).join(' ')).join('; ') : ''}` : (e ? `network or code problem: ${String(e.message || e).slice(0, 120)}` : '');
+    const detail = `Checkout failed at "${why}"${sq ? '. ' + sq : ''}.`.slice(0, 560);
+    log('square checkout failed', why, sq);
+    await updateRow(T.orders, orderId, { paymentStatus: 'payment_failed', lastError: detail });
     for (const l of lines) await updateRow(T.designs, l.designId, { orderId: '' });
-    throw new ApiError(502, 'checkout_failed', 'Payment could not be started. You were not charged. Please try again.');
+    // The shop owner also sees the reason on screen, so a test payment can be fixed without digging through logs.
+    throw new ApiError(502, 'checkout_failed', 'Payment could not be started. You were not charged. Please try again.' + (user && isAdmin(user) ? ` (Owner only: ${detail})` : ''));
   }
   async function checkout({ user, body }) {
     const { familyId } = await requireMember(user, body.familyId);
@@ -441,14 +444,14 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       pre_populated_data: { buyer_email: user.email }
     };
     let link;
-    try { link = await square.createPaymentLink(request); } catch (e) { return failCheckout(orderId, lines, 'create', e); }
+    try { link = await square.createPaymentLink(request); } catch (e) { return failCheckout(orderId, lines, 'create the Square payment link', e, user); }
     const pl = (link && link.payment_link) || {};
     const url = String(pl.url || pl.long_url || '');
-    if (!pl.id || !pl.order_id || !/^https:\/\//.test(url)) return failCheckout(orderId, lines, 'unexpected response');
+    if (!pl.id || !pl.order_id || !/^https:\/\//.test(url)) return failCheckout(orderId, lines, 'Square answered in an unexpected way', null, user);
     let sq = ((link.related_resources && link.related_resources.orders) || []).find((x) => x && x.id === pl.order_id);
     try { if (!sq) sq = (await square.retrieveOrder(pl.order_id)).order; } catch (e) { sq = null; }
     const problem = squareOrderProblem(sq, orderId, subtotalCents, shippingCents);
-    if (problem) { try { await square.deletePaymentLink(pl.id); } catch { /* the order row is already marked failed below, and a payment for it would be held */ } return failCheckout(orderId, lines, `order check: ${problem}`); }
+    if (problem) { try { await square.deletePaymentLink(pl.id); } catch { /* the order row is already marked failed below, and a payment for it would be held */ } return failCheckout(orderId, lines, `check Square's order (${problem})`, null, user); }
     const taxCents = Number((sq.total_tax_money && sq.total_tax_money.amount) || 0);
     await updateRow(T.orders, orderId, { squarePaymentLinkId: pl.id, squareOrderId: pl.order_id, checkoutUrl: url, taxCents, totalCents: Number(sq.total_money.amount) });
     return { orderId, url };
