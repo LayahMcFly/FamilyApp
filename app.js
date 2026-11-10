@@ -26,6 +26,7 @@
     var line = document.createElement('p');
     line.appendChild(document.createTextNode((C.appName || 'Family Circle') + ' v' + (C.version || '1.0.0')));
     f.appendChild(line);
+    if (C.tagline) { var tg = document.createElement('p'); tg.textContent = C.tagline; f.insertBefore(tg, line); tg.className = 'tagline'; }
     if (C.feedbackUrl) {
       var l2 = document.createElement('p');
       l2.appendChild(document.createTextNode('Feedback, bug or problem? '));
@@ -134,6 +135,7 @@
     if (s < 7 * 86400) return Math.floor(s / 86400) + ' d ago';
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
   }
+  function fmtBytes(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1).replace(/\.0$/, '') + ' GB' : fmtMB(b); }
   function fmtMB(bytes) { return (bytes / 1048576).toFixed(bytes < 10485760 ? 1 : 0) + ' MB'; }
   function baseUrl() { return location.origin + location.pathname; }   // this page, without ?query or #hash
   function initials(name) { var p = String(name || '?').trim().split(/\s+/); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
@@ -326,7 +328,7 @@
     revokeBlobs();
     S.avatarUrls.forEach(function (p) { p.then(function (u) { URL.revokeObjectURL(u); }).catch(function () {}); });
     S.avatarUrls = new Map();
-    S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.saved = new Map();
+    S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.saved = new Map(); S.usage = null;
     S.familyId = null; S.role = null; S.isOwner = false;
     if (S.main) clear(S.main);
   }
@@ -647,6 +649,7 @@
       h('img', { class: 'logo', src: 'favicon.svg', alt: '' }),
       h('h1', { text: title }),
       lead ? h('p', { class: 'lead', text: lead }) : null,
+      (CFG.tagline ? h('p', { class: 'tagline', text: CFG.tagline }) : null),
       takeNotice(),
       body));
     document.title = title + ' · ' + (CFG.appName || 'Family Circle');
@@ -1229,7 +1232,7 @@
         while (!done && n++ < 20) { done = (await api('deletePost', { familyId: S.familyId, postId: post.$id })).done; }   // the server removes comments, likes, saves and media too
         if (!done) throw new Error('That is taking longer than expected. Press delete again to finish.');
       } catch (e) { card.removeAttribute('aria-busy'); toast(e.message && !e.type ? e.message : friendly(e)); return; }
-      S.saved.delete(post.$id);
+      S.saved.delete(post.$id); S.usage = null;
       if (card.parentNode) card.parentNode.removeChild(card);
       toast('Post deleted.');
     }
@@ -1354,6 +1357,27 @@
     });
   }
 
+  // How much photo and video space this family has used. The server is the authority on the limit.
+  async function getUsage(force) {
+    var u = S.usage;
+    if (!force && u && u.familyId === S.familyId && Date.now() - u.at < 60000) return u.data;
+    var fid = S.familyId;
+    var r = await api('familyUsage', { familyId: fid });
+    S.usage = { familyId: fid, at: Date.now(), data: r };
+    return r;
+  }
+  async function renderUsage(box, withPolicy) {
+    clear(box);
+    try {
+      var u = await getUsage();
+      clear(box);
+      var pct = Math.min(100, Math.round(u.usedBytes * 100 / Math.max(1, u.limitBytes)));
+      box.appendChild(h('p', { class: 'small', text: 'Your family has used ' + fmtBytes(u.usedBytes) + ' of ' + fmtBytes(u.limitBytes) + ' of photo and video space.' }));
+      box.appendChild(h('progress', { class: 'meter', max: 100, value: pct, 'aria-label': 'Family storage used: ' + pct + ' percent' }));
+      if (withPolicy) box.appendChild(h('p', { class: 'hint', text: 'Nothing is deleted automatically. If the space fills up, new photos and videos pause and everything already shared stays. Text posts always work. This service is free to use, and the limit is a setting that may change as it grows.' }));
+    } catch (e) { clear(box); }   // the explainer simply shows without the numbers
+  }
+
   VIEWS.create = function (main) {
     var kind = 'text', file = null, draft = '', previewUrl = null;
     var KINDS = [{ id: 'text', label: 'Text' }, { id: 'photo', label: 'Photo' }, { id: 'video', label: 'Video' }, { id: 'short', label: 'Short' }];
@@ -1370,13 +1394,14 @@
       }));
       var ta = h('textarea', { id: 'body', maxlength: L.bodyMax || 2000, rows: 5, placeholder: kind === 'text' ? "What's on your mind?" : 'Add a caption (optional)' });
       ta.value = draft;
-      var msg = h('div'), info = h('div', { class: 'hint' }), prev = h('div', { class: 'preview' });
+      var msg = h('div'), info = h('div', { class: 'hint' }), prev = h('div', { class: 'preview' }), limitsBox = h('div', { class: 'limits' });
       var bar = h('progress', { max: 100, value: 0, hidden: true, 'aria-label': 'Upload progress' });
       var fileInput = null;
 
       if (kind !== 'text') {
         var accept = kind === 'photo' ? 'image/jpeg,image/png,image/webp,image/heic,image/heif' : 'video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm';
         fileInput = h('input', { id: 'file', type: 'file', accept: accept });
+        renderUsage(limitsBox, true);
         info.textContent = kind === 'photo'
           ? 'Photos are shrunk to ' + (L.imageMaxEdge || 1600) + ' pixels on the long side before upload, which saves space.'
           : 'Up to ' + (L.videoMaxMB || 25) + ' MB' + (kind === 'short' ? ', ' + (L.shortMaxSeconds || 60) + ' seconds or less, and vertical (taller than wide)' : '') + '. Videos are uploaded as they are, not compressed.';
@@ -1400,6 +1425,11 @@
               }
               prev.appendChild(h('p', { class: 'small', text: f.name + ' · ' + fmtMB(f.size) + ' · ' + Math.round(meta.duration) + ' seconds' }));
             }
+            try {
+              var uu = await getUsage();
+              var est = kind === 'photo' ? Math.min(f.size, 1.5 * 1048576) : f.size;
+              if (uu.usedBytes + est > uu.limitBytes) throw new Error('Your family has ' + fmtBytes(Math.max(0, uu.limitBytes - uu.usedBytes)) + ' of photo and video space left, and this file needs about ' + fmtBytes(est) + '. Nothing was uploaded and nothing has been deleted. You can remove posts you no longer need, or ask the family owner.');
+            } catch (e2) { if (e2 && e2.message && !e2.type && !e2.apiCode && e2.name === 'Error') throw e2; }   // if the usage check itself fails, the server still checks on posting
             file = f;
           } catch (e) { fileInput.value = ''; showAlert(msg, 'error', e.message || friendly(e)); }
         });
@@ -1435,7 +1465,7 @@
             btn.textContent = 'Posting…';
             if (fid !== S.familyId) throw new Error('You switched families while uploading. Nothing was posted.');
             await api('createPost', payload);
-            S.profiles.set(uid, S.profile);
+            S.profiles.set(uid, S.profile); S.usage = null;
             toast('Posted!');
             location.hash = kind === 'short' ? '#/shorts' : '#/home';
           } catch (e) {
@@ -1446,7 +1476,7 @@
         }, 'Posting…');
       } },
         h('label', { for: 'body', text: kind === 'text' ? 'Your note' : 'Caption' }), ta,
-        fileInput ? h('div', null, h('label', { for: 'file', text: kind === 'photo' ? 'Photo' : kind === 'short' ? 'Short video' : 'Video' }), fileInput, info, prev) : null,
+        fileInput ? h('div', null, h('label', { for: 'file', text: kind === 'photo' ? 'Photo' : kind === 'short' ? 'Short video' : 'Video' }), fileInput, info, limitsBox, prev) : null,
         bar, msg, h('div', { class: 'stack' }, btn));
       holder.appendChild(tabs); holder.appendChild(form);
     }
@@ -1479,6 +1509,9 @@
     var me = joined.filter(function (m) { return m.userId === S.user.$id; })[0];
     if (!me) { S.validatedAt = 0; return route(false); }           // not a member any more: re-check with the server
     clear(listBox);
+    var storageBox = h('div');
+    main.appendChild(h('div', { class: 'card' }, h('h2', { text: 'Photo and video space' }), storageBox));
+    renderUsage(storageBox, true);
     listBox.appendChild(h('h2', { text: joined.length + (joined.length === 1 ? ' member' : ' members') }));
     joined.forEach(function (m) {
       var p = S.profiles.get(m.userId) || null;
