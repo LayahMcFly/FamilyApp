@@ -118,10 +118,28 @@ appwrite tablesdb create-index --database-id family --table-id giftPermissions -
 ## Block 6: the private design bucket
 
 ```
-appwrite storage create-bucket --bucket-id shop-designs --name shop-designs --permissions 'create("label:family")' --file-security true --maximum-file-size 6291456 --allowed-file-extensions jpg jpeg --encryption true
+appwrite storage create-bucket --bucket-id shop-designs --name shop-designs --permissions 'create("label:family")' --file-security true --maximum-file-size 6291456 --allowed-file-extensions jpg --encryption true
 ```
 
 
 ## Check
 
 In the Console, open Databases, family. You should see five new tables, and under Storage a bucket named shop-designs. Table permissions must be empty and Row security on for each table.
+
+
+## Catch-up block (only if the Console shows something missing)
+
+Pasting many lines at once can drop the last line of a block. These re-create the last item of each table. If one already exists you will see an "already exists" error, which is fine. Paste them one at a time, wait for the prompt, then count what the Console shows.
+
+```
+appwrite tablesdb create-string-column --database-id family --table-id shopCatalog --key verifiedAt --size 32 --required false
+appwrite tablesdb create-string-column --database-id family --table-id shopDesigns --key orderId --size 40 --required false
+appwrite tablesdb create-index --database-id family --table-id shopDesigns --key idx_orderId --type key --columns orderId
+appwrite tablesdb create-string-column --database-id family --table-id shopOrders --key paidAt --size 32 --required false
+appwrite tablesdb create-index --database-id family --table-id shopOrders --key idx_printifyOrderId --type key --columns printifyOrderId
+appwrite tablesdb create-string-column --database-id family --table-id shopEvents --key note --size 200 --required false
+appwrite tablesdb create-boolean-column --database-id family --table-id giftPermissions --key allowed --required true
+appwrite tablesdb create-index --database-id family --table-id giftPermissions --key idx_postId --type key --columns postId
+```
+
+Expected counts in Databases, family: shopCatalog 8 columns; shopDesigns 12 columns and 3 indexes; shopOrders 23 columns and 2 indexes; shopEvents 4 columns; giftPermissions 4 columns and 2 indexes. Every column and index should say Available.
