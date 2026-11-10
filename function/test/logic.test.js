@@ -539,3 +539,17 @@ test('editPost: author only, stamps editedAt, ignores unchanged text', async () 
   assert.equal(r.json.edited, true);
   assert.ok(s.world.tables.posts.get(post).editedAt);
 });
+
+test('replies: point at the top comment of the thread and stay inside the post', async () => {
+  const s = await setup();
+  const post = await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'hello' });
+  const postId = post.json.postId;
+  const top = await s.call(s.alice, { action: 'createComment', familyId: 'famA', postId, body: 'first' });
+  const r1 = await s.call(s.alice, { action: 'createComment', familyId: 'famA', postId, body: '@A hi', parentId: top.json.commentId });
+  assert.equal(r1.json.parentId, top.json.commentId);
+  const r2 = await s.call(s.alice, { action: 'createComment', familyId: 'famA', postId, body: '@A again', parentId: r1.json.commentId });
+  assert.equal(r2.json.parentId, top.json.commentId);   // a reply to a reply joins the same thread
+  const other = await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'other' });
+  const bad = await s.call(s.alice, { action: 'createComment', familyId: 'famA', postId: other.json.postId, body: 'x', parentId: top.json.commentId });
+  assert.notEqual(bad.status, 200);
+});

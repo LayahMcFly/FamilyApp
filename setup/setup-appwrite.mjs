@@ -44,7 +44,7 @@ const schema = {
     indexes: [['idx_familyId', 'key', ['familyId']], ['idx_family_kind', 'key', ['familyId', 'kind']], ['idx_mediaFileId', 'key', ['mediaFileId']]]
   },
   comments: {
-    columns: [S('familyId', 36, true), S('postId', 36, true), S('authorId', 36, true), S('body', 500, true), { type: 'string', key: 'likedBy', size: 36, required: false, array: true }],
+    columns: [S('familyId', 36, true), S('postId', 36, true), S('authorId', 36, true), S('body', 500, true), S('parentId', 36, false), { type: 'string', key: 'likedBy', size: 36, required: false, array: true }],
     indexes: [['idx_postId', 'key', ['postId']], ['idx_familyId', 'key', ['familyId']]]
   },
   reactions: {

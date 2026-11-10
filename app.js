@@ -1808,10 +1808,27 @@
     var isAuthor = post.authorId === uid;
     function redraw(rows) {
       clear(list);
-      var pins = pinnedIds();
-      var sorted = rows.filter(function (c) { return pins.indexOf(c.$id) !== -1; })
-        .concat(rows.filter(function (c) { return pins.indexOf(c.$id) === -1; }));
-      sorted.forEach(function (c) { list.appendChild(commentItem(c, rows)); });
+      var pins = pinnedIds(), ids = {};
+      rows.forEach(function (c) { ids[c.$id] = true; });
+      var tops = rows.filter(function (c) { return !c.parentId || !ids[c.parentId]; });   // replies whose comment was deleted show as normal comments
+      var sorted = tops.filter(function (c) { return pins.indexOf(c.$id) !== -1; })
+        .concat(tops.filter(function (c) { return pins.indexOf(c.$id) === -1; }));
+      sorted.forEach(function (c) {
+        list.appendChild(commentItem(c, rows));
+        rows.filter(function (r) { return r.parentId === c.$id; }).forEach(function (r) { list.appendChild(commentItem(r, rows)); });
+      });
+    }
+    var replyTo = null, replyBar = h('div', { class: 'reply-bar', hidden: true });
+    function setReply(c) {
+      replyTo = c; clear(replyBar);
+      if (!c) { replyBar.hidden = true; return; }
+      var pr = S.profiles.get(c.authorId), nm = pr ? pr.displayName : 'Family member';
+      replyBar.hidden = false;
+      replyBar.appendChild(h('span', { class: 'small', text: 'Replying to ' + nm }));
+      replyBar.appendChild(h('button', { class: 'link-btn small', type: 'button', text: 'Cancel', 'aria-label': 'Cancel reply', onclick: function () { setReply(null); ta.value = ''; } }));
+      var tag = '@' + nm.split(' ')[0] + ' ';
+      if (ta.value.indexOf(tag) !== 0) ta.value = tag + ta.value;
+      ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
     }
     function commentItem(c, rows) {
       var p = S.profiles.get(c.authorId) || null;
@@ -1859,12 +1876,14 @@
           catch (e) { toast(friendly(e)); }
         } });
       }
+      var replyBtn = h('button', { class: 'link-btn small', type: 'button', text: 'Reply', 'aria-label': 'Reply to ' + (p ? p.displayName : 'this comment'), onclick: function () { setReply(c); } });
+      if (c.parentId && rows && rows.some(function (r) { return r.$id === c.parentId; })) item.classList.add('reply');
       item.appendChild(avatarEl(p));
       item.appendChild(h('div', { class: 'bubble' },
         isPinned(c) ? h('div', { class: 'pin-flag small' }, icon('pin'), ' Pinned by the author') : null,
         h('div', { class: 'small' }, h('strong', { text: p ? p.displayName : 'Family member' }), ' ', h('span', { class: 'muted', text: timeAgo(c.$createdAt) })),
         h('div', { class: 'comment-body', text: c.body }),
-        h('div', { class: 'comment-actions' }, likeBtn, pin, del)));
+        h('div', { class: 'comment-actions' }, likeBtn, replyBtn, pin, del)));
       return item;
     }
     var loaded = [];
@@ -1887,15 +1906,15 @@
       if (!text) return showAlert(msg, 'error', 'Write a comment first.');
       busy(send, async function () {
         try {
-          var made = await api('createComment', { familyId: S.familyId, postId: post.$id, body: text });
-          var row = { $id: made.commentId, authorId: uid, body: text, likedBy: [], $createdAt: new Date().toISOString() };
+          var made = await api('createComment', { familyId: S.familyId, postId: post.$id, body: text, parentId: replyTo ? replyTo.$id : undefined });
+          var row = { $id: made.commentId, authorId: uid, body: text, likedBy: [], parentId: made.parentId || undefined, $createdAt: new Date().toISOString() };
           S.profiles.set(uid, S.profile);
-          clear(status); loaded.push(row); list.appendChild(commentItem(row, loaded));
-          ta.value = ''; ta.style.height = 'auto'; showAlert(msg, 'error', '');
+          clear(status); loaded.push(row); redraw(loaded);
+          setReply(null); ta.value = ''; ta.style.height = 'auto'; showAlert(msg, 'error', '');
           st.comments++; onCount();
         } catch (e) { showAlert(msg, 'error', friendly(e)); }
       }, 'Posting…');
-    } }, h('div', { class: 'comment-row' }, ta, send), msg);
+    } }, replyBar, h('div', { class: 'comment-row' }, ta, send), msg);
     form.className = 'comment-form';
     wrap.appendChild(form);
     return wrap;

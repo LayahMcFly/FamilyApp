@@ -568,13 +568,23 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       const { familyId } = await requireMember(user, body.familyId);
       const post = await loadPostInFamily(familyId, body.postId);
       const text = textOf(body.body, 'Comment', { min: 1, max: LIMITS.commentMax });
-      const row = await createRow(
-        TABLES.comments,
-        ID.unique(),
-        { familyId, postId: post.$id, authorId: user.$id, body: text },
-        teamRead(familyId)
-      );
-      return { commentId: row.$id };
+      // A reply points at the top comment of its thread (one level of replies, like Instagram).
+      let parentId = null;
+      if (body.parentId) {
+        const parent = await getRowOrNull(TABLES.comments, idOf(body.parentId, 'parentId'));
+        if (!parent || parent.familyId !== familyId || parent.postId !== post.$id) throw missing('The comment you are replying to was not found.');
+        parentId = parent.parentId || parent.$id;
+      }
+      const data = { familyId, postId: post.$id, authorId: user.$id, body: text };
+      let row;
+      try {
+        row = await createRow(TABLES.comments, ID.unique(), parentId ? { ...data, parentId } : data, teamRead(familyId));
+      } catch (e) {
+        // The parentId column is not set up yet: still post the reply, as a plain comment that starts with @Name.
+        if (parentId && sdkCode(e) === 400) { parentId = null; row = await createRow(TABLES.comments, ID.unique(), data, teamRead(familyId)); }
+        else throw e;
+      }
+      return { commentId: row.$id, parentId };
     },
 
     /** Like or unlike a comment. The list of likers lives on the comment row (column `likedBy`, a list of user ids). */

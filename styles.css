@@ -862,3 +862,9 @@ article.card.tile { flex: 0 0 min(78vw, 300px); display: flex; flex-direction: c
 .tile .actions { margin-top: auto; padding: 6px 8px 2px; border: 0; }
 .tile .actions .act.save { margin-left: auto; }
 @media (min-width: 900px) { article.card.tile { flex-basis: 300px; } }
+
+/* v1.14.0 — replies */
+.comment.reply { margin-left: 34px; }
+.comment.reply .avatar { width: 26px; height: 26px; font-size: .7rem; }
+.reply-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--surface-2); color: var(--muted); }
+.reply-bar[hidden] { display: none; }
