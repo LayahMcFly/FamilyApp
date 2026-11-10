@@ -738,7 +738,8 @@
       var m = nx && nx.querySelector ? nx.querySelector('.reel-media') : null;
       if (m && m.__prefetch) m.__prefetch();          // get the next video ready so the swipe feels instant
     };
-    box.__deactivate = function () { st.active = false; if (st.v) st.v.pause(); };
+    // Scrolling away stops the video and rewinds it, so it starts from the beginning when you scroll back.
+    box.__deactivate = function () { st.active = false; if (st.v) { st.v.pause(); try { st.v.currentTime = 0; } catch (e) {} } };
     box.__prefetch = function () { load(false); };
     box.__unload = function () {
       if (st.active) return false;
@@ -2924,7 +2925,28 @@
     { key: 'music', ask: 'My favorite songs or artists', title: 'Favorite songs and artists' },
     { key: 'hobbies', ask: 'My hobbies', title: 'Hobbies' },
     { key: 'loves', ask: 'Things I love', title: 'Things I love' },
-    { key: 'fears', ask: 'Things I’m afraid of', title: 'Things I’m afraid of' }
+    { key: 'fears', ask: 'Things I’m afraid of', title: 'Things I’m afraid of' },
+    // Memories from childhood (the heading above them in the list says so)
+    { key: 'kidshows', ask: 'Shows and cartoons I watched as a kid', title: 'Shows I watched as a kid', kid: true },
+    { key: 'kidmovies', ask: 'Movies I watched over and over as a kid', title: 'Movies I watched as a kid', kid: true },
+    { key: 'kidgames', ask: 'Games I played as a kid', title: 'Games I played as a kid', kid: true },
+    { key: 'kidtoys', ask: 'Toys I loved as a kid', title: 'Toys I loved as a kid', kid: true },
+    { key: 'kidoutside', ask: 'What I did for fun outside as a kid', title: 'What I did outside as a kid', kid: true },
+    { key: 'kidmusic', ask: 'Songs and music from my childhood', title: 'Music from my childhood', kid: true },
+    { key: 'kidfoods', ask: 'Foods and snacks I ate as a kid', title: 'Foods I ate as a kid', kid: true },
+    { key: 'kidbooks', ask: 'Books I loved as a kid', title: 'Books I loved as a kid', kid: true },
+    { key: 'kidschools', ask: 'Schools I went to as a child', title: 'Schools I went to', kid: true },
+    { key: 'kidteachers', ask: 'Teachers I remember', title: 'Teachers I remember', kid: true },
+    { key: 'kidsubjects', ask: 'My favorite subjects in school', title: 'Favorite school subjects', kid: true },
+    { key: 'kidlunch', ask: 'School lunches I remember', title: 'School lunches I remember', kid: true },
+    { key: 'kidfriends', ask: 'Friends I grew up with', title: 'Friends I grew up with', kid: true },
+    { key: 'kidplaces', ask: 'Places I lived or visited as a kid', title: 'Where I lived as a kid', kid: true },
+    { key: 'kidpets', ask: 'Pets I had growing up', title: 'Pets I had growing up', kid: true },
+    { key: 'kidholidays', ask: 'Holidays and traditions when I was little', title: 'Holidays when I was little', kid: true },
+    { key: 'kidwant', ask: 'What I wanted to be when I grew up', title: 'What I wanted to be someday', kid: true },
+    { key: 'kidtrouble', ask: 'Trouble I got into as a kid', title: 'Trouble I got into as a kid', kid: true },
+    { key: 'kidnick', ask: 'Nicknames I had as a kid', title: 'Nicknames I had as a kid', kid: true },
+    { key: 'kidfears', ask: 'Things I was afraid of as a kid', title: 'Things I feared as a kid', kid: true }
   ];
   function aboutOf(profile) {
     try { var a = JSON.parse((profile && profile.about) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
@@ -2976,7 +2998,9 @@
     function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
     var list = h('div', { class: 'lib-list' });
+    var kidHeading = false;
     ABOUT_PROMPTS.forEach(function (p) {
+      if (p.kid && !kidHeading) { kidHeading = true; list.appendChild(h('h3', { class: 'lib-heading', text: 'When I was a kid' })); }
       var has = taken.indexOf(p.key) !== -1;
       list.appendChild(h('button', { class: 'lib-row', type: 'button', disabled: has, onclick: function () { close(); onPick({ key: p.key, title: p.title, items: [] }); } },
         h('span', { text: p.ask }), has ? h('span', { class: 'lib-here', text: 'Added' }) : null));
