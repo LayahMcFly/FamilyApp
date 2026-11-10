@@ -313,7 +313,7 @@ progress::-moz-progress-bar { background: var(--grad); border-radius: 999px; }
    Instagram-style layout: flat white feed, story rings, icon-only
    bottom bar, edge-to-edge photos, caption under the buttons.
    ===================================================================== */
-:root { --ig-ring: linear-gradient(135deg, #2563eb, #7c4dbd); --grad: var(--accent); --lift: none; }
+:root { --rb: #ff3b6b, #ff8a1f, #ffd60a, #3ddc84, #22b8ff, #7c4dff, #e040fb, #ff3b6b; --grad: var(--accent); --lift: none; }
 body { background: var(--bg); }
 .main > h1::after, .card > h2:first-child::before { display: none; }
 .card > h2:first-child { display: block; }
@@ -358,14 +358,14 @@ h1 { font-weight: 700; letter-spacing: 0; }
 .stories::-webkit-scrollbar { display: none; }
 .story { flex: none; width: 70px; text-align: center; font-size: .75rem; color: var(--text); }
 .story span { display: block; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ring { width: 66px; height: 66px; padding: 3px; border-radius: 50%; background: var(--ig-ring); margin: 0 auto; }
+.ring { width: 66px; height: 66px; padding: 3px; border-radius: 50%; background: conic-gradient(from var(--ang), var(--rb)); margin: 0 auto; }
 .ring .avatar.lg { width: 100%; height: 100%; font-size: 1.4rem; box-shadow: 0 0 0 3px var(--bg); }
 
 /* posts: flat, full width, hairline between */
 article.card { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; background: var(--bg); margin: 0; padding: 0 0 12px; }
 .post-head { margin: 0; padding: 10px 12px; gap: 10px; }
 .post-head .avatar { width: 34px; height: 34px; font-size: .8rem; border: 2px solid transparent; box-shadow: none;
-  background: linear-gradient(var(--accent), var(--accent)) padding-box, var(--ig-ring) border-box; }
+  background: linear-gradient(var(--accent), var(--accent)) padding-box, conic-gradient(from var(--ang), var(--rb)) border-box; }
 .post-head .avatar img { border-radius: 50%; }
 .post-head .name { font-size: .9rem; font-weight: 700; line-height: 1.2; }
 .post-head .small { font-size: .75rem; }
@@ -836,3 +836,9 @@ article.card .reel-sound svg { width: 20px; height: 20px; }
 .reel-info textarea { background: #26262c; color: #fff; border: 1px solid #ffffff40; border-radius: 14px; min-height: 80px; margin-bottom: 8px; }
 .reel-info textarea::placeholder { color: #b5b5bb; }
 .reel-info .btn.secondary { background: #ffffff26; color: #fff; border-color: transparent; }
+
+/* v1.12.0 — rainbow ring that slowly turns; matches the animated icon */
+@property --ang { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+@keyframes ring-turn { to { --ang: 360deg; } }
+.ring, .post-head .avatar { animation: ring-turn 6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ring, .post-head .avatar { animation: none; } }
