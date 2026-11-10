@@ -1582,7 +1582,8 @@
     function move(y, ev) {
       if (y0 === null) return;
       var d = y - y0;
-      if (mode === 'body' && (sheet.scrollTop > 0 || d <= 0)) { if (d <= 0) return; if (sheet.scrollTop > 0) { y0 = y; return; } }
+      var sc = sheet.querySelector('.c-scroll'), top = sc ? sc.scrollTop : sheet.scrollTop;
+      if (mode === 'body' && (top > 0 || d <= 0)) { if (d <= 0) return; if (top > 0) { y0 = y; return; } }
       dy = Math.max(0, d); setY(dy); if (ev && ev.cancelable) ev.preventDefault();
     }
     function end() {
@@ -1740,17 +1741,21 @@
       st.busy = false; paintSave();
     }
 
+    var backEl = null;
     function toggleComments() {
       if (isTile) { location.hash = '#/post/' + post.$id; return; }
-      if (commentsEl) { card.removeChild(commentsEl); commentsEl = null; document.body.classList.remove('sheet-open'); paintCmt(); return; }
-      if (isReel) document.body.classList.add('sheet-open');
-      commentsEl = commentsPanel(post, st, paintCmt);
-      if (isReel) {
-        commentsEl = h('div', { class: 'sheet', role: 'dialog', 'aria-label': 'Comments' },
-          h('div', { class: 'sheet-head' }, h('strong', { text: 'Comments' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Close', onclick: toggleComments })), commentsEl);
+      if (commentsEl) {
+        card.removeChild(commentsEl); if (backEl && backEl.parentNode) backEl.parentNode.removeChild(backEl);
+        commentsEl = null; backEl = null; document.body.classList.remove('sheet-open'); paintCmt(); return;
       }
-      card.appendChild(commentsEl); paintCmt();
-      if (isReel) sheetDrag(commentsEl, function () { if (commentsEl) toggleComments(); });
+      document.body.classList.add('sheet-open');
+      // Comments open as a sheet from the bottom on every kind of post, like Instagram: dimmed page behind, list in the middle, emoji row and box at the bottom.
+      var panel = commentsPanel(post, st, paintCmt);
+      commentsEl = h('div', { class: 'sheet', role: 'dialog', 'aria-label': 'Comments' },
+        h('div', { class: 'sheet-head' }, h('strong', { text: 'Comments' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Close', onclick: toggleComments })), panel);
+      backEl = h('div', { class: 'sheet-backdrop', onclick: toggleComments });
+      card.appendChild(backEl); card.appendChild(commentsEl); paintCmt();
+      sheetDrag(commentsEl, function () { if (commentsEl) toggleComments(); });
     }
 
     function startEdit() {
@@ -1803,11 +1808,13 @@
     var ta = h('textarea', { rows: 1, class: 'comment-input', maxlength: L.commentMax || 500, 'aria-label': 'Write a comment', placeholder: 'Join the conversation…' });
     ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 110) + 'px'; });
     var send = h('button', { class: 'btn small comment-send', type: 'submit', text: 'Post' });
-    var wrap = h('div', { class: 'comments' }, list, status);
+    var scroller = h('div', { class: 'c-scroll' }, list, status);
+    var wrap = h('div', { class: 'comments' }, scroller);
 
     function pinnedIds() { return String(post.pinnedCommentIds || '').split(',').filter(Boolean); }
     function isPinned(c) { return pinnedIds().indexOf(c.$id) !== -1; }
     var isAuthor = post.authorId === uid;
+    var open = {};
     function redraw(rows) {
       clear(list);
       var pins = pinnedIds(), ids = {};
@@ -1817,7 +1824,14 @@
         .concat(tops.filter(function (c) { return pins.indexOf(c.$id) === -1; }));
       sorted.forEach(function (c) {
         list.appendChild(commentItem(c, rows));
-        rows.filter(function (r) { return r.parentId === c.$id; }).forEach(function (r) { list.appendChild(commentItem(r, rows)); });
+        var kids = rows.filter(function (r) { return r.parentId === c.$id; });
+        if (!kids.length) return;
+        if (!open[c.$id]) {
+          list.appendChild(h('button', { class: 'view-replies', type: 'button', text: 'View ' + kids.length + (kids.length === 1 ? ' reply' : ' replies'), onclick: function () { open[c.$id] = true; redraw(rows); } }));
+        } else {
+          kids.forEach(function (r) { list.appendChild(commentItem(r, rows)); });
+          list.appendChild(h('button', { class: 'view-replies', type: 'button', text: 'Hide replies', onclick: function () { open[c.$id] = false; redraw(rows); } }));
+        }
       });
     }
     var replyTo = null, replyBar = h('div', { class: 'reply-bar', hidden: true });
@@ -1917,7 +1931,7 @@
           var made = await api('createComment', { familyId: S.familyId, postId: post.$id, body: text, parentId: replyTo ? replyTo.$id : undefined });
           var row = { $id: made.commentId, authorId: uid, body: text, likedBy: [], parentId: made.parentId || undefined, $createdAt: new Date().toISOString() };
           S.profiles.set(uid, S.profile);
-          clear(status); loaded.push(row); redraw(loaded);
+          clear(status); loaded.push(row); if (row.parentId) open[row.parentId] = true; redraw(loaded);
           setReply(null); ta.value = ''; ta.style.height = 'auto'; showAlert(msg, 'error', '');
           st.comments++; onCount();
         } catch (e) { showAlert(msg, 'error', friendly(e)); }
