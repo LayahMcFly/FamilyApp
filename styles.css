@@ -1029,3 +1029,6 @@ dialog input[type="date"] { border-color: transparent; }
 .tree-count { margin: 6px 12px; }
 .kind-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: .72rem; font-weight: 600; vertical-align: middle; }
 .partner-rows .row, .parent-rows .row { align-items: flex-end; }
+
+/* v1.20.1: the family's name as the title above the feed */
+.family-title { margin: 6px 12px 2px; font-size: 1.35rem; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }

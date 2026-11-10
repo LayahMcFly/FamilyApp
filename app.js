@@ -1508,7 +1508,7 @@
   };
 
   VIEWS.home = async function (main, token) {
-    main.appendChild(h('h1', { class: 'sr-only', text: 'Home' }));
+    main.appendChild(h('h1', { class: 'family-title', text: famName() }));
     var people = Array.from(S.profiles.values());
     var trend = await getTrending(false);
     if (token !== S.nav) return;
