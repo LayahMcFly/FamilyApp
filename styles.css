@@ -549,3 +549,32 @@ progress.meter { display: block; width: 100%; height: 10px; margin: 6px 0 8px; }
 .site-footer .tagline { margin: 0 0 8px; font-weight: 600; }
 .member .badge { margin-left: 6px; padding: 2px 8px; background: var(--bg); color: var(--muted); }
 progress.meter, progress.meter::-webkit-progress-bar { background: color-mix(in srgb, var(--text) 14%, transparent); }
+
+/* Shorts: sound button, progress line, tap-through caption area, end of list */
+.reel-sound { position: absolute; top: 58px; right: 12px; z-index: 6; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: #0006; color: #fff; cursor: pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.reel-sound svg { width: 24px; height: 24px; }
+.reel-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; z-index: 6; background: #ffffff40; pointer-events: none; }
+.reel-progress .fill { height: 100%; width: 0; background: #fff; }
+.reel .media { cursor: pointer; }
+.reel-info { pointer-events: none; }
+.reel-info > * { pointer-events: auto; }
+.reel-info .post-head, .reel-info .post-body { pointer-events: none; }
+.reels-end { height: 40vh; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; color: #cfd6dc; scroll-snap-align: end; }
+.sentinel { height: 1px; }
+.reel .media:not(.placeholder) { display: block; }
+.reel .media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.reel .media, .short.reel .media { aspect-ratio: auto; max-width: none; margin: 0; }
+
+/* Saved libraries */
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 8px; margin: 0 12px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; min-height: 40px; padding: 8px 16px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.chip[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.chip.add { background: transparent; border: 1.5px dashed var(--border); color: var(--muted); }
+.main > .row { margin: 0 12px 10px; }
+dialog.sheet-dialog { margin: auto auto 0; width: 100%; max-width: 470px; border-radius: 24px 24px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+.lib-list { display: grid; gap: 6px; margin: 4px 0 14px; max-height: 40vh; overflow-y: auto; }
+.lib-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 10px 16px; border: 0; border-radius: 14px; background: var(--surface-2); color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.lib-row[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+.lib-here { font-size: .8rem; font-weight: 600; color: var(--muted); }
+dialog form input[type="text"] { margin: 8px 0; }
