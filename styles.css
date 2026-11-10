@@ -849,3 +849,16 @@ html:has(.reels-main), body:has(.reels-main), body.sheet-open { overscroll-behav
 .sheet { touch-action: pan-y; will-change: transform; }
 .sheet-head { touch-action: none; cursor: grab; padding: 6px 0 10px; }
 .reel .sheet::before { margin: -2px auto 4px; }
+
+/* v1.13.0 — text posts sit in a sideways-scrolling row (10 per row) */
+.text-row { overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 12px 0 14px; border-bottom: 1px solid var(--border); }
+.text-row::-webkit-scrollbar { display: none; }
+.text-track { display: flex; gap: 12px; padding: 0 12px; width: max-content; min-width: 100%; }
+article.card.tile { flex: 0 0 min(78vw, 300px); display: flex; flex-direction: column; scroll-snap-align: start; border: 1px solid var(--border); border-radius: 22px; padding: 0 0 6px; background: var(--surface); box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+.tile .post-head { padding: 12px 8px 4px 14px; margin: 0; }
+.tile .post-head .badge { display: none; }
+.tile .post-body { margin: 0; padding: 4px 14px 6px; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .98rem; }
+.tile .tile-more { display: inline-block; padding: 0 14px 6px; color: var(--muted); font-weight: 600; text-decoration: none; }
+.tile .actions { margin-top: auto; padding: 6px 8px 2px; border: 0; }
+.tile .actions .act.save { margin-left: auto; }
+@media (min-width: 900px) { article.card.tile { flex-basis: 300px; } }

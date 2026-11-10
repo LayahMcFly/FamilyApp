@@ -574,6 +574,37 @@
     observeReel(box);
     return box;
   }
+
+  /* ---------- animated tab icon: the rainbow turns (drawn frame by frame, so it moves in every desktop browser) ---------- */
+  (function animateFavicon() {
+    try {
+      if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var PATH = new Path2D('M13.691999999999997 50.538000000000004Q11.253999999999998 50.354 10.494999999999997 49.342Q9.735999999999997 48.33 9.735999999999997 46.812000000000005Q9.735999999999997 45.11 10.333999999999996 42.718Q10.931999999999997 40.326 11.897999999999996 37.612Q12.863999999999997 34.898 14.013999999999998 32.230000000000004Q13.507999999999997 32.276 12.426999999999996 32.368Q11.345999999999997 32.46 10.218999999999998 32.575Q9.091999999999997 32.69 8.401999999999997 32.828Q8.539999999999997 31.402 9.482999999999997 30.597Q10.425999999999997 29.792 11.920999999999996 29.424Q13.415999999999997 29.056 15.163999999999996 29.01Q16.359999999999996 25.698 17.624999999999996 22.547Q18.889999999999997 19.396 20.177999999999997 16.774Q19.901999999999997 16.728 19.534 16.705000000000002Q19.165999999999997 16.682000000000002 18.522 16.682000000000002Q15.715999999999998 16.682000000000002 14.174999999999997 17.28Q12.633999999999997 17.878 12.058999999999997 18.982Q11.483999999999996 20.086000000000002 11.483999999999996 21.696Q11.483999999999996 22.846 11.713999999999995 23.789Q11.943999999999996 24.732000000000003 12.403999999999996 25.836000000000002Q10.241999999999997 25.468 9.321999999999997 24.433Q8.401999999999997 23.398000000000003 8.401999999999997 21.834000000000003Q8.401999999999997 19.442 10.172999999999996 17.602Q11.943999999999996 15.762 14.956999999999997 14.704Q17.97 13.646 21.741999999999997 13.646Q24.179999999999996 13.646 26.617999999999995 13.968Q29.055999999999997 14.29 31.171999999999997 14.29Q32.321999999999996 14.29 33.379999999999995 14.129000000000001Q34.437999999999995 13.968000000000004 35.818 13.600000000000001Q33.61 16.038 32.206999999999994 16.866Q30.803999999999995 17.694000000000003 29.469999999999995 17.694000000000003Q28.365999999999996 17.694000000000003 26.617999999999995 17.395000000000003Q24.869999999999997 17.096000000000004 22.845999999999997 16.958000000000002Q22.247999999999998 18.430000000000003 21.557999999999996 20.362000000000002Q20.867999999999995 22.294 20.154999999999994 24.502000000000002Q19.441999999999997 26.71 18.705999999999996 29.056Q21.097999999999995 29.240000000000002 23.029999999999994 29.470000000000002Q24.961999999999996 29.700000000000003 27.307999999999996 29.792Q26.755999999999997 30.528000000000002 26.180999999999997 30.965000000000003Q25.605999999999998 31.402 24.662999999999997 31.586000000000002Q23.719999999999995 31.770000000000003 22.086999999999996 31.862000000000002Q20.453999999999997 31.954 17.831999999999997 32.0Q17.464 33.38 17.049999999999997 34.806Q16.635999999999996 36.232 16.336999999999996 37.244Q16.037999999999997 38.256 15.945999999999996 38.486000000000004Q14.657999999999996 42.902 14.174999999999997 45.685Q13.691999999999997 48.468 13.691999999999997 50.538000000000004Z M40.556 50.538000000000004Q37.059999999999995 50.538000000000004 34.82899999999999 48.882000000000005Q32.598 47.226 31.563 44.604Q30.528 41.982 30.528 39.176Q30.528 35.542 31.631999999999998 31.885Q32.736 28.228 34.691 24.916000000000004Q36.646 21.604000000000003 39.129999999999995 19.028000000000002Q41.614 16.452 44.443 14.957000000000003Q47.272 13.462000000000003 50.077999999999996 13.462000000000003Q52.102 13.462000000000003 53.482 14.405000000000003Q54.861999999999995 15.348000000000003 54.861999999999995 17.648000000000003Q54.861999999999995 19.028000000000002 54.379 20.730000000000004Q53.896 22.432000000000002 53.091 24.019000000000002Q52.286 25.606 51.274 26.618000000000002Q50.262 27.630000000000003 49.20399999999999 27.630000000000003Q48.744 27.630000000000003 48.238 27.308Q47.732 26.986 47.318 26.204Q48.007999999999996 25.422 48.882 24.295Q49.756 23.168000000000003 50.538 21.903000000000002Q51.31999999999999 20.638 51.82599999999999 19.419000000000004Q52.331999999999994 18.200000000000003 52.331999999999994 17.28Q52.331999999999994 16.452 51.87199999999999 15.969000000000001Q51.41199999999999 15.486 50.262 15.486Q48.238 15.486 46.099 17.004Q43.959999999999994 18.522000000000002 41.982 21.075000000000003Q40.004 23.628 38.417 26.779000000000003Q36.83 29.930000000000003 35.91 33.265Q34.989999999999995 36.6 34.989999999999995 39.59Q34.989999999999995 41.798 35.657 43.79900000000001Q36.324 45.800000000000004 37.796 47.065Q39.268 48.33 41.66 48.33Q44.144 48.33 46.605 46.95Q49.065999999999995 45.57 51.113 43.316Q53.16 41.062 54.402 38.486000000000004L55.598 39.268Q53.988 42.35 51.733999999999995 44.903000000000006Q49.48 47.456 46.650999999999996 48.997Q43.821999999999996 50.538000000000004 40.556 50.538000000000004Z');
+      var cv = document.createElement('canvas'); cv.width = cv.height = 64;
+      var cx = cv.getContext('2d'); if (!cx || !cv.toDataURL) return;
+      var COLORS = ['#ff3b6b', '#ff8a1f', '#ffd60a', '#3ddc84', '#22b8ff', '#7c4dff', '#e040fb', '#ff3b6b'];
+      var link = null, a = 0, timer = null;
+      function frame() {
+        cx.clearRect(0, 0, 64, 64);
+        var g = cx.createConicGradient ? cx.createConicGradient(a, 32, 32) : cx.createLinearGradient(0, 0, 64, 64);
+        COLORS.forEach(function (c, i) { g.addColorStop(i / (COLORS.length - 1), c); });
+        cx.fillStyle = g;
+        cx.beginPath(); if (cx.roundRect) cx.roundRect(0, 0, 64, 64, 16); else cx.rect(0, 0, 64, 64); cx.fill();
+        cx.lineJoin = 'round'; cx.lineWidth = 2.4; cx.strokeStyle = '#2a1456'; cx.stroke(PATH);
+        cx.fillStyle = '#fff'; cx.fill(PATH);
+        if (!link) {
+          Array.prototype.forEach.call(document.querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"]'), function (l) { l.parentNode.removeChild(l); });
+          link = document.createElement('link'); link.rel = 'icon'; link.type = 'image/png'; document.head.appendChild(link);
+        }
+        link.href = cv.toDataURL('image/png');
+        a += 0.35;
+      }
+      function run() { if (timer || document.hidden) return; frame(); timer = setInterval(frame, 160); }
+      function stop() { clearInterval(timer); timer = null; }
+      document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else run(); });
+      run();
+    } catch (e) {}
+  })();
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) Array.prototype.forEach.call(document.querySelectorAll('video'), function (v) { v.pause(); });
   });
@@ -1271,7 +1302,18 @@
         } while (!page.posts.length && !st.done);
         var meta = page.posts.length ? await decorate(page.posts) : {};
         if (token !== S.nav) return;
-        page.posts.forEach(function (p) { list.appendChild(postCard(p, meta[p.$id], opts.variant, opts)); });
+        page.posts.forEach(function (p) {
+          if (opts.textRows && !p.mediaFileId) {
+            // Text posts gather into a sideways-scrolling row (10 per row, then a new row), sitting between the photo and video posts.
+            var last = list.lastElementChild;
+            if (!(last && last.classList.contains('text-row') && last.__n < (L.textRowMax || 10))) {
+              var track = h('div', { class: 'text-track' });
+              last = h('section', { class: 'text-row', 'aria-label': 'Text posts. Scroll sideways to see more.', tabindex: '0' }, track);
+              last.__n = 0; last.__track = track; list.appendChild(last);
+            }
+            last.__track.appendChild(postCard(p, meta[p.$id], 'tile', opts)); last.__n++;
+          } else list.appendChild(postCard(p, meta[p.$id], opts.variant, opts));
+        });
         st.count += page.posts.length;
         clear(status);
         if (!st.count) status.appendChild(h('div', { class: 'empty' }, h('p', { text: opts.emptyTitle }), h('p', { class: 'small', text: opts.emptyHint || '' }), opts.emptyAction || null));
@@ -1465,6 +1507,7 @@
     }
     append(main, trendingStrip(trend));
     return pagedFeed(token, main, function (c) { return fetchPostsPage(null, c); }, {
+      textRows: true,
       emptyTitle: 'No posts yet.', emptyHint: 'Be the first to share something with the family.',
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a post' })
     });
@@ -1585,7 +1628,8 @@
     var isMine = post.authorId === uid;
     var isReel = variant === 'short';
     var info = isReel ? h('div', { class: 'reel-info' }) : null;
-    var card = h('article', { class: isReel ? 'reel short' : 'card', 'aria-label': 'Post by ' + name });
+    var isTile = variant === 'tile';
+    var card = h('article', { class: isReel ? 'reel short' : (isTile ? 'card tile' : 'card'), 'aria-label': 'Post by ' + name });
 
     // header
     // "edited" comes from editedAt, which only an edit to the text sets. Until that column exists, fall back to the old guess.
@@ -1603,7 +1647,7 @@
 
     // text (can be swapped for an editor)
     var bodyHolder = h('div');
-    function showBody() { clear(bodyHolder); if (post.body) bodyHolder.appendChild(h('p', { class: 'post-body' }, isReel ? null : h('strong', { class: 'cap-name', text: name }), isReel ? '' : ' ', post.body)); }
+    function showBody() { clear(bodyHolder); if (post.body) bodyHolder.appendChild(h('p', { class: 'post-body' }, (isReel || isTile) ? null : h('strong', { class: 'cap-name', text: name }), (isReel || isTile) ? '' : ' ', post.body)); if (isTile && post.body && post.body.length > 200) bodyHolder.appendChild(h('a', { class: 'tile-more', href: '#/post/' + post.$id, text: 'more' })); }
     showBody();
     if (isReel) info.appendChild(bodyHolder);
     else if (!post.mediaFileId) card.appendChild(bodyHolder);   // text-only posts: text first; media posts: caption goes under the buttons
@@ -1695,6 +1739,7 @@
     }
 
     function toggleComments() {
+      if (isTile) { location.hash = '#/post/' + post.$id; return; }
       if (commentsEl) { card.removeChild(commentsEl); commentsEl = null; document.body.classList.remove('sheet-open'); paintCmt(); return; }
       if (isReel) document.body.classList.add('sheet-open');
       commentsEl = commentsPanel(post, st, paintCmt);
