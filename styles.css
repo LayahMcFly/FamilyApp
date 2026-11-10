@@ -1286,3 +1286,13 @@ button, a, summary, label, select, [role="button"], [role="tab"], .btn, .link-bt
   -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
 }
 input, textarea { -webkit-user-select: text; user-select: text; }
+
+/* Wide screens (and a phone browser set to "Desktop site"): Shorts sit in a phone-shaped 9:16 stage in the middle instead of stretching the full window height. */
+@media (min-width: 900px) {
+  body:has(.reels-main) { background: #000; }
+  .main.reels-main { left: calc(244px + (100vw - 244px - 460px) / 2); right: auto; width: 460px; top: max(0px, calc((100dvh - 860px) / 2)); bottom: max(0px, calc((100dvh - 860px) / 2)); }
+  .reel { height: min(100dvh, 860px); }
+  .reels-top { left: calc(244px + (100vw - 244px - 460px) / 2); right: auto; width: 460px; top: max(0px, calc((100dvh - 860px) / 2)); box-sizing: border-box; }
+}
+/* The family tree box keeps a sensible height on very tall or very short windows. */
+.tree-chart { height: clamp(380px, calc(100dvh - 380px), 760px); }
