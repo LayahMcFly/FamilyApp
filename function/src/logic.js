@@ -186,6 +186,29 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     const prof = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${ctx.familyId}_${user.$id}`])]);
     if (!prof || prof.treeAdmin !== true) throw forbidden('Only the family owner or a tree admin can change the family tree. You can send a suggestion instead.');
   }
+  // Personal details on a tree entry: birthday ("2015-06-30" or just a year) and gender. Stored only when given.
+  function cleanBirthday(v) {
+    if (v === undefined || v === null || v === '') return '';
+    const s = String(v).trim();
+    if (!/^\d{4}(-\d{2}-\d{2})?$/.test(s)) throw bad('A birthday looks like 2015-06-30 (or just the year).');
+    const y = Number(s.slice(0, 4));
+    if (y < 1850 || y > new Date().getFullYear()) throw bad('That birth year does not look right.');
+    return s;
+  }
+  function cleanGender(v) {
+    if (v === undefined || v === null || v === '') return '';
+    return textOf(v, 'Gender', { min: 1, max: 20 });
+  }
+  async function writePerson(createOrUpdate, data, extras) {
+    const clean = {};
+    for (const [k, val] of Object.entries(extras)) if (val !== undefined) clean[k] = val;
+    try { return await createOrUpdate({ ...data, ...clean }); }
+    catch (e) {
+      // The new columns (birthday, gender, inviteMembershipId) may not exist yet: save everything else.
+      if (Object.keys(clean).length && sdkCode(e) === 400) return await createOrUpdate(data);
+      throw e;
+    }
+  }
   async function checkLink(familyId, raw, selfId, all) {
     if (raw === undefined || raw === null || raw === '') return '';
     const uid = idOf(raw, 'userId');
@@ -407,26 +430,77 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       const ctx = await requireMember(user, body.familyId);
       await requireTreeAdmin(user, ctx);
       const all = (await treePeople(ctx.familyId));
-      if (all.length >= LIMITS.maxPeople) throw new ApiError(409, 'quota', `A family tree can hold up to ${LIMITS.maxPeople} people.`);
+      if (all.length >= LIMITS.maxPeople - 1) throw new ApiError(409, 'quota', `A family tree can hold up to ${LIMITS.maxPeople} people.`);
       const name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
       const linkId = await checkLink(ctx.familyId, body.userId, null, all);
-      const parentIds = checkIds(body.parentIds, all, null);
-      const partnerIds = checkIds(body.partnerIds, all, null);
-      const row = await createRow(TABLES.people, ID.unique(),
-        { familyId: ctx.familyId, name, userId: linkId, confirmed: false, parentIds, partnerIds, createdBy: user.$id }, teamRead(ctx.familyId));
+      let parentIds = checkIds(body.parentIds, all, null);
+      let partnerIds = checkIds(body.partnerIds, all, null);
+      const extras = { birthday: cleanBirthday(body.birthday) || undefined, gender: cleanGender(body.gender) || undefined };
+      if (body.inviteMembershipId) extras.inviteMembershipId = idOf(body.inviteMembershipId, 'inviteMembershipId');
+
+      // "How is this person related to me?" Only parent and partner links exist in the tree; the rest are added without a link.
+      let relationLinked = null, meRow = null, afterCreate = null;
+      const relation = typeof body.relation === 'string' ? body.relation : '';
+      if (relation) {
+        meRow = all.find((x) => x.userId === user.$id) || null;
+        if (!meRow) {
+          const prof = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${ctx.familyId}_${user.$id}`])]);
+          meRow = await writePerson((d) => createRow(TABLES.people, ID.unique(), d, teamRead(ctx.familyId)),
+            { familyId: ctx.familyId, name: (prof && prof.displayName) || 'Me', userId: user.$id, confirmed: true, parentIds: [], partnerIds: [], createdBy: user.$id }, {});
+          all.push(meRow);
+        }
+        const myParents = Array.isArray(meRow.parentIds) ? meRow.parentIds : [];
+        if (relation === 'child') { parentIds = [meRow.$id]; relationLinked = true; }
+        else if (relation === 'partner') { partnerIds = [meRow.$id]; relationLinked = true; }
+        else if (relation === 'sibling') { parentIds = myParents.slice(0, 2); relationLinked = parentIds.length > 0; }
+        else if (relation === 'parent') {
+          if (myParents.length < 2) { relationLinked = true; afterCreate = (newId) => updateRow(TABLES.people, meRow.$id, { parentIds: [...myParents, newId] }); }
+          else relationLinked = false;
+        } else if (relation === 'grandparent') {
+          const par = all.find((x) => x.$id === myParents[0]);
+          const gp = par && Array.isArray(par.parentIds) ? par.parentIds : [];
+          if (par && gp.length < 2) { relationLinked = true; afterCreate = (newId) => updateRow(TABLES.people, par.$id, { parentIds: [...gp, newId] }); }
+          else relationLinked = false;
+        } else relationLinked = false;
+      }
+      const row = await writePerson((d) => createRow(TABLES.people, ID.unique(), d, teamRead(ctx.familyId)),
+        { familyId: ctx.familyId, name, userId: linkId, confirmed: false, parentIds, partnerIds, createdBy: user.$id }, extras);
       for (const pid of partnerIds) await addPartner(all, pid, row.$id);
-      return { personId: row.$id };
+      if (afterCreate) await afterCreate(row.$id);
+      return { personId: row.$id, linked: relationLinked };
+    },
+
+    /** Someone who just accepted an invitation: the tree entry made for them becomes theirs (confirmed). */
+    async claimInvite({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      const all = await treePeople(ctx.familyId);
+      if (all.some((x) => x.userId === user.$id)) return { claimed: false };
+      const p = all.find((x) => x.inviteMembershipId && x.inviteMembershipId === ctx.membership.$id && !x.userId);
+      if (!p) return { claimed: false };
+      await updateRow(TABLES.people, p.$id, { userId: user.$id, confirmed: true });
+      return { claimed: true, personId: p.$id };
     },
 
     async treeEditPerson({ user, body }) {
       const ctx = await requireMember(user, body.familyId);
-      await requireTreeAdmin(user, ctx);
       const all = await treePeople(ctx.familyId);
       const p = all.find((x) => x.$id === body.personId);
       if (!p) throw missing('That person is not in this family tree.');
+      const isSelf = p.userId === user.$id;
+      if (!isSelf) await requireTreeAdmin(user, ctx);
+      // Once a person has accepted (their entry is linked and confirmed), their own details are theirs alone.
+      const locked = !!(p.userId && p.confirmed === true && !isSelf);
+      if (locked && (body.name !== undefined && body.name !== p.name || body.birthday !== undefined && String(body.birthday || '') !== String(p.birthday || '') || body.gender !== undefined && String(body.gender || '') !== String(p.gender || ''))) {
+        throw forbidden(`Only ${p.name} can change their own name, gender and birthday, because it is their account.`);
+      }
       const data = {};
-      if (body.name !== undefined) data.name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
-      if (body.userId !== undefined) {
+      const extras = {};
+      if (!locked) {
+        if (body.name !== undefined) data.name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
+        if (body.birthday !== undefined) extras.birthday = cleanBirthday(body.birthday);
+        if (body.gender !== undefined) extras.gender = cleanGender(body.gender);
+      }
+      if (body.userId !== undefined && !isSelf) {
         const linkId = await checkLink(ctx.familyId, body.userId, p.$id, all);
         if (linkId !== (p.userId || '')) { data.userId = linkId; data.confirmed = false; }
       }
@@ -437,7 +511,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       let partners = null;
       if (body.partnerIds !== undefined) partners = checkIds(body.partnerIds, all, p.$id);
       if (partners) data.partnerIds = partners;
-      if (Object.keys(data).length) await updateRow(TABLES.people, p.$id, data);
+      if (Object.keys(data).length || Object.keys(extras).length) await writePerson((d) => updateRow(TABLES.people, p.$id, d), data, extras);
       if (partners) {
         const before = Array.isArray(p.partnerIds) ? p.partnerIds : [];
         for (const pid of partners.filter((x) => !before.includes(x))) await addPartner(all, pid, p.$id);

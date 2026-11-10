@@ -336,3 +336,12 @@ Use one normal window and one private window, with two different email addresses
 > New installs made with the setup script get all of this automatically.
 
 > **Added in v1.7.2 (the "edited" label):** in `posts` add a String column `editedAt`, size `32`, not required, then redeploy the `family-api` Function. Until then the label uses a rougher guess.
+
+## v1.18.0 — relatives with a relationship, birthday and gender
+Add three optional columns to the `people` table (Console Terminal), wait until each shows "available", then upload the new `family-api.tar.gz` as a new deployment:
+
+    appwrite tablesdb create-string-column --database-id family --table-id people --key birthday --size 10 --required false
+    appwrite tablesdb create-string-column --database-id family --table-id people --key gender --size 20 --required false
+    appwrite tablesdb create-string-column --database-id family --table-id people --key inviteMembershipId --size 36 --required false
+
+Until the columns exist, invitations and the tree still work; birthday, gender and the "this entry becomes theirs when they accept" link are simply not saved.

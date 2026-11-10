@@ -716,7 +716,14 @@
     if (!f) return false;
     S.familyId = id; S.role = f.role; S.isOwner = f.role === 'owner';
     try { localStorage.setItem(FAM_KEY, id); } catch (e) {}
-    try { await loadTree(false); } catch (e) { S.ringRole = new Map(); }   // the tree decides ring colors
+    try {
+      var tr = await loadTree(false);   // the tree decides ring colors
+      // If someone invited me and made a tree entry for me, it becomes mine now that I have joined.
+      if (tr.people.some(function (x) { return x.inviteMembershipId && !x.userId; }) && !tr.people.some(function (x) { return x.userId === S.user.$id; })) {
+        var cl = await api('claimInvite', { familyId: id });
+        if (cl && cl.claimed) await loadTree(true);
+      }
+    } catch (e) { S.ringRole = S.ringRole || new Map(); }
     await loadProfiles();
     if (S.familyId !== id) return false;
     if (S.profile) await loadSaved();
@@ -2361,7 +2368,7 @@
       if (center) focusOn(id);
       clear(panel);
       var prof = p.userId ? S.profiles.get(p.userId) : null;
-      panel.appendChild(h('div', { class: 'tree-who' }, avatarEl(prof || { displayName: p.name }), h('div', { class: 'grow' }, h('h2', { text: p.name }),
+      panel.appendChild(h('div', { class: 'tree-who' }, avatarEl(prof || { displayName: p.name }), h('div', { class: 'grow' }, h('h2', { text: p.name }), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null,
         prof ? h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Open profile' }) : null),
         h('button', { class: 'btn secondary small', type: 'button', text: 'Clear', onclick: function () { vp.classList.remove('has-sel'); Object.keys(cards).forEach(function (x) { cards[x].classList.remove('sel', 'rel'); }); clear(panel); } })));
       function group(label, ids) {
@@ -2468,7 +2475,12 @@
     main.appendChild(rn);
     // ---- invite ----
     var email = field('inviteEmail', 'Relative\'s email', 'email', { required: true, autocomplete: 'off' });
-    var name = field('inviteName', 'Their name (optional)', 'text', { maxlength: 60, autocomplete: 'off' });
+    var name = field('inviteName', 'Their name', 'text', { maxlength: 60, autocomplete: 'off', required: true });
+    function sel(id, label, opts) { var el = h('select', { id: id, name: id }, opts.map(function (o) { return h('option', { value: o[0], text: o[1] }); })); return { el: el, wrap: h('div', null, h('label', { for: id, text: label }), el) }; }
+    var rel = sel('inviteRelation', 'They are my…', [['', 'Choose one'], ['parent', 'Parent'], ['child', 'Child'], ['sibling', 'Sibling'], ['partner', 'Partner or spouse'], ['grandparent', 'Grandparent'], ['other', 'Other relative (link later)']]);
+    var gen = sel('inviteGender', 'Gender (optional)', [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']]);
+    var bday = field('inviteBirthday', 'Birthday (optional)', 'date', {});
+    var age = field('inviteAge', 'Or their age (if you do not know the birthday)', 'number', { placeholder: 'For example 8' });
     var msg = h('div');
     var btn = h('button', { class: 'btn', type: 'submit', text: 'Send invitation' });
     var memberBox = h('div', { class: 'card' });
@@ -2478,13 +2490,28 @@
       if (!emailOk(e)) return showAlert(msg, 'error', 'Please enter a valid email address.');
       busy(btn, async function () {
         try {
-          await teams.createMembership({ teamId: fid, roles: ['member'], email: e, name: name.input.value.trim() || undefined, url: baseUrl() + '?action=invite' });
-          showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email while signed in with that address.');
-          email.input.value = ''; name.input.value = '';
+          var nm = name.input.value.trim();
+          if (!nm) return showAlert(msg, 'error', 'Please type their name.');
+          var birthday = bday.input.value || '';
+          if (!birthday && age.input.value) {
+            var a = Math.floor(Number(age.input.value));
+            if (!(a >= 0 && a <= 120)) return showAlert(msg, 'error', 'Please enter an age between 0 and 120.');
+            birthday = String(new Date().getFullYear() - a);
+          }
+          var mem = await teams.createMembership({ teamId: fid, roles: ['member'], email: e, name: nm, url: baseUrl() + '?action=invite' });
+          var note = '';
+          try {
+            var pr = await api('treeAddPerson', { familyId: fid, name: nm, relation: rel.el.value || undefined, birthday: birthday || undefined, gender: gen.el.value || undefined, inviteMembershipId: mem.$id });
+            S.tree = null;
+            if (rel.el.value && pr.linked === false) note = ' They were added to the family tree without a link, because that relationship could not be linked yet. You can link them in Settings \u2192 Family tree.';
+            else note = ' They were added to the family tree.';
+          } catch (te) { note = ' The invitation was sent, but adding them to the family tree did not work: ' + friendly(te); }
+          showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email while signed in with that address.' + note + ' Once they accept, only they can change their name, gender and birthday.');
+          email.input.value = ''; name.input.value = ''; rel.el.value = ''; gen.el.value = ''; bday.input.value = ''; age.input.value = '';
           loadMemberships();
         } catch (err) { showAlert(msg, 'error', friendly(err)); }
       }, 'Sending…');
-    } }, email.wrap, name.wrap, msg, h('div', { class: 'stack' }, btn));
+    } }, email.wrap, name.wrap, rel.wrap, gen.wrap, bday.wrap, age.wrap, msg, h('div', { class: 'stack' }, btn));
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Invite a relative' },
       h('h2', { text: 'Invite a relative' }),
       h('p', { class: 'muted small', text: 'Only family owners can do this. Ask them to create an account and verify their email first, then send the invitation to that same address.' }), form));
@@ -2593,6 +2620,21 @@
   ];
   function aboutOf(profile) {
     try { var a = JSON.parse((profile && profile.about) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+  }
+  // Age from a stored birthday ("2015-06-30") or an approximate birth year ("2015").
+  function ageOf(p) {
+    var b = p && p.birthday ? String(p.birthday) : ''; if (!b) return null;
+    var now = new Date(), y = Number(b.slice(0, 4)); if (!y) return null;
+    if (b.length === 4) return { n: now.getFullYear() - y, approx: true };
+    var m = Number(b.slice(5, 7)), d = Number(b.slice(8, 10)), a = now.getFullYear() - y;
+    if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) a--;
+    return { n: a, approx: false };
+  }
+  function detailLine(p) {
+    var bits = [], a = ageOf(p);
+    if (p.gender) bits.push(p.gender);
+    if (a && a.n >= 0) bits.push((a.approx ? 'about ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'under 1') : a.n + ' years old'));
+    return bits.join(' \u00B7 ');
   }
   function canEditTree() { return !!(S.isOwner || (S.profile && S.profile.treeAdmin === true)); }
   function famName() { var f = currentFamily(); return f ? f.name : 'this family'; }
@@ -3160,10 +3202,11 @@
           avatarEl(prof || { displayName: p.name }),
           h('div', { class: 'grow' }, h('strong', { text: p.name }),
             partners.length ? h('div', { class: 'small muted', text: 'Partner: ' + partners.map(function (x) { return x.name; }).join(', ') }) : null,
+            detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null,
             p.userId ? h('div', { class: 'small muted', text: p.confirmed ? 'Member of this family' : 'Waiting for them to confirm' }) : null),
           h('div', { class: 'tnode-actions' },
             prof ? h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Profile' }) : null,
-            edit ? h('button', { class: 'link-btn small', type: 'button', text: 'Edit', 'aria-label': 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (id) { draw(id, true); }); } })
+            (edit || p.userId === me) ? h('button', { class: 'link-btn small', type: 'button', text: 'Edit', 'aria-label': 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (id) { draw(id, true); }); } })
                  : h('button', { class: 'link-btn small', type: 'button', text: 'Suggest', 'aria-label': 'Suggest a change about ' + p.name, onclick: function () { sendSuggestion(p.$id).then(function (ok) { if (ok) draw(p.$id, true); }); } })));
         return el;
       }
@@ -3222,6 +3265,13 @@
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
     var name = h('input', { type: 'text', maxlength: 80, 'aria-label': 'Name', id: 'pname' });
     name.value = p ? p.name : '';
+    var meId = S.user.$id, isSelf = !!(p && p.userId === meId), admin = canEditTree();
+    var locked = !!(p && p.userId && p.confirmed && !isSelf);   // after they accept, their name, gender and birthday are theirs alone
+    if (locked) name.disabled = true;
+    var bd = h('input', { type: 'date', id: 'pbday', 'aria-label': 'Birthday' }); bd.value = p && p.birthday && String(p.birthday).length === 10 ? p.birthday : '';
+    var gd = h('select', { id: 'pgender', 'aria-label': 'Gender' }, [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+    gd.value = p ? (p.gender || '') : '';
+    if (locked) { bd.disabled = true; gd.disabled = true; }
     function select(id, label, options, value) {
       var sel = h('select', { id: id, 'aria-label': label }, options.map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
       sel.value = value || ''; return h('div', null, h('label', { for: id, text: label }), sel);
@@ -3249,7 +3299,9 @@
       if (parents.length === 2 && parents[0] === parents[1]) return showAlert(msg, 'error', 'Choose two different parents.');
       busy(save, async function () {
         try {
-          var payload = { familyId: S.familyId, name: n, userId: v('link') };
+          var payload = { familyId: S.familyId, name: n };
+          if (admin && !isSelf) payload.userId = v('link');
+          if (!locked) { payload.birthday = bd.value || (p && p.birthday && String(p.birthday).length === 4 ? p.birthday : ''); payload.gender = gd.value; }
           var origPar = par.slice(0, 2).join(','), origPrt = (prt[0] || '');
           if (!p || parents.join(',') !== origPar) payload.parentIds = parents;
           if (!p || v('partner') !== origPrt) payload.partnerIds = v('partner') ? [v('partner')] : [];
@@ -3260,9 +3312,13 @@
         } catch (e) { showAlert(msg, 'error', errText(e)); }
       }, 'Saving…');
     } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : 'Add a person' }),
-      h('div', null, h('label', { for: 'pname', text: 'Name' }), name), s1, s2, s3, s4,
+      h('div', null, h('label', { for: 'pname', text: 'Name' }), name),
+      h('div', null, h('label', { for: 'pgender', text: 'Gender' }), gd),
+      h('div', null, h('label', { for: 'pbday', text: 'Birthday' }), bd),
+      locked ? h('p', { class: 'hint', text: 'Only ' + p.name + ' can change their name, gender and birthday, because it is their account.' }) : null,
+      s1, s2, s3, (admin && !isSelf) ? s4 : null,
       h('p', { class: 'hint', text: 'Linking a member lets them confirm “this is me”. The tree entry and their sign-in account stay separate.' }),
-      msg, h('div', { class: 'row' }, cancel, save), remove ? h('div', { class: 'stack' }, remove) : null));
+      msg, h('div', { class: 'row' }, cancel, save), (remove && admin) ? h('div', { class: 'stack' }, remove) : null));
     document.body.appendChild(dlg); dlg.showModal(); name.focus();
   }
 

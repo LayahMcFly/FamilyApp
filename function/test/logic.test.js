@@ -91,7 +91,7 @@ function makeWorld() {
       const memberships = [];
       for (const [teamId, t] of Object.entries(world.teams)) {
         for (const m of t.members) {
-          if (m.userId === userId) memberships.push({ teamId, teamName: t.name, roles: m.roles, confirm: m.confirm, userId });
+          if (m.userId === userId) memberships.push({ $id: 'm_' + teamId + '_' + userId, teamId, teamName: t.name, roles: m.roles, confirm: m.confirm, userId });
         }
       }
       return { memberships };
@@ -552,4 +552,36 @@ test('replies: point at the top comment of the thread and stay inside the post',
   const other = await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'text', body: 'other' });
   const bad = await s.call(s.alice, { action: 'createComment', familyId: 'famA', postId: other.json.postId, body: 'x', parentId: top.json.commentId });
   assert.notEqual(bad.status, 200);
+});
+
+test('inviting a relative: relationship, details, claim on accept, and the inviter cannot change their details afterwards', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' });
+  const add = (b) => s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', ...b });
+  // Alice invites Bob as her child; her own tree entry is made automatically
+  const r = await add({ name: 'Bobby', relation: 'child', birthday: '2015-06-30', gender: 'Male', inviteMembershipId: 'm_famA_bob' });
+  assert.equal(r.status, 200); assert.equal(r.json.linked, true);
+  const people = [...s.world.tables.people.values()];
+  const aliceRow = people.find((p) => p.userId === 'alice');
+  assert.ok(aliceRow);
+  const bobbyRow = s.world.tables.people.get(r.json.personId);
+  assert.deepEqual(bobbyRow.parentIds, [aliceRow.$id]);
+  // bad birthday is refused
+  assert.equal((await add({ name: 'X', birthday: 'June 5' })).status, 400);
+  // Bob accepts: the entry becomes his
+  const claim = await s.call(s.bob, { action: 'claimInvite', familyId: 'famA' });
+  assert.equal(claim.json.claimed, true);
+  assert.equal(s.world.tables.people.get(r.json.personId).userId, 'bob');
+  assert.equal(s.world.tables.people.get(r.json.personId).confirmed, true);
+  // Alice (inviter, owner) can no longer change his name, gender or birthday
+  const edit = (u, b) => s.call(u, { action: 'treeEditPerson', familyId: 'famA', personId: r.json.personId, ...b });
+  assert.equal((await edit(s.alice, { name: 'Robert' })).status, 403);
+  assert.equal((await edit(s.alice, { gender: 'Female' })).status, 403);
+  // Bob can change everything about himself
+  assert.equal((await edit(s.bob, { name: 'Robert', birthday: '2015-07-01', gender: 'Other' })).status, 200);
+  assert.equal(s.world.tables.people.get(r.json.personId).name, 'Robert');
+  // a sibling shares the inviter's parents; "other" is added without a link
+  const sib = await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Sis', relation: 'sibling' });
+  assert.equal(sib.status, 403);   // Bob is not a tree admin
 });

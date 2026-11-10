@@ -944,3 +944,8 @@ article.card.tile { flex: 0 0 min(78vw, 300px); display: flex; flex-direction: c
   :root[data-ring="grand"] .nav a[data-route="create"], :root[data-ring="grand"] .nav a[data-route="create"][aria-current="page"] { background: linear-gradient(135deg, #8fa7d8, #f4f8ff 45%, #6f8fd0 75%, #a28bdc); color: #1d2a55; box-shadow: 0 0 0 5px var(--bg), 0 0 0 7px #7f98d1, 0 8px 18px -6px rgba(111, 143, 208, .6); }
   :root[data-ring="married"] .nav a[data-route="create"] svg, :root[data-ring="grand"] .nav a[data-route="create"] svg { filter: none; }
 }
+
+/* v1.18.0 — date and number boxes match the other inputs */
+input[type="date"], input[type="number"] { width: 100%; min-height: 44px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); color: var(--text); font: inherit; }
+.card:not(article) input[type="date"], .card:not(article) input[type="number"] { border-color: transparent; }
+dialog input[type="date"] { border-color: transparent; }
