@@ -38,7 +38,7 @@ const schema = {
     columns: [
       S('familyId', 36, true), S('authorId', 36, true),
       { type: 'enum', key: 'kind', elements: ['text', 'photo', 'video', 'short'], required: true },
-      S('body', 2000, false), S('mediaFileId', 36, false), S('mediaMime', 32, false), S('pinnedCommentIds', 120, false), S('editedAt', 32, false), S('captions', 16000, false),
+      S('body', 2000, false), S('mediaFileId', 36, false), S('mediaMime', 32, false), S('pinnedCommentIds', 120, false), S('editedAt', 32, false), S('captions', 16000, false), S('repostOfId', 36, false),
       { type: 'integer', key: 'mediaSize', min: 0, max: 52428800, required: false }
     ],
     indexes: [['idx_familyId', 'key', ['familyId']], ['idx_family_kind', 'key', ['familyId', 'kind']], ['idx_mediaFileId', 'key', ['mediaFileId']]]

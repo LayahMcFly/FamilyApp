@@ -725,3 +725,24 @@ test('captions: saved with a video, cleaned, author-only, and never stored for p
   const ph = await s.call(s.bob, { action: 'createPost', familyId: 'famA', kind: 'photo', mediaFileId: 'fp', captions: [[0, 1, 'x']] });
   assert.equal(s.world.tables.posts.get(ph.json.postId).captions, undefined);
 });
+
+test('repost: any member can remind the family; no file is copied; flattened; once a day; family-only', async () => {
+  const s = await setup();
+  s.addFile('fr', { owner: 'bob', familyId: 'famA' });
+  const orig = await s.call(s.bob, { action: 'createPost', familyId: 'famA', kind: 'photo', body: 'Lake day', mediaFileId: 'fr' });
+  const rp = await s.call(s.alice, { action: 'repostPost', familyId: 'famA', postId: orig.json.postId });
+  assert.equal(rp.status, 200);
+  const row = s.world.tables.posts.get(rp.json.postId);
+  assert.deepEqual([row.kind, row.body, row.repostOfId, row.authorId, row.mediaFileId], ['repost', 'Remember this day?', orig.json.postId, 'alice', undefined]);
+  assert.deepEqual(row.$permissions, ['read("team:famA")']);
+  assert.equal(Object.keys(s.world.files).length, 1);                                         // still just the one original file
+  assert.equal((await s.call(s.alice, { action: 'repostPost', familyId: 'famA', postId: orig.json.postId })).status, 409);   // not twice in a day
+  const note = await s.call(s.bob, { action: 'repostPost', familyId: 'famA', postId: rp.json.postId, body: 'Best day ever' });   // a repost of a repost points at the original
+  assert.equal(s.world.tables.posts.get(note.json.postId).repostOfId, orig.json.postId);
+  assert.equal(s.world.tables.posts.get(note.json.postId).body, 'Best day ever');
+  assert.equal((await s.call(s.carol, { action: 'repostPost', familyId: 'famA', postId: orig.json.postId })).status, 403);   // not in the family
+  assert.equal((await s.call(s.alice, { action: 'repostPost', familyId: 'famA', postId: 'nope' })).status, 404);
+  assert.equal((await s.call(s.alice, { action: 'createPost', familyId: 'famA', kind: 'repost', body: 'x' })).status, 400);   // cannot be faked through createPost
+  assert.equal((await s.call(s.alice, { action: 'deletePost', familyId: 'famA', postId: rp.json.postId })).status, 200);
+  assert.ok(s.world.tables.posts.has(orig.json.postId));                                       // deleting a repost keeps the original
+});

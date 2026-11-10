@@ -337,6 +337,8 @@ Use one normal window and one private window, with two different email addresses
 
 > **Added in v1.23.0 (automatic captions):** in `posts` add a String column `captions`, size `16000`, not required, then redeploy the `family-api` Function. In the Console Terminal: `appwrite tablesdb create-string-column --database-id family --table-id posts --key captions --size 16000 --required false`. Until then, posting with captions still works but the captions are skipped.
 
+> **Added in v1.26.0 (reposts and family-only links):** in `posts` add a String column `repostOfId`, size `36`, not required, then redeploy the `family-api` Function. In the Console Terminal: `appwrite tablesdb create-string-column --database-id family --table-id posts --key repostOfId --size 36 --required false`. Until it exists, "Remember this day? (repost)" shows a message asking you to add it; everything else keeps working.
+
 > **Added in v1.7.2 (the "edited" label):** in `posts` add a String column `editedAt`, size `32`, not required, then redeploy the `family-api` Function. Until then the label uses a rougher guess.
 
 ## v1.18.0 — relatives with a relationship, birthday and gender

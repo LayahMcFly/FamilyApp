@@ -339,7 +339,7 @@
     revokeBlobs();
     S.avatarUrls.forEach(function (p) { p.then(function (u) { URL.revokeObjectURL(u); }).catch(function () {}); });
     S.avatarUrls = new Map();
-    S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.saved = new Map(); S.usage = null;
+    S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.origs = new Map(); S.saved = new Map(); S.usage = null;
     S.familyId = null; S.role = null; S.isOwner = false; S.ringRole = new Map();
     if (S.main) clear(S.main);
   }
@@ -1383,8 +1383,18 @@
   async function decorate(posts) {
     var ids = posts.map(function (p) { return p.$id; });
     var reactions = [], comments = [];
+    var origIds = [];
+    posts.forEach(function (p) { if (p.kind === 'repost' && p.repostOfId && origIds.indexOf(p.repostOfId) === -1) origIds.push(p.repostOfId); });
+    var origs = [];
+    if (origIds.length) {
+      try { origs = (await listRows('posts', [Query.equal('$id', origIds), Query.limit(origIds.length)])).rows; } catch (e) { origs = []; }
+      origs = origs.filter(function (o) { return o.familyId === S.familyId; });
+    }
+    S.origs = S.origs || new Map();
+    origIds.forEach(function (id) { S.origs.set(id, null); });
+    origs.forEach(function (o) { S.origs.set(o.$id, o); });
     await Promise.all([
-      ensureProfiles(posts.map(function (p) { return p.authorId; })),
+      ensureProfiles(posts.map(function (p) { return p.authorId; }).concat(origs.map(function (o) { return o.authorId; }))),
       listRows('reactions', [Query.equal('postId', ids), Query.limit(500)]).then(function (r) { reactions = r.rows; }),
       listRows('comments', [Query.equal('postId', ids), Query.select(['postId']), Query.limit(500)]).then(function (r) { comments = r.rows; })
     ]);
@@ -1621,7 +1631,14 @@
     try { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { notifSeen: now }) }); } catch (e) { /* badge will return; harmless */ }
   };
 
-  VIEWS.post = async function (main, token, id) {
+  VIEWS.post = async function (main, token, id, famParam) {
+    // A shared link carries the family id; if I belong to that family, open it there. Otherwise nothing is revealed.
+    if (famParam && famParam !== S.familyId && S.families.some(function (f) { return f.id === famParam; })) {
+      history.replaceState(null, '', location.pathname + '#/post/' + id + '/' + famParam);
+      await switchFamily(famParam);
+      location.hash = '#/post/' + id;
+      return;
+    }
     main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/home', text: 'Back to Home' })));
     var holder = h('div', null, spinnerLine('Loading…'));
     main.appendChild(holder);
@@ -1782,6 +1799,64 @@
     return b;
   }
 
+
+  /* ---------- REPOST + SHARE ---------- */
+  function longDate(iso) { return new Date(iso).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); }
+
+  // The box inside a repost: the original post, with its own date.
+  function originalBox(post) {
+    var o = S.origs && S.origs.get(post.repostOfId);
+    var box = h('div', { class: 'orig-box' });
+    if (!o) { box.appendChild(h('p', { class: 'muted', text: 'The original post was removed.' })); return box; }
+    var pr = S.profiles.get(o.authorId) || null, nm = pr ? pr.displayName : 'Family member';
+    box.appendChild(h('div', { class: 'orig-head' }, avatarEl(pr), h('div', { class: 'who' },
+      h('a', { class: 'member-link', href: '#/profile/' + o.authorId, text: nm }),
+      h('div', { class: 'small muted' }, 'Originally posted ', h('time', { datetime: o.$createdAt, text: longDate(o.$createdAt) }), (Date.now() - new Date(o.$createdAt).getTime() < 7 * 86400000) ? ' · ' + timeAgo(o.$createdAt) : ''))));
+    if (o.body) box.appendChild(h('p', { class: 'post-body', text: o.body }));
+    if (o.mediaFileId) {
+      if (o.kind === 'photo') box.appendChild(imageBlock(o));
+      else if (o.kind === 'video' || o.kind === 'short') box.appendChild(videoBlock(o, false));
+    }
+    box.appendChild(h('a', { class: 'link-btn', href: '#/post/' + o.$id, text: 'Open the original post' }));
+    return box;
+  }
+
+  function repostDialog(post) {
+    var base = (post.kind === 'repost' && post.repostOfId && S.origs && S.origs.get(post.repostOfId)) || post;
+    textDialog('Remind the family of this day', 'Remember this day?', 'Repost', { multiline: true, max: 500, aria: 'Your note on the repost',
+      hint: 'The repost shows the original date (' + longDate(base.$createdAt) + ') and today’s date. Only members of ' + famName() + ' can see it.' },
+      async function (v) {
+        await api('repostPost', { familyId: S.familyId, postId: post.$id, body: v });
+        S.feedDirty = true; toast('Reposted to ' + famName() + '.');
+        if (location.hash === '#/home' || location.hash === '' || location.hash === '#/') route();
+      });
+  }
+
+  function shareLink(post) { return baseUrl() + '#/post/' + post.$id + '/' + S.familyId; }
+
+  function shareDialog(post) {
+    var link = shareLink(post);
+    var dlg = h('dialog', { class: 'sheet-dialog', 'aria-labelledby': 'dlg-title' });
+    function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    var field = h('input', { type: 'text', readonly: true, 'aria-label': 'Link to this post', value: link });
+    var msg = h('div');
+    var canShare = typeof navigator.share === 'function';
+    dlg.appendChild(h('h2', { id: 'dlg-title', text: 'Share with family only' }));
+    dlg.appendChild(h('p', { class: 'hint', text: 'This link holds no photo, video or text. It opens only for people who are signed in and are members of ' + famName() + '. Anyone else sees “That post is not available.”' }));
+    dlg.appendChild(field); dlg.appendChild(msg);
+    dlg.appendChild(h('div', { class: 'stack' },
+      h('button', { class: 'btn block', type: 'button', text: 'Copy link', onclick: async function () {
+        try { await navigator.clipboard.writeText(link); showAlert(msg, 'ok', 'Link copied.'); }
+        catch (e) { field.focus(); field.select(); showAlert(msg, 'ok', 'Select the link above and copy it.'); }
+      } }),
+      canShare ? h('button', { class: 'btn secondary block', type: 'button', text: 'Send with…', onclick: function () {
+        navigator.share({ title: famName(), text: 'A post from ' + famName() + ' (family members only)', url: link }).catch(function () {});
+      } }) : null,
+      h('button', { class: 'btn ghost block', type: 'button', text: 'Close', onclick: close })));
+    document.body.appendChild(dlg); dlg.showModal();
+  }
+
   function postCard(post, meta, variant, hooks) {
     hooks = hooks || {};
     var uid = S.user.$id;
@@ -1799,11 +1874,11 @@
     function isEdited() { return post.editedAt ? true : (post.editedAt === undefined && !post.pinnedCommentIds && new Date(post.$updatedAt) - new Date(post.$createdAt) > 3000); }
     var editedEl = h('span', { class: 'edited', text: ' \u00B7 edited', hidden: !isEdited() });
     function paintEdited() { editedEl.hidden = !isEdited(); }
-    var kindLabel = { photo: 'Photo', video: 'Video', short: 'Short' }[post.kind];
+    var kindLabel = { photo: 'Photo', video: 'Video', short: 'Short', repost: 'Reposted' }[post.kind];
     var wrap = (!isReel && post.mediaFileId) ? h('div', { class: 'media-wrap' }) : null;   // photo/video posts: the name sits on top of the picture, like Instagram
     var headEl = h('div', { class: 'post-head' + (wrap ? ' overlay' : '') }, avatarEl(prof),
       h('div', { class: 'who' }, h('div', { class: 'name' }, h('a', { class: 'member-link', href: '#/profile/' + post.authorId, text: name })),
-        h('div', { class: 'small muted' }, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), editedEl)),
+        h('div', { class: 'small muted' }, post.kind === 'repost' ? 'Reposted ' : null, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), editedEl)),
       S.trend && S.trend.ids.has(post.$id) ? h('span', { class: 'badge hot' }, icon('flame'), ' Trending') : null,
       kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null);
     if (wrap) wrap.appendChild(headEl); else (isReel ? info : card).appendChild(headEl);
@@ -1814,6 +1889,7 @@
     showBody();
     if (isReel) info.appendChild(bodyHolder);
     else if (!post.mediaFileId) card.appendChild(bodyHolder);   // text-only posts: text first; media posts: caption goes under the buttons
+    if (post.kind === 'repost') card.appendChild(originalBox(post));
 
     // media
     if (post.mediaFileId) {
@@ -1873,6 +1949,8 @@
     function openMore() {
       var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
         post.mediaFileId ? h('button', { class: 'btn secondary block', type: 'button', text: post.kind === 'photo' ? 'Download photo' : 'Download video', onclick: function () { dlg.close(); downloadMedia(); } }) : null,
+        h('button', { class: 'btn secondary block', type: 'button', text: 'Remember this day? (repost)', onclick: function () { dlg.close(); repostDialog(post); } }),
+        h('button', { class: 'btn secondary block', type: 'button', text: 'Share link (family only)', onclick: function () { dlg.close(); shareDialog(post); } }),
         isMine ? h('button', { class: 'btn secondary block', type: 'button', text: 'Edit caption', onclick: function () { dlg.close(); startEdit(); } }) : null,
         (isMine && (post.kind === 'video' || post.kind === 'short')) ? h('button', { class: 'btn secondary block', type: 'button', text: post.captions ? 'Make the captions again' : 'Add automatic captions', onclick: function () { dlg.close(); addCaptionsToPost(); } }) : null,
         (isMine && post.captions) ? h('button', { class: 'btn secondary block', type: 'button', text: 'Remove captions', onclick: function () { dlg.close(); saveCaptions([], 'Captions removed.'); } }) : null,
@@ -1881,7 +1959,7 @@
       dlg.addEventListener('close', function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
       document.body.appendChild(dlg); dlg.showModal();
     }
-    if (isMine || S.isOwner || post.mediaFileId) {
+    {
       var moreBtn = h('button', { class: isReel ? 'act' : 'more-btn', type: 'button', 'aria-label': 'More options for this post', onclick: openMore }, icon('more'));
       if (isReel) actions.appendChild(moreBtn); else headEl.appendChild(moreBtn);
     }

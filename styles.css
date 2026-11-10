@@ -1233,3 +1233,11 @@ dialog .row { gap: 12px; }
 dialog h2 + button, dialog h3 + button, dialog h3 + .row { margin-top: 12px; }
 dialog :not(.row):not(.chips) > :is(h1, h2, h3, h4, strong, label, legend, div, select, input, p, fieldset) + :is(button.btn, a.btn) { margin-top: 14px; }
 dialog :not(.row):not(.chips) > :is(button.btn, a.btn) + :is(button.btn, a.btn, div, label, select, input, h3, h4, strong) { margin-top: 14px; }
+
+/* v1.26.0 reposts */
+.orig-box { margin: 10px 14px 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
+.orig-box .orig-head { display: flex; align-items: center; gap: 10px; }
+.orig-box .media, .orig-box .media-wrap { border-radius: 10px; overflow: hidden; }
+.orig-box .link-btn { align-self: flex-start; }
+.orig-box .post-body { padding: 0; margin: 0; }
+.orig-box .media, .orig-box .media-wrap { margin: 0; }

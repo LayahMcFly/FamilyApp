@@ -47,6 +47,7 @@ export const PARENT_KINDS = ['birth', 'adoptive', 'step', 'foster', 'guardian'];
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/;
 const KINDS = ['text', 'photo', 'video', 'short'];
+export const REPOST_NOTE = 'Remember this day?';
 
 /* Automatic captions are made on the viewer's phone and saved as a short list of [start, end, text].
    The server re-checks the list so nobody can store anything else in that column. */
@@ -734,7 +735,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     async createPost({ user, body }) {
       const { familyId } = await requireMember(user, body.familyId);
       const kind = body.kind;
-      if (!KINDS.includes(kind)) throw bad('Unknown post type.');
+      if (!KINDS.includes(kind)) throw bad('Unknown post type.');   // reposts have their own action (repostPost)
       const text = textOf(body.body ?? '', 'Post', { max: LIMITS.bodyMax });
       const data = { familyId, authorId: user.$id, kind, body: text };
       if (kind === 'text') {
@@ -766,6 +767,31 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         row = await createRow(TABLES.posts, ID.unique(), data, teamRead(familyId));
       }
       return { postId: row.$id, captionsSaved };
+    },
+
+    /** "Remember this day?": a new post that points at an older one (no file is copied, so it uses no extra storage). */
+    async repostPost({ user, body }) {
+      const { familyId } = await requireMember(user, body.familyId);
+      let orig = await loadPostInFamily(familyId, body.postId);
+      if (orig.kind === 'repost') {                           // reposting a repost reposts the original
+        if (!orig.repostOfId) throw missing('The original post was removed.');
+        orig = await loadPostInFamily(familyId, orig.repostOfId);
+      }
+      const note = textOf(body.body ?? '', 'Note', { max: LIMITS.bodyMax });
+      const recent = (await listRows(TABLES.posts, [Query.equal('familyId', [familyId]), Query.equal('authorId', [user.$id]), Query.orderDesc('$createdAt'), Query.limit(50)])).rows;
+      const since = now() - 24 * 3600 * 1000;
+      if (recent.some((r) => r.repostOfId === orig.$id && new Date(r.$createdAt).getTime() > since)) {
+        throw new ApiError(409, 'already_reposted', 'You already reposted this in the last 24 hours.');
+      }
+      const data = { familyId, authorId: user.$id, kind: 'repost', body: note || REPOST_NOTE, repostOfId: orig.$id };
+      let row;
+      try {
+        row = await createRow(TABLES.posts, ID.unique(), data, teamRead(familyId));
+      } catch (e) {
+        if (sdkCode(e) === 400) throw bad('Reposts are not set up yet. Add the repostOfId column (see the guide).');
+        throw e;
+      }
+      return { postId: row.$id };
     },
 
     async editPost({ user, body }) {
