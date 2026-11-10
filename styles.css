@@ -752,3 +752,27 @@ a:hover { text-decoration: underline; }
   .topbar-inner { gap: 6px; }
   .topbar-inner .fam-select, .topbar-inner .fam-name { min-width: 0; max-width: 90px; flex: 0 1 90px; }
 }
+
+/* v1.9.2 — breathing room: forms, button groups and cards never touch */
+.main > :where(.card, section, .btn, .tree-box, .row, .empty) + :where(.card, section, .btn, .tree-box, .row, .empty) { margin-top: 16px; }
+.card:not(article) { margin-bottom: 16px; }
+.card:not(article) > * + .card.inner, .card.inner { margin-top: 16px; }
+label { display: block; margin: 16px 0 6px; }
+label:first-child { margin-top: 0; }
+:where(input, textarea, select):not([type="checkbox"], [type="radio"], [type="file"]) { margin-bottom: 14px; }
+:where(input, textarea, select) + :where(.btn, button, .row, .stack) { margin-top: 4px; }
+.row, .tabs, .chips, .rel-list { gap: 10px; }
+.row > .btn, .row > button { margin: 0; }
+.tabs { margin-bottom: 16px; }
+.tabs > * { margin: 0; }
+.actions { gap: 8px; }
+.stack > * + * { margin-top: 10px; }
+.card > h2 + * , .card > h3 + * { margin-top: 8px; }
+.card p + .btn, .card p + .row, .card .hint + .btn { margin-top: 8px; }
+.set-list + .btn, .set-list + .row { margin-top: 16px; }
+.card .row + .row, .card .btn + .btn { margin-top: 10px; }
+.about-list > * + *, .abt-row, .about-item { margin-top: 10px; }
+.card :where(.btn, button.btn):not(.small) + :where(p, .hint) { margin-top: 10px; }
+.about-tools, .about-cat-head { gap: 8px; }
+.about-tools > * + * { margin-left: 8px; }
+.row + :where(label, .field) { margin-top: 18px; }

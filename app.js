@@ -2269,6 +2269,18 @@
 
   function renderAdminTools(main, token) {
     var fid = S.familyId;
+    // ---- rename ----
+    var rn = h('section', { class: 'card', 'aria-label': 'Family name' }, h('h2', { text: 'Family name' }),
+      h('p', { class: 'muted small', text: 'Everyone in the family sees this name. Only owners can change it.' }),
+      h('div', { class: 'row' }, h('strong', { text: famName() }),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Rename family', onclick: async function () {
+          var ok = await textDialog('Rename family', famName(), 'Save', { max: 60, aria: 'Family name' }, async function (v) {
+            if (!v) throw new Error('Please type a name for your family.');
+            await teams.updateName({ teamId: fid, name: v });
+          });
+          if (ok) { await loadFamilies(); render(); }
+        } })));
+    main.appendChild(rn);
     // ---- invite ----
     var email = field('inviteEmail', 'Relative\'s email', 'email', { required: true, autocomplete: 'off' });
     var name = field('inviteName', 'Their name (optional)', 'text', { maxlength: 60, autocomplete: 'off' });
