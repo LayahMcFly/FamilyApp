@@ -1504,9 +1504,7 @@
     if (!post || post.familyId !== S.familyId) { holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That post is not available. It may have been deleted.' }))); return; }
     var meta = await decorate([post]);
     if (token !== S.nav) return;
-    holder.appendChild(postCard(post, meta[post.$id], null, {}));
-    var btn = holder.querySelector('.act[aria-expanded]');
-    if (btn) btn.click();
+    holder.appendChild(postCard(post, meta[post.$id], null, { inlineComments: true }));
   };
 
   VIEWS.home = async function (main, token) {
@@ -1729,6 +1727,12 @@
     } else if (post.mediaFileId) { card.appendChild(bodyHolder); card.appendChild(h('div', { class: 'post-date', text: new Date(post.$createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) })); }
     var commentsEl = null;
     paintLike(); paintCmt(); paintSave();
+    // On a post's own page the comments are already open right underneath it, so there is no comment button.
+    if (hooks.inlineComments) {
+      if (cmt.parentNode) cmt.parentNode.removeChild(cmt);
+      commentsEl = commentsPanel(post, st, paintCmt); commentsEl.classList.add('inline-comments');
+      card.appendChild(commentsEl);
+    }
 
     async function toggleLike() {
       if (st.busy) return; st.busy = true;

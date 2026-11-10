@@ -1000,3 +1000,6 @@ dialog input[type="date"] { border-color: transparent; }
   .nav a[data-route="create"]:active { animation-play-state: paused; transform: scale(.94); }
 }
 @media (prefers-reduced-motion: reduce) { .nav a[data-route="create"], .nav a[data-route="create"][aria-current="page"] { animation: none; background-size: 100% 100%; } }
+
+/* v1.19.2 — comments shown right under a post on its own page */
+.inline-comments { margin: 6px 14px 0; padding-top: 8px; border-top: 1px solid var(--border); }
