@@ -544,8 +544,64 @@
       var wh = h('button', { class: 'btn secondary small', type: 'button', text: 'Register Printify order webhooks', onclick: function () {
         X.busy(wh, async function () { try { var r = await shopApi('shopAdminRegisterWebhooks'); toast(r.added.length ? 'Registered ' + r.added.length + ' webhook(s).' : 'Already registered.'); } catch (e) { toast(msgOf(e)); } }, 'Registering…'); } });
       holder.appendChild(h('p', null, wh));
-      // products
-      var pc = h('div', { class: 'card inner' }, h('h2', { text: 'Products' }));
+      // products from the owner's own Printify shop
+      var sc = h('div', { class: 'card inner' }, h('h2', { text: 'Your Printify store products' }),
+        h('p', { class: 'hint', text: 'Make and edit your products in Printify. Press Sync and they appear here. Titles, descriptions, pictures, enabled sizes and styles, and prices come from Printify each time you sync. Whether a product is shown to customers, and which section it sits in, is decided here and is kept when you sync again. Nothing in Printify is ever changed, moved or deleted from here.' }));
+      var newCb = h('input', { type: 'checkbox', id: 'sync-new' });
+      var progress = h('div', { class: 'small', role: 'status' });
+      var report = h('div');
+      var syncBtn = h('button', { class: 'btn', type: 'button', text: 'Sync from Printify', onclick: function () {
+        X.busy(syncBtn, async function () {
+          clear(report); var seen = [], counts = { new: 0, updated: 0, flagged: 0, skipped: 0 }, page = 1, last = 1, total = 0, shopInfo = null;
+          try {
+            do {
+              progress.textContent = 'Reading page ' + page + (last > 1 ? ' of ' + last : '') + ' from Printify…';
+              var r = await shopApi('shopAdminSync', { page: page, enableNew: newCb.checked });
+              last = r.lastPage; total = r.total; if (r.shop) shopInfo = r.shop;
+              if (r.diagnosis) { progress.textContent = ''; report.appendChild(X.alertBox('error', r.diagnosis.message)); return; }
+              r.results.forEach(function (x) { if (x.key) seen.push(x.key); if (x.action === 'skipped') counts.skipped++; else counts[x.action]++; if (x.action !== 'skipped' && !x.supported) counts.flagged++; });
+              page++;
+            } while (page <= last);
+            await shopApi('shopAdminSyncFinish', { seen: seen });
+            progress.textContent = '';
+            toast('Synced ' + total + ' product' + (total === 1 ? '' : 's') + '.');
+            await reload();
+          } catch (e) { progress.textContent = ''; report.appendChild(X.alertBox('error', msgOf(e))); }
+        }, 'Syncing…'); } });
+      var checkBtn = h('button', { class: 'btn secondary', type: 'button', text: 'Check Printify connection', onclick: function () {
+        X.busy(checkBtn, async function () {
+          clear(report);
+          try {
+            var c = await shopApi('shopAdminPrintifyCheck');
+            report.appendChild(h('div', { class: 'card inner' },
+              h('p', { class: c.shopMatch ? '' : 'danger-text', text: c.shopMatch ? '✓ PRINTIFY_SHOP_ID ' + c.configuredShopId + ' is one of your shops.' : '✗ PRINTIFY_SHOP_ID ' + (c.configuredShopId || '(empty)') + ' is not one of the shops this token can see.' }),
+              h('ul', { class: 'ticks' }, c.shops.map(function (x) { return h('li', { text: (x.configured ? '→ ' : '') + x.title + ' (ID ' + x.id + ', ' + (x.channel || 'store') + '): ' + (x.products === null ? 'product count unavailable' : x.products + ' product' + (x.products === 1 ? '' : 's')) + (x.configured ? ' ← the shop this site uses' : '') }); })),
+              h('ul', { class: 'ticks' }, c.scopes.map(function (x) { return h('li', { class: x.ok === false ? 'danger-text' : '', text: (x.ok === true ? '✓ ' : x.ok === false ? '✗ ' : '• ') + x.scope + (x.note ? ': ' + x.note : '') }); }))));
+          } catch (e) { report.appendChild(X.alertBox('error', msgOf(e))); }
+        }, 'Checking…'); } });
+      sc.appendChild(h('label', { class: 'check', for: 'sync-new' }, newCb, h('span', { text: ' Show NEW products to customers right away (otherwise they start hidden)' })));
+      sc.appendChild(h('div', { class: 'row' }, syncBtn, checkBtn)); sc.appendChild(progress); sc.appendChild(report);
+      var imp = ov.imported || [];
+      if (!imp.length) sc.appendChild(h('p', { class: 'muted', text: 'Nothing synced yet. Press “Sync from Printify”.' }));
+      imp.forEach(function (p) {
+        var info = [p.enabled ? 'ON' : 'hidden', p.variantCount + ' variant' + (p.variantCount === 1 ? '' : 's'), p.variantCount ? (p.minCents === p.maxCents ? money(p.minCents) : money(p.minCents) + ' to ' + money(p.maxCents)) : '', 'Printify: ' + (p.visible ? 'published' : 'draft')].filter(Boolean).join(' · ');
+        var sel = h('select', { 'aria-label': 'Section for ' + p.title, onchange: async function () { try { await shopApi('shopAdminToggle', { key: p.key, enabled: p.enabled, section: sel.value }); toast('Moved.'); await reload(); } catch (e) { toast(msgOf(e)); } } },
+          h('option', { value: 'gifts', text: 'Photo gifts' }), h('option', { value: 'jewelry', text: 'Jewelry' }));
+        sel.value = p.section;
+        var line = h('div', { class: 'admin-prod imported' },
+          p.image ? h('img', { class: 'shop-thumb small', src: p.image, alt: '' }) : null,
+          h('div', null, h('strong', { text: p.title }), h('div', { class: 'small muted', text: info }),
+            p.missing ? h('div', { class: 'small danger-text', text: 'No longer in your Printify shop, so it is hidden.' }) : null,
+            !p.supported ? h('div', { class: 'small danger-text', text: 'Cannot be sold through the photo editor: ' + p.reason }) : null,
+            (p.notes || []).map(function (n) { return h('div', { class: 'small muted', text: n }); })));
+        var btns2 = h('div', { class: 'row' });
+        btns2.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: p.enabled ? 'Hide from customers' : 'Show to customers', disabled: !p.supported || p.missing, onclick: async function () { try { await shopApi('shopAdminToggle', { key: p.key, enabled: !p.enabled }); await reload(); } catch (e) { toast(msgOf(e)); } } }));
+        btns2.appendChild(sel);
+        sc.appendChild(line); sc.appendChild(btns2);
+      });
+      holder.appendChild(sc);
+      // products chosen by hand from Printify's blank-product catalog (older method)
+      var pc = h('div', { class: 'card inner' }, h('h2', { text: 'Products from Printify’s blank-product catalog' }), h('p', { class: 'hint', text: 'Only needed if you want a product you have not made in Printify. Products from your own Printify store are above.' }));
       var lastSection = '';
       ov.products.slice().sort(function (x, y) { return (x.section === 'jewelry') - (y.section === 'jewelry'); }).forEach(function (p) {
         if (p.section !== lastSection) { lastSection = p.section; pc.appendChild(h('h3', { class: 'shop-section', text: p.section === 'jewelry' ? 'Jewelry' : 'Photo gifts' })); }

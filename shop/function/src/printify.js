@@ -49,12 +49,23 @@ export function createPrintify({ token, shopId, fetchImpl = fetch, sleep = (ms) 
     if (!shopId) throw new Error('printify_shop_not_set');
     return `/shops/${encodeURIComponent(shopId)}`;
   };
+  const qs = (o) => Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   return {
     listShops: () => call('GET', '/shops.json'),
     // The whole blueprint list is large and rarely changes: keep it for an hour.
     listBlueprints: () => cached('bp', 3600e3, async () => { const r = await call('GET', '/catalog/blueprints.json'); return Array.isArray(r) ? r : (r && r.data) || []; }),
     listProviders: (bp) => cached('pr' + bp, 3600e3, async () => { const r = await call('GET', `/catalog/blueprints/${encodeURIComponent(bp)}/print_providers.json`); return Array.isArray(r) ? r : (r && r.data) || []; }),
     listVariants: (bp, pr) => call('GET', `/catalog/blueprints/${encodeURIComponent(bp)}/print_providers/${encodeURIComponent(pr)}/variants.json`),
+    // Products already created in the merchant's own shop (NOT the blank catalog). Paginated: { current_page, last_page, total, data: [...] }.
+    // limit is 1 to 50 (default 50). sid lets the diagnostics look at the merchant's other shops.
+    listProductsPage: (page = 1, limit = 50, sid = shopId) => {
+      if (!sid) throw new Error('printify_shop_not_set');
+      return call('GET', `/shops/${encodeURIComponent(sid)}/products.json?${qs({ page, limit })}`);
+    },
+    // Short-lived copy of the variant list so a sync does not ask Printify for the same blueprint and provider again and again.
+    listVariantsCached: (bp, pr) => cached(`va${bp}:${pr}`, 600e3, () => call('GET', `/catalog/blueprints/${encodeURIComponent(bp)}/print_providers/${encodeURIComponent(pr)}/variants.json`)),
+    probe: (path) => call('GET', path, undefined, 1),
+    shopId: () => shopId,
     uploadImageBase64: (fileName, contents) => call('POST', '/uploads/images.json', { file_name: fileName, contents }),
     shippingCost: (lineItems, addressTo) => call('POST', `${shop()}/orders/shipping.json`, { line_items: lineItems, address_to: addressTo }),
     createOrder: (order) => call('POST', `${shop()}/orders.json`, order, 1),     // never retried blindly: external_id makes a repeat safe, but we decide

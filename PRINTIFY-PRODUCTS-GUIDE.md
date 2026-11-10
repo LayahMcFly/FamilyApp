@@ -1,5 +1,7 @@
 # Getting your Printify products into Family Circle
 
+> Own products made in Printify: see PRINTIFY-SYNC-GUIDE.md. This older guide covers choosing from the blank-product catalog.
+
 **Short version.** Printify products do not appear on their own. You set up each product once in the app's owner screen (**Shop, Manage the shop, Products**). Until a product is set up **and turned on**, family members see "Not available yet". The app has two sections. **Photo gifts** has the framed print, magnet, mug, blanket and puzzle. **Jewelry** has **Photo necklace** and **Photo bracelet** (new in 1.29.2).
 
 ## Before you start (one time)

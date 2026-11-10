@@ -75,7 +75,7 @@ function world(over = {}) {
     listProviders: async () => [{ id: 3, title: 'Prov', production_time: { average: 4 } }],
     listVariants: async () => ({ variants: [VAR, { id: 102, title: '16x20 / Black', options: {}, placeholders: [{ position: 'front', width: 1600, height: 2000 }] }] })
   };
-  const cfg = { databaseId: 'family', designBucketId: 'shop-designs', siteUrl: 'https://x.test/FamilyCircle/', adminIds: ['owner'], countries: ['US'], squareConfigured: true, squareEnvironment: 'sandbox', squareLocationId: 'LOC1', squareWebhookSignatureKey: 'sigkey', printifyWebhookSecret: 'pfy1', webhookBase: 'https://fn.test', autoSubmit: false, ...over.cfg };
+  const cfg = { databaseId: 'family', designBucketId: 'shop-designs', siteUrl: 'https://x.test/FamilyCircle/', adminIds: ['owner'], countries: ['US'], squareConfigured: true, squareEnvironment: 'sandbox', squareLocationId: 'LOC1', squareWebhookSignatureKey: 'sigkey', printifyWebhookSecret: 'pfy1', printifyConfigured: true, printifyShopId: '15930678', webhookBase: 'https://fn.test', autoSubmit: false, ...over.cfg };
   let t = 1700000000000;
   const shop = createShop({ users, db, storage, square, printify, cfg, now: () => t });
   const A = { $id: 'alice', email: 'a@x.test', emailVerification: true }, B = { $id: 'bob', email: 'b@x.test', emailVerification: true }, C = { $id: 'carol', email: 'c@x.test', emailVerification: true }, O = { $id: 'owner', email: 'o@x.test', emailVerification: true };
@@ -437,4 +437,129 @@ test('webhook registration is admin only and uses the function URL', async () =>
   const w = world(); await seed(w);
   assert.equal((await w.call(w.A, 'shopAdminRegisterWebhooks')).status, 403);
   const r = await w.ok(w.O, 'shopAdminRegisterWebhooks'); assert.equal(r.url, 'https://fn.test/webhooks/printify'); assert.ok(r.added.includes('order:shipment:created'));
+});
+
+/* ---------- sync from the owner's own Printify shop ---------- */
+const PID = 'a1b2c3d4e5f6a1b2c3d4e5f6', PID2 = 'b1b2c3d4e5f6a1b2c3d4e5f7';
+const mkProduct = (over = {}) => ({
+  id: PID, title: 'Personalized Photo Mug', description: '<p>Hello &amp; welcome</p>', blueprint_id: 68, print_provider_id: 5, visible: false,
+  options: [{ name: 'Size', type: 'size', values: [{ id: 1, title: '11oz' }, { id: 2, title: '15oz' }] }],
+  variants: [{ id: 501, title: '11oz', price: 1999, is_enabled: true, is_available: true, options: [1] }, { id: 502, title: '15oz', price: 2299, is_enabled: true, is_available: true, options: [2] }, { id: 503, title: '20oz', price: 2599, is_enabled: false, is_available: true, options: [] }],
+  images: [{ src: 'https://images-api.printify.com/mockup/a.jpg', is_default: false }, { src: 'https://images-api.printify.com/mockup/b.jpg', is_default: true }],
+  print_areas: [{ variant_ids: [501, 502], placeholders: [{ position: 'front', images: [] }] }], ...over
+});
+const MUG_CAT = { variants: [{ id: 501, options: {}, placeholders: [{ position: 'front', width: 2700, height: 1100 }] }, { id: 502, options: {}, placeholders: [{ position: 'front', width: 2700, height: 1100 }] }, { id: 503, options: {}, placeholders: [{ position: 'front', width: 2700, height: 1100 }] }] };
+function fakeShop(w, products, extra = {}) {
+  const calls = [];
+  Object.assign(w.printify, {
+    listShops: async () => extra.shops || [{ id: 15930678, title: 'Family Circle', sales_channel: 'custom_integration' }],
+    listProductsPage: async (page, limit, sid) => {
+      calls.push([page, limit, sid]);
+      if (extra.fail) throw extra.fail;
+      const list = (extra.byShop && sid !== undefined && extra.byShop[sid]) || products;
+      const last = Math.max(1, Math.ceil(list.length / limit));
+      return { current_page: page, last_page: last, total: list.length, data: list.slice((page - 1) * limit, page * limit) };
+    },
+    listVariantsCached: async () => MUG_CAT, probe: async () => ({})
+  });
+  return calls;
+}
+async function syncAll(w, body = {}) {
+  const seen = []; let page = 1, last = 1, first;
+  do { const r = await w.ok(w.O, 'shopAdminSync', { page, ...body }); first ||= r; last = r.lastPage; r.results.forEach((x) => x.key && seen.push(x.key)); page++; } while (page <= last);
+  await w.ok(w.O, 'shopAdminSyncFinish', { seen });
+  return first;
+}
+
+test('sync reads EVERY page of the shop products, is admin only, and stores a stable row per Printify product', async () => {
+  const w = world(); await seed(w);
+  const many = Array.from({ length: 23 }, (_, i) => mkProduct({ id: (i + 10).toString(16).padStart(24, 'c'), title: 'Mug ' + i }));
+  const calls = fakeShop(w, many);
+  assert.equal((await w.call(w.A, 'shopAdminSync', { page: 1 })).status, 403);
+  await syncAll(w);
+  assert.deepEqual(calls.map((c) => c[0]), [1, 2, 3], '23 products at 10 per page = 3 pages');
+  const ov = await w.ok(w.O, 'shopAdminOverview');
+  assert.equal(ov.imported.length, 23);
+  await syncAll(w);                                                            // a second sync updates, never duplicates
+  assert.equal((await w.ok(w.O, 'shopAdminOverview')).imported.length, 23);
+});
+
+test('imported product: title, text, picture, enabled variants, prices and IDs are copied; new products start hidden', async () => {
+  const w = world(); await seed(w); fakeShop(w, [mkProduct()]);
+  await syncAll(w);
+  const p = (await w.ok(w.O, 'shopAdminOverview')).imported[0];
+  assert.equal(p.key, 'pf_' + PID); assert.equal(p.title, 'Personalized Photo Mug'); assert.equal(p.enabled, false);
+  assert.equal(p.supported, true); assert.equal(p.variantCount, 2, 'the switched-off 20oz is left out'); assert.equal(p.minCents, 1999); assert.equal(p.maxCents, 2299);
+  assert.equal(p.image, 'https://images-api.printify.com/mockup/b.jpg'); assert.equal(p.blueprintId, 68); assert.equal(p.providerId, 5); assert.equal(p.position, 'front'); assert.equal(p.visible, false, 'a draft is imported too');
+  assert.equal((await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' })).products.some((x) => x.key === 'pf_' + PID), false, 'hidden until turned on');
+  await w.ok(w.O, 'shopAdminToggle', { key: 'pf_' + PID, enabled: true });
+  const c = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' });
+  const pub = c.products.find((x) => x.key === 'pf_' + PID);
+  assert.equal(pub.blurb, 'Hello & welcome'); assert.deepEqual(pub.variants.map((v) => [v.id, v.label, v.priceCents, v.width, v.height, v.options.Size]), [[501, '11oz', 1999, 2700, 1100, '11oz'], [502, '15oz', 2299, 2700, 1100, '15oz']]);
+  assert.equal(pub.image, 'https://images-api.printify.com/mockup/b.jpg');
+  assert.ok(c.slots.some((s) => s.key === 'pf_' + PID && s.available));
+  assert.equal(JSON.stringify(c).includes('cost'), false);
+});
+
+test('re-sync keeps the on/off choice, picks up price changes, and marks a product removed from Printify as missing and off', async () => {
+  const w = world(); await seed(w); fakeShop(w, [mkProduct(), mkProduct({ id: PID2, title: 'Second' })]);
+  await syncAll(w); await w.ok(w.O, 'shopAdminToggle', { key: 'pf_' + PID, enabled: true, section: 'jewelry' });
+  fakeShop(w, [mkProduct({ variants: [{ id: 501, title: '11oz', price: 2499, is_enabled: true, is_available: true, options: [1] }] })]);
+  await syncAll(w);
+  const ov = (await w.ok(w.O, 'shopAdminOverview')).imported;
+  const a = ov.find((x) => x.key === 'pf_' + PID), b = ov.find((x) => x.key === 'pf_' + PID2);
+  assert.equal(a.enabled, true); assert.equal(a.minCents, 2499); assert.equal(a.section, 'jewelry', 'the local section choice survives a sync');
+  assert.equal(b.missing, true); assert.equal(b.enabled, false);
+  assert.equal((await w.call(w.O, 'shopAdminToggle', { key: 'pf_' + PID2, enabled: true })).status, 409);
+});
+
+test('products the photo editor cannot fill are flagged with a reason and cannot be turned on', async () => {
+  const w = world(); await seed(w);
+  fakeShop(w, [
+    mkProduct({ id: PID, print_areas: [{ variant_ids: [501], placeholders: [{ position: 'front', images: [] }, { position: 'back', images: [] }] }] }),
+    mkProduct({ id: PID2, variants: [{ id: 501, title: 'x', price: 1999, is_enabled: false }] }),
+    mkProduct({ id: 'c1b2c3d4e5f6a1b2c3d4e5f8', print_areas: [] })
+  ]);
+  await syncAll(w, { enableNew: true });
+  const ov = (await w.ok(w.O, 'shopAdminOverview')).imported;
+  assert.equal(ov.length, 3); assert.ok(ov.every((x) => !x.supported && !x.enabled), 'nothing unsupported is ever switched on');
+  assert.match(ov.find((x) => x.key === 'pf_' + PID).reason, /2 areas/); assert.match(ov.find((x) => x.key === 'pf_' + PID2).reason, /No variants/);
+  const r = await w.call(w.O, 'shopAdminToggle', { key: 'pf_' + PID, enabled: true }); assert.equal(r.status, 409); assert.equal(r.json.error, 'unsupported');
+});
+
+test('empty and failing Printify answers are explained, not hidden', async () => {
+  let w = world(); await seed(w); fakeShop(w, []);
+  let r = await w.ok(w.O, 'shopAdminSync', { page: 1 }); assert.equal(r.diagnosis.code, 'no_products'); assert.match(r.diagnosis.message, /no filter/);
+  w = world(); await seed(w); fakeShop(w, [], { byShop: { 999: [mkProduct()] }, shops: [{ id: 15930678, title: 'Family Circle' }, { id: 999, title: 'BrainTeaz' }] });
+  r = await w.ok(w.O, 'shopAdminSync', { page: 1 }); assert.equal(r.diagnosis.code, 'wrong_shop_likely'); assert.match(r.diagnosis.message, /BrainTeaz/);
+  w = world(); await seed(w); fakeShop(w, [], { fail: new PrintifyError(404, {}), shops: [{ id: 111, title: 'Other' }] });
+  r = await w.call(w.O, 'shopAdminSync', { page: 1 }); assert.equal(r.json.error, 'wrong_shop'); assert.match(r.json.message, /Other \(ID 111/);
+  w = world(); await seed(w); fakeShop(w, [], { fail: new PrintifyError(403, {}) });
+  r = await w.call(w.O, 'shopAdminSync', { page: 1 }); assert.equal(r.json.error, 'missing_permission'); assert.match(r.json.message, /products\.read/);
+  w = world(); await seed(w); fakeShop(w, [], { fail: new PrintifyError(401, {}) });
+  assert.equal((await w.call(w.O, 'shopAdminSync', { page: 1 })).json.error, 'bad_token');
+  w = world(); await seed(w); fakeShop(w, [], { fail: new PrintifyError(503, {}) });
+  assert.equal((await w.call(w.O, 'shopAdminSync', { page: 1 })).json.error, 'api_failure');
+});
+
+test('an imported product can be designed with a buyer photo, only by its owner, and the shared base product is never edited', async () => {
+  const w = world(); await seed(w); fakeShop(w, [mkProduct()]);
+  await syncAll(w); await w.ok(w.O, 'shopAdminToggle', { key: 'pf_' + PID, enabled: true });
+  w.storage.add('mugf', { owner: 'alice', buf: jpeg(2700, 1100) });
+  const d = await w.ok(w.A, 'shopSaveDesign', { familyId: 'fam1', postId: 'post1', productKey: 'pf_' + PID, variantId: 501, fileId: 'mugf', quantity: 1, spec: {} });
+  assert.ok(d.design || d.designId || d.id || d.ok);
+  const before = JSON.stringify([...w.db.tab(T.catalog).get('pf_' + PID).variants]);
+  const rows = [...w.db.tab(T.designs).values()]; assert.equal(rows[0].productKey, 'pf_' + PID); assert.equal(rows[0].ownerId, 'alice');
+  assert.equal(JSON.stringify([...w.db.tab(T.catalog).get('pf_' + PID).variants]), before, 'saving a design never edits the shared product');
+  assert.equal((await w.call(w.B, 'shopSaveDesign', { familyId: 'fam1', postId: 'post1', productKey: 'pf_' + PID, variantId: 501, fileId: 'mugf', quantity: 1, spec: {} })).status >= 400, true, 'another buyer cannot reuse alice\'s upload');
+});
+
+test('Printify connection check reports shop match and which read permissions work', async () => {
+  const w = world(); await seed(w); fakeShop(w, [mkProduct()]);
+  w.printify.probe = async (path) => { if (path.includes('/orders.json')) throw new PrintifyError(403, {}); return {}; };
+  w.printify.listWebhooks = async () => [];
+  const r = await w.ok(w.O, 'shopAdminPrintifyCheck');
+  assert.equal(r.shopMatch, true); assert.equal(r.shops[0].products, 1);
+  assert.equal(r.scopes.find((x) => x.scope === 'products.read').ok, true); assert.equal(r.scopes.find((x) => x.scope === 'orders.read').ok, false);
+  assert.equal((await w.call(w.A, 'shopAdminPrintifyCheck')).status, 403);
 });

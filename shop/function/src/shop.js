@@ -14,6 +14,7 @@ import { Query, Permission, Role } from 'node-appwrite';
 import { ApiError, bad, forbidden, missing, conflict, idOf, intIn, rowId, sha256hex, money, publicError } from './util.js';
 import { verifySquareSignature, SquareError } from './square.js';
 import { PrintifyError, verifyPrintifySignature } from './printify.js';
+import { planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure } from './sync.js';
 import { imageSize } from './images.js';
 
 export const T = {
@@ -122,19 +123,33 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   }
 
   /* ---------- catalog (our saved allowlist) ---------- */
-  function parseVariants(row) { try { const v = JSON.parse(row.variants || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } }
+  function parseVariants(row) { return unpack(row.variants).variants; }
+  const metaOf = (row) => unpack(row.variants).meta;
+  const knownKey = (key) => !!SLOTS[key] || isImportedKey(key);
+  const titleOf = (row, key) => (row && row.title) || (SLOTS[key] && SLOTS[key].title) || 'Product';
+  /** Saved rows from the owner's own Printify shop carry a flag saying whether our photo editor can fill them. Older hand-set-up rows have no flag and are fine. */
+  const sellable = (row) => { const m = metaOf(row); return !(m && (m.ok === false || m.missing === true)); };
+  async function allCatalogRows() {
+    const out = []; let cursor = null;
+    for (let i = 0; i < 20; i++) {
+      const q = [Query.limit(100)]; if (cursor) q.push(Query.cursorAfter(cursor));
+      const page = (await listRows(T.catalog, q)).rows;
+      out.push(...page); if (page.length < 100) break; cursor = page[page.length - 1].$id;
+    }
+    return out;
+  }
   async function enabledProducts() {
-    const rows = (await listRows(T.catalog, [Query.limit(50)])).rows;
-    return rows.filter((r) => r.enabled === true && SLOTS[r.$id] && r.blueprintId && r.providerId).map((r) => ({ row: r, variants: parseVariants(r) }));
+    const rows = await allCatalogRows();
+    return rows.filter((r) => r.enabled === true && knownKey(r.$id) && r.blueprintId && r.providerId && sellable(r)).map((r) => ({ row: r, variants: parseVariants(r) }));
   }
   async function productByKey(key) {
-    if (!SLOTS[key]) throw bad('Unknown product.');
+    if (!knownKey(key)) throw bad('Unknown product.');
     const row = await getRowOrNull(T.catalog, key);
-    if (!row || row.enabled !== true) throw conflict('unavailable', 'That product is not available right now.');
+    if (!row || row.enabled !== true || !sellable(row)) throw conflict('unavailable', 'That product is not available right now.');
     return { row, variants: parseVariants(row) };
   }
   const publicProduct = ({ row, variants }) => ({
-    key: row.$id, title: row.title || SLOTS[row.$id].title, blurb: row.blurb || '', frameNote: !!SLOTS[row.$id].frameNote,
+    key: row.$id, title: titleOf(row, row.$id), blurb: row.blurb || '', frameNote: !!(SLOTS[row.$id] && SLOTS[row.$id].frameNote),
     position: row.position,
     variants: variants.map((v) => ({ id: v.id, label: v.label, options: v.options || {}, priceCents: v.priceCents, width: v.width, height: v.height }))
   });
@@ -167,16 +182,20 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     const enabled = await enabledProducts();
     const products = enabled.map(publicProduct);
     try {
-      const byId = new Map((await printify.listBlueprints()).map((b) => [Number(b.id), b]));
+      const byId = new Map(enabled.some((e) => !(metaOf(e.row) || {}).image) ? (await printify.listBlueprints()).map((b) => [Number(b.id), b]) : []);
       enabled.forEach(({ row }, i) => {
+        const own = (metaOf(row) || {}).image;
         const b = byId.get(Number(row.blueprintId));
-        const img = b && Array.isArray(b.images) ? b.images.find((u) => typeof u === 'string' && u.startsWith('https://images.printify.com/')) : '';
+        const img = own || (b && Array.isArray(b.images) ? b.images.find((u) => typeof u === 'string' && u.startsWith('https://images.printify.com/')) : '');
         if (img) products[i].image = img;
       });
     } catch (e) { /* pictures are optional */ }
     return {
       products,
-      slots: Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, section: s.section || 'gifts', available: products.some((p) => p.key === key) })),
+      slots: [
+        ...Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, section: s.section || 'gifts', available: products.some((p) => p.key === key) })),
+        ...enabled.filter(({ row }) => isImportedKey(row.$id)).map(({ row }) => ({ key: row.$id, title: titleOf(row, row.$id), section: (metaOf(row) || {}).section === 'jewelry' ? 'jewelry' : 'gifts', available: true }))
+      ],
       config: { countries, currency, maxQty: LIMITS.maxQty, supportEmail: cfg.supportEmail || '', taxPercent, testMode: cfg.squareEnvironment !== 'production', paymentsReady: squareReady() },
       isAdmin: isAdmin(user)
     };
@@ -246,7 +265,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     let spec = {}; try { spec = JSON.parse(d.spec || '{}'); } catch { spec = {}; }
     return {
       id: d.$id, postId: d.postId, productKey: d.productKey, variantId: d.variantId, quantity: d.quantity, spec, fileId: d.fileId, width: d.width, height: d.height,
-      title: prod ? (prod.row.title || SLOTS[d.productKey]?.title) : (SLOTS[d.productKey]?.title || 'Product'),
+      title: titleOf(prod && prod.row, d.productKey),
       variantLabel: variant ? variant.label : '', unitCents: variant ? variant.priceCents : 0, available: !!(prod && variant)
     };
   }
@@ -309,11 +328,11 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       if (d.orderId) throw conflict('in_order', 'A design in your cart is already part of another order.');
       const prod = await productByKey(d.productKey);
       const variant = prod.variants.find((v) => v.id === d.variantId);
-      if (!variant) throw conflict('unavailable', `${prod.row.title || SLOTS[d.productKey].title}: that size or style is no longer available.`);
+      if (!variant) throw conflict('unavailable', `${titleOf(prod.row, d.productKey)}: that size or style is no longer available.`);
       const post = d.postId === OWN_PHOTO ? OWN_PHOTO : await loadPhoto(familyId, d.postId).catch(() => null);
       if (!post || (post !== OWN_PHOTO && !(await giftAllowed(post, user.$id)))) throw conflict('photo_not_allowed', 'One of the photos can no longer be used for gifts. Remove that design from your cart.');
       lines.push({
-        designId: d.$id, postId: d.postId, productKey: d.productKey, title: prod.row.title || SLOTS[d.productKey].title, variantId: variant.id, variantLabel: variant.label,
+        designId: d.$id, postId: d.postId, productKey: d.productKey, title: titleOf(prod.row, d.productKey), variantId: variant.id, variantLabel: variant.label,
         blueprintId: prod.row.blueprintId, providerId: prod.row.providerId, position: prod.row.position, quantity: d.quantity,
         unitCents: variant.priceCents, fileId: d.fileId, fileSha: d.fileSha, width: d.width, height: d.height
       });
@@ -743,8 +762,9 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   async function adminOverview({ user }) {
     requireAdmin(user);
     const rows = (await listRows(T.orders, [Query.orderDesc('$createdAt'), Query.limit(50)])).rows;
-    const catalog = (await listRows(T.catalog, [Query.limit(50)])).rows;
-    return { orders: rows.map(adminOrderRow), products: Object.entries(SLOTS).map(([key, s]) => { const r = catalog.find((c) => c.$id === key); return { key, title: s.title, section: s.section || 'gifts', saved: !!r, enabled: !!(r && r.enabled), blueprintId: r ? r.blueprintId : null, providerId: r ? r.providerId : null, variantCount: r ? parseVariants(r).length : 0, verifiedAt: r ? r.verifiedAt : '' }; }) };
+    const catalog = await allCatalogRows();
+    const imported = catalog.filter((r) => isImportedKey(r.$id)).map((r) => { const m = metaOf(r) || {}; const vs = parseVariants(r); const prices = vs.map((v) => v.priceCents); return { key: r.$id, title: r.title, enabled: r.enabled === true, supported: m.ok !== false, reason: m.reason || '', notes: m.notes || [], image: m.image || '', section: m.section === 'jewelry' ? 'jewelry' : 'gifts', visible: !!m.visible, missing: !!m.missing, variantCount: vs.length, minCents: prices.length ? Math.min(...prices) : 0, maxCents: prices.length ? Math.max(...prices) : 0, syncedAt: m.syncedAt || '', printifyId: m.pid || '', blueprintId: r.blueprintId, providerId: r.providerId, position: r.position }; });
+    return { orders: rows.map(adminOrderRow), imported, products: Object.entries(SLOTS).map(([key, s]) => { const r = catalog.find((c) => c.$id === key); return { key, title: s.title, section: s.section || 'gifts', saved: !!r, enabled: !!(r && r.enabled), blueprintId: r ? r.blueprintId : null, providerId: r ? r.providerId : null, variantCount: r ? parseVariants(r).length : 0, verifiedAt: r ? r.verifiedAt : '' }; }) };
   }
   async function adminOrder({ user, body }) {
     requireAdmin(user);
@@ -795,10 +815,127 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   }
   async function adminToggle({ user, body }) {
     requireAdmin(user);
-    const key = String(body.key || ''); if (!SLOTS[key]) throw bad('Unknown product slot.');
-    if (!(await getRowOrNull(T.catalog, key))) throw conflict('not_set_up', 'Set this product up first.');
-    await updateRow(T.catalog, key, { enabled: body.enabled === true });
-    return { enabled: body.enabled === true };
+    const key = String(body.key || ''); if (!knownKey(key)) throw bad('Unknown product.');
+    const row = await getRowOrNull(T.catalog, key);
+    if (!row) throw conflict('not_set_up', 'Set this product up first.');
+    const m = metaOf(row);
+    if (body.enabled === true && m && m.ok === false) throw conflict('unsupported', `This product cannot be sold through the photo editor yet: ${m.reason}`);
+    if (body.enabled === true && m && m.missing) throw conflict('missing', 'This product is no longer in your Printify shop. Sync again after you restore it there.');
+    const data = { enabled: body.enabled === true };
+    if (isImportedKey(key) && (body.section === 'gifts' || body.section === 'jewelry')) {
+      const u = unpack(row.variants); u.meta = { ...(u.meta || {}), section: body.section, sectionLocal: true };
+      data.variants = JSON.stringify({ v: u.variants, m: u.meta });
+    }
+    await updateRow(T.catalog, key, data);
+    return { enabled: data.enabled };
+  }
+
+  /* ---------- products already created in the owner's own Printify shop ---------- */
+  const SYNC_PAGE = 10;   // small pages keep each request well inside the function's time limit; the browser asks for page after page
+  async function shopsOrNull() { try { const l = await printify.listShops(); return Array.isArray(l) ? l : []; } catch { return null; } }
+  const shopLine = (x) => `${String(x.title || 'Untitled').slice(0, 60)} (ID ${x.id}${x.sales_channel ? ', ' + x.sales_channel : ''})`;
+  async function explainProductsFailure(e) {
+    const base = explainPrintifyFailure(e, 'the products in this shop');
+    if (!(e instanceof PrintifyError) || ![403, 404].includes(e.status)) return base;
+    const shops = await shopsOrNull();
+    if (shops === null) return { code: 'missing_permission', message: `Printify refused both the product list and the shop list. The token is missing permissions (it needs shops.read and products.read). Make a new token with all permissions ticked and update PRINTIFY_API_TOKEN.` };
+    if (!shops.some((x) => String(x.id) === String(cfg.printifyShopId))) {
+      return { code: 'wrong_shop', message: `PRINTIFY_SHOP_ID (${cfg.printifyShopId}) is not one of the shops on this token's account. Shops it can see: ${shops.map(shopLine).join('; ') || 'none'}. Set PRINTIFY_SHOP_ID to the one that holds your products.` };
+    }
+    return { code: 'missing_permission', message: 'The shop ID is right, but Printify refused to list its products. The token is missing the products.read permission. Make a new token with all permissions ticked and update PRINTIFY_API_TOKEN.' };
+  }
+  async function explainEmpty(shops) {
+    const mine = (shops || []).find((x) => String(x.id) === String(cfg.printifyShopId));
+    const others = [];
+    for (const x of (shops || []).filter((y) => y !== mine).slice(0, 8)) {
+      try { const r = await printify.listProductsPage(1, 1, x.id); others.push({ id: x.id, title: String(x.title || '').slice(0, 60), products: Number((r && r.total) || 0) }); } catch { /* ignore: only a hint */ }
+    }
+    const richer = others.filter((o) => o.products > 0);
+    if (shops && !mine) return { code: 'wrong_shop', message: `PRINTIFY_SHOP_ID (${cfg.printifyShopId}) is not one of the shops on this token's account.`, shops: others };
+    if (richer.length) return { code: 'wrong_shop_likely', message: `Shop ${cfg.printifyShopId} has no products, but ${richer.map((o) => `"${o.title}" (ID ${o.id}) has ${o.products}`).join(' and ')}. If your products are there, change PRINTIFY_SHOP_ID to that ID.`, shops: others };
+    return { code: 'no_products', message: `Shop ${cfg.printifyShopId}${mine ? ` ("${String(mine.title || '').slice(0, 60)}")` : ''} has no products yet. This sync applies no filter: drafts and published products both count. Create a product in Printify (My products), then sync again.`, shops: others };
+  }
+  async function adminSync({ user, body }) {
+    requireAdmin(user);
+    if (!cfg.printifyConfigured || !cfg.printifyShopId) throw conflict('not_configured', 'Printify is not connected yet. Add PRINTIFY_API_TOKEN and PRINTIFY_SHOP_ID to the shop-api function first.');
+    const page = intIn(body.page ?? 1, 'page', 1, 200);
+    let res;
+    try { res = await printify.listProductsPage(page, SYNC_PAGE); }
+    catch (e) { const x = await explainProductsFailure(e); throw conflict(x.code, x.message); }
+    const list = Array.isArray(res) ? res : ((res && res.data) || []);
+    const lastPage = Number((res && res.last_page) || 1), total = Number((res && res.total) ?? list.length);
+    const out = { page, lastPage, total, results: [] };
+    if (page === 1) {
+      const shops = await shopsOrNull();
+      const mine = (shops || []).find((x) => String(x.id) === String(cfg.printifyShopId));
+      out.shop = { id: String(cfg.printifyShopId), title: mine ? String(mine.title || '') : '', channel: mine ? String(mine.sales_channel || '') : '', foundInAccount: shops === null ? null : !!mine };
+      if (!list.length && total === 0) { out.diagnosis = await explainEmpty(shops); return out; }
+    }
+    let titles = new Map();
+    try { titles = new Map((await printify.listBlueprints()).map((b) => [Number(b.id), String(b.title || '')])); } catch { /* only used to guess the section */ }
+    const cats = new Map();
+    await Promise.all([...new Set(list.map((p) => `${p.blueprint_id}:${p.print_provider_id}`))].map(async (k) => {
+      const [bp, pr] = k.split(':');
+      try { cats.set(k, await printify.listVariantsCached(bp, pr)); } catch { cats.set(k, null); }
+    }));
+    const syncedAt = nowIso();
+    const one = async (p) => {
+      const key = importedKey(p && p.id);
+      const cat = cats.get(`${p.blueprint_id}:${p.print_provider_id}`);
+      if (cat === null) return { key, title: String(p.title || '').slice(0, 80), action: 'skipped', supported: false, reason: 'Printify did not return the print area sizes for this product just now. Sync again in a minute.' };
+      const plan = planImport(p, cat, titles.get(Number(p.blueprint_id)) || '');
+      if (!plan.key) return { key: '', title: plan.title, action: 'skipped', supported: false, reason: plan.support.reason };
+      const existing = await getRowOrNull(T.catalog, plan.key);
+      const prev = existing ? metaOf(existing) : null;
+      if (prev && prev.sectionLocal) plan.section = prev.section;
+      const data = {
+        title: plan.title, blurb: plan.blurb, blueprintId: plan.blueprintId, providerId: plan.providerId, position: plan.position,
+        variants: packVariants(plan, { shopId: String(cfg.printifyShopId), syncedAt, sectionLocal: !!(prev && prev.sectionLocal) }),
+        enabled: existing ? (existing.enabled === true && plan.support.ok) : (body.enableNew === true && plan.support.ok), verifiedAt: syncedAt
+      };
+      if (existing) await updateRow(T.catalog, plan.key, data); else await createRow(T.catalog, plan.key, data, []);
+      return { key: plan.key, title: plan.title, action: existing ? 'updated' : 'new', supported: plan.support.ok, reason: plan.support.reason, notes: plan.notes.slice(0, 4), enabled: data.enabled, variants: plan.variants.length };
+    };
+    for (let i = 0; i < list.length; i += 5) out.results.push(...(await Promise.all(list.slice(i, i + 5).map(one))));
+    return out;
+  }
+  async function adminSyncFinish({ user, body }) {
+    requireAdmin(user);
+    const seen = new Set((Array.isArray(body.seen) ? body.seen : []).map(String).filter(isImportedKey).slice(0, 2000));
+    let missingNow = 0;
+    for (const r of await allCatalogRows()) {
+      if (!isImportedKey(r.$id) || seen.has(r.$id)) continue;
+      const u = unpack(r.variants); if (u.meta && u.meta.missing && r.enabled !== true) continue;
+      u.meta = { ...(u.meta || {}), missing: true };
+      await updateRow(T.catalog, r.$id, { enabled: false, variants: JSON.stringify({ v: u.variants, m: u.meta }) });
+      missingNow++;
+    }
+    return { missing: missingNow };
+  }
+  async function adminPrintifyCheck({ user }) {
+    requireAdmin(user);
+    if (!cfg.printifyConfigured) throw conflict('not_configured', 'PRINTIFY_API_TOKEN is not set yet.');
+    const sid = cfg.printifyShopId ? encodeURIComponent(cfg.printifyShopId) : '';
+    const test = async (scope, fn, needsShop) => {
+      if (needsShop && !sid) return { scope, ok: null, note: 'PRINTIFY_SHOP_ID is not set.' };
+      try { await fn(); return { scope, ok: true, note: '' }; } catch (e) { return { scope, ok: false, note: explainPrintifyFailure(e, scope).message }; }
+    };
+    const shops = await shopsOrNull();
+    const infos = [];
+    for (const x of (shops || []).slice(0, 8)) {
+      let products = null; try { products = Number(((await printify.listProductsPage(1, 1, x.id)) || {}).total || 0); } catch { /* shown as unknown */ }
+      infos.push({ id: String(x.id), title: String(x.title || '').slice(0, 60), channel: String(x.sales_channel || ''), products, configured: String(x.id) === String(cfg.printifyShopId) });
+    }
+    const scopes = [
+      { scope: 'shops.read', ok: shops !== null, note: shops === null ? 'Printify refused the shop list.' : '' },
+      await test('products.read', () => printify.listProductsPage(1, 1), true),
+      await test('catalog.read', () => printify.listBlueprints(), false),
+      await test('orders.read', () => printify.probe(`/shops/${sid}/orders.json?limit=1`), true),
+      await test('uploads.read', () => printify.probe('/uploads.json?limit=1'), false),
+      await test('webhooks.read', () => printify.listWebhooks(), true),
+      { scope: 'orders.write, uploads.write, webhooks.write', ok: null, note: 'These cannot be tested without placing an order or changing something. Tick every permission when you make the token and they will work.' }
+    ];
+    return { configuredShopId: String(cfg.printifyShopId || ''), shopMatch: infos.some((x) => x.configured), shops: infos, scopes };
   }
   async function adminResolve({ user, body }) {
     requireAdmin(user);
@@ -846,7 +983,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     shopSaveDesign: saveDesign, shopDesigns: listDesigns, shopUpdateDesign: updateDesign,
     shopQuote: quote, shopCheckout: checkout, shopCancelOrder: cancelOrder, shopOrders: myOrders, shopOrder: getOrder,
     shopAdminCheck: adminCheck, shopAdminOverview: adminOverview, shopAdminOrder: adminOrder, shopAdminBlueprints: adminBlueprints, shopAdminProviders: adminProviders,
-    shopAdminVariants: adminVariants, shopAdminSaveProduct: adminSaveProduct, shopAdminToggle: adminToggle, shopAdminResolve: adminResolve, shopAdminRegisterWebhooks: adminRegisterWebhooks
+    shopAdminVariants: adminVariants, shopAdminSaveProduct: adminSaveProduct, shopAdminToggle: adminToggle, shopAdminSync: adminSync, shopAdminSyncFinish: adminSyncFinish, shopAdminPrintifyCheck: adminPrintifyCheck, shopAdminResolve: adminResolve, shopAdminRegisterWebhooks: adminRegisterWebhooks
   };
 
   async function handle({ user, body }) {

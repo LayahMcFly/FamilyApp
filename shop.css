@@ -70,3 +70,6 @@
 
 .check[hidden], .shop-sources input[hidden] { display: none !important; }
 .shop-sources { gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+
+.admin-prod.imported { display: flex; gap: 10px; align-items: flex-start; }
+.shop-thumb.small { width: 56px; height: 56px; flex: none; }
