@@ -1112,6 +1112,16 @@ dialog input[type="date"] { border-color: transparent; }
 .cc-btn.on { background: #fff; color: #111; border-color: #fff; }
 .reel-media .cc-btn { top: 108px; right: 12px; }
 article.card .reel-media .cc-btn { top: auto; bottom: 56px; right: 12px; }
+/* Captions drawn by the page, in the person's appearance style. The default is an accent-colored pill; each preset changes the shape and font. */
+.cc-line { position: absolute; left: 12%; right: 20%; bottom: 30%; z-index: 5; display: flex; justify-content: center; pointer-events: none; }
+.cc-line[hidden] { display: none; }
+.cc-text { display: inline-block; max-width: 100%; padding: 6px 14px; border-radius: 14px; text-align: center; font: 700 clamp(15px, 4.2vw, 20px)/1.3 system-ui, sans-serif;
+  background: color-mix(in srgb, var(--accent) 90%, #000); color: var(--on-accent); border: 2px solid rgba(255,255,255,.75); box-shadow: 0 3px 10px rgba(0,0,0,.35); overflow-wrap: anywhere; }
+:root[data-preset="girly"] .cc-text { font-family: "Dancing Script", "Snell Roundhand", "Segoe Script", cursive; font-size: clamp(19px, 5.2vw, 25px); border-radius: 22px; padding: 6px 18px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 92%, #fff), color-mix(in srgb, var(--accent) 80%, #ff7fbf)); border-color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent), 0 4px 12px rgba(0,0,0,.3); }
+:root[data-preset="boyish"] .cc-text { border-radius: 6px; letter-spacing: .02em; background: rgba(12,16,20,.86); color: #fff; border: 0; border-left: 5px solid var(--accent); border-bottom: 2px solid var(--accent); }
+:root[data-preset="neutral"] .cc-text { border-radius: 10px; background: rgba(255,253,248,.94); color: #2b2a26; border: 2px solid var(--accent); font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
+.card .media:not(.reel-media) .cc-line { left: 8%; right: 8%; bottom: 64px; }
 video::cue { background: rgba(0,0,0,.72); color: #fff; font: 600 1.05em system-ui, sans-serif; }
 label.check { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 label.check input { width: 22px; height: 22px; flex: none; }

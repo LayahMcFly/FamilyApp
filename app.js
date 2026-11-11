@@ -653,6 +653,7 @@
   function applyCaptions(v, box, post) {
     Array.prototype.forEach.call(v.querySelectorAll('track'), function (t) { if (t.__url) URL.revokeObjectURL(t.__url); v.removeChild(t); });
     var old = box.querySelector('.cc-btn'); if (old) box.removeChild(old);
+    var oldLine = box.querySelector('.cc-line'); if (oldLine) box.removeChild(oldLine);
     var cues = window.Captions ? window.Captions.parse(post.captions) : [];
     post.__cc = { v: v, box: box };
     if (!cues.length) return;
@@ -660,8 +661,19 @@
     tr.kind = 'captions'; tr.srclang = 'en'; tr.label = 'English (automatic)';
     tr.__url = URL.createObjectURL(new Blob([window.Captions.toVtt(cues, box.classList.contains('reel-media') ? 'line:68% position:42% size:70% align:center' : '')], { type: 'text/vtt' }));
     tr.src = tr.__url; v.appendChild(tr);
+    // The words are drawn by the page, not the browser, so they can wear the person's appearance style (colors, corners, font).
+    var line = h('div', { class: 'cc-line', 'aria-hidden': 'true', hidden: true }, h('span', { class: 'cc-text' }));
+    box.appendChild(line);
+    var shown = true;
+    function showCue() {
+      var a = tr.track.activeCues, t = '';
+      for (var i = 0; a && i < a.length; i++) t += (t ? ' ' : '') + a[i].text;
+      line.firstChild.textContent = t; line.hidden = !(shown && t);
+    }
+    tr.track.mode = 'hidden';
+    tr.track.addEventListener('cuechange', showCue);
     function paint(on) {
-      tr.track.mode = on ? 'showing' : 'hidden';
+      shown = on; showCue();
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
       btn.setAttribute('aria-label', on ? 'Captions are on. Turn captions off' : 'Captions are off. Turn captions on');
       btn.classList.toggle('on', on);
