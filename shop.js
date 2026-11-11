@@ -55,7 +55,7 @@
   function shopLinks(extra) {
     return h('div', { class: 'shop-links' },
       h('a', { class: 'btn secondary small cart-icon-btn', href: '#/shop/cart', 'aria-label': 'Cart' + (extra && extra.cart ? ', ' + extra.cart + ' items' : ''), title: 'Cart' }, icon('cart'), extra && extra.cart ? h('span', { class: 'cart-count', text: String(extra.cart) }) : null),
-      h('a', { class: 'btn secondary small', href: '#/orders', text: 'My orders' }));
+      h('a', { class: 'btn secondary small', href: '#/orders', text: 'My orders', onclick: function () { X.S.ordersFrom = ''; } }));
   }
   function setupNeeded(main, e) {
     clear(main).appendChild(h('div', { class: 'empty' }, h('h1', { text: 'Photo Gifts' }), h('p', { text: msgOf(e) }),
@@ -488,7 +488,7 @@
   }
   async function viewOrders(main, token, id, sub) {
     if (id) return viewOrder(main, token, id, sub);
-    main.appendChild(head('My orders', '#/shop', 'Photo Gifts'));
+    main.appendChild(X.S.ordersFrom === '#/profile' ? head('My orders', '#/profile', 'Profile') : head('My orders', '#/shop', 'Photo Gifts'));
     main.appendChild(h('p', { class: 'small muted', text: 'Only you can see your orders. Your family cannot.' }));
     var holder = h('div', null, X.spinnerLine('Loading…')); main.appendChild(holder);
     try {
