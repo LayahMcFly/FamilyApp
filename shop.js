@@ -232,6 +232,46 @@
     }
     function adminLink() { return h('p', null, h('a', { class: 'link-btn', href: '#/shop/admin', text: 'Manage Photo Gifts (owner only)' }), ' · ', h('a', { class: 'link-btn', href: '#/shop/admin/cj', text: 'Manage Family Shop (owner only)' })); }
     pickSection(st().section || 'photo-gifts');
+    if (cat.isAdmin) autoSync(token, search);
+  }
+
+  /* Owner only: opening the shop refreshes it from Printify and CJ, at most once every 30 minutes on this device.
+     It never turns anything on by itself. Products gone from Printify or CJ are removed, as with the manual buttons. */
+  var autoRunning = false, AUTO_KEY = 'fc_shop_autosync', AUTO_EVERY = 30 * 60 * 1000;
+  async function autoSync(token) {
+    if (autoRunning) return;
+    try { if (Date.now() - Number(localStorage.getItem(AUTO_KEY) || 0) < AUTO_EVERY) return; } catch (e) { /* no storage: sync every time */ }
+    autoRunning = true;
+    try { localStorage.setItem(AUTO_KEY, String(Date.now())); } catch (e) { /* ignore */ }
+    var note = h('p', { class: 'small muted', role: 'status', text: 'Updating the shop from Printify and CJ…' });
+    var host = document.querySelector('.shop-search-row'); if (host && host.parentNode) host.parentNode.insertBefore(note, host.nextSibling);
+    var changed = 0, problems = [];
+    try {
+      try {
+        var seen = [], page = 1, last = 1, ok = true;
+        do {
+          var r = await shopApi('shopAdminSync', { page: page, enableNew: false });
+          if (r.diagnosis) { ok = false; break; }
+          last = r.lastPage; r.results.forEach(function (x) { if (x.key) seen.push(x.key); if (x.action === 'new' || x.action === 'updated') changed++; });
+          page++;
+        } while (page <= last);
+        if (ok) { var f = await shopApi('shopAdminSyncFinish', { seen: seen }); changed += (f.deleted || 0); }
+      } catch (e) { problems.push('Printify'); }
+      try {
+        var ov = await shopApi('shopAdminCjList');
+        if (ov.configured) {
+          var list = ov.products.slice(0, 30);
+          for (var i = 0; i < list.length; i++) {
+            try { var cr = await shopApi('shopAdminCjSync', { id: list[i].id }); if (cr.deleted || (cr.changes && cr.changes.length)) changed++; }
+            catch (e) { if (e.apiCode === 'cj_rate_limit' || e.apiCode === 'cj_auth') { problems.push('CJ'); break; } }
+          }
+        }
+      } catch (e) { problems.push('CJ'); }
+    } finally { autoRunning = false; }
+    if (note.parentNode) note.parentNode.removeChild(note);
+    if (token !== X.S.nav) return;
+    if (problems.length) toast('Could not update from ' + problems.join(' and ') + '. Open the owner screen to see why.');
+    if (changed) { toast('The shop was updated from Printify and CJ.'); X.route(false); }
   }
 
   /* ================= "MAKE A GIFT" ENTRY ================= */
