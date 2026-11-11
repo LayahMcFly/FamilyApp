@@ -306,7 +306,7 @@
         var fid = X.S.familyId, uploaded = null;
         try {
           if (!st().consentShown) {
-            var okc = await X.confirmDialog('Before we make your product', CONSENT_IMAGE + ' Nothing is sent to Printify until your payment is confirmed. Until then, the picture stays in your private area of this app.', 'I understand');
+            var okc = await X.confirmDialog('Before we make your product', CONSENT_IMAGE + ' A copy of the finished design goes to Printify when you add it to the cart, so it can show you a picture of the product. Nothing is printed until your payment is confirmed.', 'I understand');
             if (!okc) return; st().consentShown = true;
           }
           var W = variant.width, H = variant.height, s = Math.min(1, 4096 / Math.max(W, H)), blob = null, outW = 0, outH = 0;
@@ -407,6 +407,24 @@
   /* ================= CART + CHECKOUT ================= */
   function newRequestId() { try { return crypto.randomUUID(); } catch (e) { return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); } }
 
+  /* Asks the server for Printify's picture of each design on its product, one at a time, every few seconds. Failing is fine: the flat design stays. */
+  async function runPreviews(items, token) {
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      it.note.hidden = false; it.note.textContent = 'Making your product preview…';
+      var done = false;
+      for (var n = 0; n < 24 && !done; n++) {
+        if (token !== X.S.nav) return;
+        try {
+          var r = await shopApi('shopPreview', { familyId: X.S.familyId, designId: it.d.id });
+          if (r.status === 'ready') { await it.show(r.fileId); it.note.hidden = true; done = true; }
+          else if (r.status === 'unavailable') { if (r.hint) { it.note.hidden = false; it.note.textContent = r.hint; } else it.note.hidden = true; done = true; }
+        } catch (e) { it.note.hidden = true; done = true; }
+        if (!done) await new Promise(function (res) { setTimeout(res, 2500); });
+      }
+      if (!done) it.note.hidden = true;
+    }
+  }
   async function viewCart(main, token) {
     main.appendChild(head('Your cart', '#/shop', 'Photo Gifts'));
     var holder = h('div', null, X.spinnerLine('Loading your cart…')); main.appendChild(holder);
@@ -416,18 +434,24 @@
     var designs = res.designs; clear(holder);
     if (!designs.length) { holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'Your cart is empty.' }), h('a', { class: 'btn', href: '#/shop', text: 'Browse gifts' }))); return; }
     var list = h('div', { class: 'cart-list' }), summary = h('div', { class: 'card inner' }), form = h('form', { class: 'cart-form', novalidate: true }), msg = h('div');
+    var previews = [];
     designs.forEach(function (d) {
       var img = h('img', { class: 'cart-thumb', alt: 'Your design for ' + d.title });
-      X.fetchMedia(d.fileId, false, X.CFG.shopBucketId || 'family-media').then(function (b) { img.src = X.blobUrl(b, 'image/jpeg'); }).catch(function () {});
+      var pvNote = h('div', { class: 'small muted', hidden: true });
+      function showFile(id, mime) { return X.fetchMedia(id, false, X.CFG.shopBucketId || 'family-media').then(function (b) { img.src = X.blobUrl(b, mime || 'image/jpeg'); }); }
+      // The flat print image shows first. Printify's picture of the real product replaces it as soon as it is ready.
+      showFile(d.preview || d.fileId, d.preview ? 'image/jpeg' : 'image/jpeg').catch(function () { if (d.preview) showFile(d.fileId).catch(function () {}); });
+      if (!d.preview && d.previewState === 'maybe' && d.available) previews.push({ d: d, note: pvNote, show: showFile });
       var qty = h('select', { 'aria-label': 'Quantity for ' + d.title, onchange: async function () { try { await shopApi('shopUpdateDesign', { designId: d.id, quantity: Number(qty.value) }); st().requestId = null; X.route(false); } catch (e) { toast(msgOf(e)); } } },
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return h('option', { value: String(n), text: String(n) }); }));
       qty.value = String(d.quantity);
-      list.appendChild(h('div', { class: 'cart-row' }, img, h('div', { class: 'grow' }, h('strong', { text: d.title }), h('div', { class: 'small muted', text: d.variantLabel }),
+      list.appendChild(h('div', { class: 'cart-row' }, img, h('div', { class: 'grow' }, h('strong', { text: d.title }), h('div', { class: 'small muted', text: d.variantLabel }), pvNote,
         d.available ? h('div', { text: money(d.unitCents) + ' each' }) : h('div', { class: 'small danger-text', text: 'No longer available. Please remove it.' }),
         h('div', { class: 'cart-actions' }, h('label', { class: 'small', text: 'Qty ' }, qty),
           h('button', { class: 'link-btn', type: 'button', text: 'Remove', onclick: async function () { try { await shopApi('shopUpdateDesign', { designId: d.id, remove: true }); st().requestId = null; X.route(false); } catch (e) { toast(msgOf(e)); } } })))));
     });
     holder.appendChild(list);
+    runPreviews(previews, token);
 
     var a = st().addr || {};
     function f(name, label, opts) { opts = opts || {}; var inp = h('input', { type: 'text', name: name, value: a[name] || (name === 'country' ? 'US' : ''), autocomplete: opts.ac || 'off', maxlength: opts.max || 80, 'aria-label': label, placeholder: label }); return { inp: inp, wrap: h('div', null, h('label', { text: label }), inp) }; }
@@ -439,7 +463,7 @@
     Object.keys(F).forEach(function (k) { form.appendChild(F[k].wrap); });
     var cbDel = h('input', { type: 'checkbox' }), cbImg = h('input', { type: 'checkbox' });
     form.appendChild(h('label', { class: 'check' }, cbDel, ' ', CONSENT_DELIVERY));
-    form.appendChild(h('label', { class: 'check' }, cbImg, ' ', CONSENT_IMAGE + ' This happens only after your payment is confirmed.'));
+    form.appendChild(h('label', { class: 'check' }, cbImg, ' ', CONSENT_IMAGE + ' Printing starts only after your payment is confirmed.'));
     var quoteBtn = h('button', { class: 'btn secondary block', type: 'submit', text: 'Calculate shipping and total' });
     var payBtn = h('button', { class: 'btn block', type: 'button', text: 'Pay securely with Square', hidden: true });
     form.appendChild(quoteBtn); form.appendChild(summary); form.appendChild(payBtn); form.appendChild(msg);

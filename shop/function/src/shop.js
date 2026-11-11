@@ -10,11 +10,12 @@
  *  - Only payments for OUR location, tied to an order WE created (reference_id + saved Square order id), are ever looked at.
  *  - A Printify order is created only AFTER payment is verified, so nothing can enter production for an unpaid order.
  */
-import { Query, Permission, Role } from 'node-appwrite';
+import { Query, Permission, Role, ID } from 'node-appwrite';
+import { InputFile } from 'node-appwrite/file';
 import { ApiError, bad, forbidden, missing, conflict, idOf, intIn, rowId, sha256hex, money, publicError } from './util.js';
 import { verifySquareSignature, SquareError } from './square.js';
 import { PrintifyError, verifyPrintifySignature } from './printify.js';
-import { planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure, SECTION_IDS, cleanSection } from './sync.js';
+import { safeImage, planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure, SECTION_IDS, cleanSection } from './sync.js';
 import { imageSize } from './images.js';
 
 export const T = {
@@ -74,7 +75,7 @@ function stageByFulfillment(f) {
   return { label: 'Payment received. We are preparing your order.', tone: 'ok' };
 }
 
-export function createShop({ users, db, storage, square, printify, cfg, now = () => Date.now(), log = () => {} }) {
+export function createShop({ users, db, storage, square, printify, cfg, now = () => Date.now(), log = () => {}, fetchImpl = fetch }) {
   const databaseId = cfg.databaseId;
   const listRows = (tableId, queries) => db.listRows({ databaseId, tableId, queries });
   const createRow = (tableId, id, data, permissions) => db.createRow({ databaseId, tableId, rowId: id, data, permissions });
@@ -265,7 +266,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     const variant = prod ? prod.variants.find((v) => v.id === d.variantId) : null;
     let spec = {}; try { spec = JSON.parse(d.spec || '{}'); } catch { spec = {}; }
     return {
-      id: d.$id, postId: d.postId, productKey: d.productKey, variantId: d.variantId, quantity: d.quantity, spec, fileId: d.fileId, width: d.width, height: d.height,
+      id: d.$id, postId: d.postId, productKey: d.productKey, variantId: d.variantId, quantity: d.quantity, spec, fileId: d.fileId, preview: typeof spec.pv === 'string' ? spec.pv : '', previewState: spec.pv ? 'ready' : (spec.pvFail ? 'none' : 'maybe'), width: d.width, height: d.height,
       title: titleOf(prod && prod.row, d.productKey),
       variantLabel: variant ? variant.label : '', unitCents: variant ? variant.priceCents : 0, available: !!(prod && variant)
     };
@@ -286,10 +287,80 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     if (body.remove === true) {
       await db.deleteRow({ databaseId, tableId: T.designs, rowId: d.$id });
       try { await storage.deleteFile({ bucketId: cfg.designBucketId, fileId: d.fileId }); } catch (e) { if (sdkCode(e) !== 404) throw e; }
+      let sp = {}; try { sp = JSON.parse(d.spec || '{}'); } catch { sp = {}; }
+      if (sp.pv) { try { await storage.deleteFile({ bucketId: cfg.designBucketId, fileId: String(sp.pv) }); } catch { /* already gone */ } }
+      if (sp.pvp) { try { await printify.deleteProduct(sp.pvp); } catch { /* already gone */ } }
       return { removed: true };
     }
     await updateRow(T.designs, d.$id, { quantity: intIn(body.quantity, 'Quantity', 1, LIMITS.maxQty) });
     return { updated: true };
+  }
+
+
+  /* ---------- cart preview: Printify's own picture of the buyer's design on the product ----------
+   * Printify only draws such a picture for a product that exists in the shop. So: upload the design, make a temporary product (tagged
+   * fc-preview), wait for the picture, copy it into the buyer's private storage, then delete the temporary product. The client calls this
+   * again every few seconds until it says ready or unavailable; every call is short. A failure never blocks buying. */
+  const PREVIEW_WAIT_MS = 120e3;
+  async function previewDesign({ user, body }) {
+    const { familyId } = await requireMember(user, body.familyId);
+    if (!cfg.printifyConfigured || !cfg.printifyShopId) return { status: 'unavailable' };
+    const d0 = await getRowOrNull(T.designs, idOf(body.designId, 'designId'));
+    if (!d0 || d0.ownerId !== user.$id || d0.familyId !== familyId) throw missing('Design not found.');
+    const d = await releaseIfStale(d0);
+    if (d.orderId) return { status: 'unavailable' };
+    let spec = {}; try { spec = JSON.parse(d.spec || '{}'); } catch { spec = {}; }
+    if (spec.pv) return { status: 'ready', fileId: spec.pv };
+    if (spec.pvFail) return { status: 'unavailable' };
+    let prod;
+    try { prod = await productByKey(d.productKey); } catch { return { status: 'unavailable' }; }
+    const variant = prod.variants.find((v) => v.id === d.variantId);
+    if (!variant || !prod.row.blueprintId || !prod.row.providerId || !prod.row.position) return { status: 'unavailable' };
+    const save = async (patch) => {
+      spec = { ...spec, ...patch }; for (const k of Object.keys(spec)) if (spec[k] === undefined) delete spec[k];
+      await updateRow(T.designs, d.$id, { spec: JSON.stringify(spec) });
+    };
+    const giveUp = async (why) => {
+      if (spec.pvp) { try { await printify.deleteProduct(spec.pvp); } catch { /* the owner can delete "FC preview" products by hand */ } }
+      await save({ pvFail: String(why).slice(0, 80), pvp: undefined });
+      // Only the owner is told why, and only in words that do not reveal anything secret.
+      return { status: 'unavailable', ...(isAdmin(user) ? { hint: why === 'printify_403' || why === 'printify_401' ? 'Owner: Printify refused to make the preview. The token needs the products.write permission (and uploads.write). Make a new token with it and update PRINTIFY_API_TOKEN.' : 'Owner: the preview could not be made (' + String(why).slice(0, 40) + '). The cart still works.' } : {}) };
+    };
+    try {
+      if (!spec.pvp) {
+        const bytes = await toBuffer(await storage.getFileDownload({ bucketId: cfg.designBucketId, fileId: d.fileId }));
+        const up = await printify.uploadImageBase64(`fc-preview-${d.$id.slice(0, 8)}.jpg`, bytes.toString('base64'));
+        if (!up || !up.id) return await giveUp('upload_no_id');
+        const made = await printify.createProduct({
+          title: `FC preview ${d.$id.slice(0, 8)}`, description: 'Temporary preview made by Family Circle. It deletes itself. Safe to delete.', tags: ['fc-preview'],
+          blueprint_id: prod.row.blueprintId, print_provider_id: prod.row.providerId,
+          variants: [{ id: variant.id, price: variant.priceCents, is_enabled: true }],
+          print_areas: [{ variant_ids: [variant.id], placeholders: [{ position: prod.row.position, images: [{ id: up.id, x: 0.5, y: 0.5, scale: 1, angle: 0 }] }] }]
+        });
+        if (!made || !made.id) return await giveUp('product_no_id');
+        await save({ pvp: String(made.id), pvAt: now() });
+        return { status: 'pending' };
+      }
+      const timedOut = now() - Number(spec.pvAt || 0) > PREVIEW_WAIT_MS;
+      const full = await printify.getProduct(spec.pvp);
+      const imgs = (Array.isArray(full && full.images) ? full.images : []).filter((i) => i && safeImage(i.src));
+      const pick = imgs.find((i) => i.is_default && (i.variant_ids || []).includes(variant.id)) || imgs.find((i) => (i.variant_ids || []).includes(variant.id)) || imgs[0];
+      if (!pick) return timedOut ? await giveUp('no_image') : { status: 'pending' };
+      const res = await fetchImpl(safeImage(pick.src));
+      const type = String(res.headers.get('content-type') || '').split(';')[0].toLowerCase();
+      const buf = res.ok ? Buffer.from(await res.arrayBuffer()) : Buffer.alloc(0);
+      const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[type];
+      if (!res.ok || !ext || buf.length < 2000) return timedOut ? await giveUp('image_not_ready') : { status: 'pending' };
+      if (buf.length > LIMITS.maxDesignBytes) return await giveUp('image_too_big');
+      const file = await storage.createFile({ bucketId: cfg.designBucketId, fileId: ID.unique(), file: InputFile.fromBuffer(buf, `preview.${ext}`), permissions: ownerRead(user.$id) });
+      try { await printify.deleteProduct(spec.pvp); } catch { /* picture is already saved; a leftover "FC preview" product is harmless */ }
+      await save({ pv: file.$id, pvp: undefined });
+      return { status: 'ready', fileId: file.$id };
+    } catch (e) {
+      log('preview failed: ' + (e && e.message));
+      if (e instanceof PrintifyError && (e.status === 429 || e.status >= 500)) return { status: 'pending' };     // try again on the next call
+      return await giveUp(e instanceof PrintifyError ? 'printify_' + e.status : 'error');
+    }
   }
 
   /* ---------- pricing, address, shipping ---------- */
@@ -872,7 +943,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     let res;
     try { res = await printify.listProductsPage(page, SYNC_PAGE); }
     catch (e) { const x = await explainProductsFailure(e); throw conflict(x.code, x.message); }
-    const list = Array.isArray(res) ? res : ((res && res.data) || []);
+    const list = (Array.isArray(res) ? res : ((res && res.data) || [])).filter((p) => !(Array.isArray(p && p.tags) && p.tags.includes('fc-preview')));   // temporary cart previews are never products
     const lastPage = Number((res && res.last_page) || 1), total = Number((res && res.total) ?? list.length);
     const out = { page, lastPage, total, results: [] };
     if (page === 1) {
@@ -990,7 +1061,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
 
   const actions = {
     shopCatalog: catalogAction, shopSetGift: setGift, shopGiftStatus: giftStatus,
-    shopSaveDesign: saveDesign, shopDesigns: listDesigns, shopUpdateDesign: updateDesign,
+    shopSaveDesign: saveDesign, shopPreview: previewDesign, shopDesigns: listDesigns, shopUpdateDesign: updateDesign,
     shopQuote: quote, shopCheckout: checkout, shopCancelOrder: cancelOrder, shopOrders: myOrders, shopOrder: getOrder,
     shopAdminCheck: adminCheck, shopAdminOverview: adminOverview, shopAdminOrder: adminOrder, shopAdminBlueprints: adminBlueprints, shopAdminProviders: adminProviders,
     shopAdminVariants: adminVariants, shopAdminSaveProduct: adminSaveProduct, shopAdminToggle: adminToggle, shopAdminSync: adminSync, shopAdminSyncFinish: adminSyncFinish, shopAdminPrintifyCheck: adminPrintifyCheck, shopAdminResolve: adminResolve, shopAdminRegisterWebhooks: adminRegisterWebhooks

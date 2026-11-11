@@ -90,3 +90,10 @@ The same result lists each permission with ✓ or ✗: shops.read, products.read
 2. Open a product, add a photo, move and zoom it, and save. This creates no order and no charge.
 3. Add to cart, check out, and pay with Square's test card 4111 1111 1111 1111, any future date, CVV 111.
 4. In Printify, open Orders. The test order waits there. **Cancel it in Printify** and do not press approve here.
+
+
+## Cart preview picture (needs one more permission)
+
+When someone adds a design to the cart, the shop asks Printify for a real picture of the product with their photo on it. To do that it makes a temporary product in your Printify shop named **FC preview …**, copies Printify's picture into the buyer's private storage, then deletes the temporary product. It never touches your real products, and the product sync ignores these temporary ones.
+
+This needs the token permission **products.write**. If the cart shows a note starting "Owner:" under a design, make a new token with products.write ticked and update PRINTIFY_API_TOKEN. If you ever see a leftover **FC preview** product in Printify, it is safe to delete. Buying still works if the preview fails; the cart just keeps the flat design picture.

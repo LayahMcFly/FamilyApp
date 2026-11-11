@@ -38,6 +38,7 @@ class FakeStorage {
   async getFileDownload({ fileId }) { return this.files.get(fileId).buf; }
   async updateFile({ fileId, permissions }) { this.files.get(fileId).$permissions = permissions; }
   async deleteFile({ fileId }) { this.files.delete(fileId); }
+  async createFile({ fileId, file, permissions }) { this.files.set(fileId, { $id: fileId, $permissions: permissions, buf: Buffer.alloc(0), mimeType: 'image/jpeg' }); return { $id: fileId }; }
 }
 const VAR = { id: 101, title: '12x16 / Black', options: { size: '12x16', color: 'Black' }, placeholders: [{ position: 'front', width: 1200, height: 1600 }] };
 function world(over = {}) {
@@ -70,6 +71,9 @@ function world(over = {}) {
     sendToProduction: async (id) => { pcalls.push(['send', id]); },
     getOrder: async (id) => printify.__order || { id, status: 'pending', metadata: {} },
     cancelOrder: async (id) => { pcalls.push(['cancel', id]); },
+    createProduct: async (p) => { pcalls.push(['createProduct', p]); if (over.noProduct) throw new PrintifyError(400, { message: 'bad' }); return { id: 'tmp1' }; },
+    getProduct: async (id) => { pcalls.push(['getProduct', id]); return over.mockupReady === false ? { id, images: [] } : { id, images: [{ src: 'https://images-api.printify.com/mockup/tmp1/101/a.jpg', variant_ids: [101], is_default: true }] }; },
+    deleteProduct: async (id) => { pcalls.push(['deleteProduct', id]); },
     listWebhooks: async () => [], createWebhook: async (t) => { pcalls.push(['hook', t]); return {}; },
     listBlueprints: async () => [{ id: 7, title: 'Framed Poster', brand: 'Acme', model: 'fp', images: ['http://evil.example/x.jpg', 'https://images.printify.com/a.jpg'] }],
     listProviders: async () => [{ id: 3, title: 'Prov', production_time: { average: 4 } }],
@@ -77,7 +81,8 @@ function world(over = {}) {
   };
   const cfg = { databaseId: 'family', designBucketId: 'shop-designs', siteUrl: 'https://x.test/FamilyCircle/', adminIds: ['owner'], countries: ['US'], squareConfigured: true, squareEnvironment: 'sandbox', squareLocationId: 'LOC1', squareWebhookSignatureKey: 'sigkey', printifyWebhookSecret: 'pfy1', printifyConfigured: true, printifyShopId: '15930678', webhookBase: 'https://fn.test', autoSubmit: false, ...over.cfg };
   let t = 1700000000000;
-  const shop = createShop({ users, db, storage, square, printify, cfg, now: () => t });
+  const fetchImpl = async (u) => { pcalls.push(['fetchImage', u]); return { ok: true, headers: { get: () => 'image/jpeg' }, arrayBuffer: async () => new Uint8Array(3000).buffer }; };
+  const shop = createShop({ users, db, storage, square, printify, cfg, now: () => t, fetchImpl });
   const A = { $id: 'alice', email: 'a@x.test', emailVerification: true }, B = { $id: 'bob', email: 'b@x.test', emailVerification: true }, C = { $id: 'carol', email: 'c@x.test', emailVerification: true }, O = { $id: 'owner', email: 'o@x.test', emailVerification: true };
   const call = async (user, action, body = {}) => { const r = await shop.handle({ user, body: { action, ...body } }); return r; };
   const ok = async (user, action, body) => { const r = await call(user, action, body); assert.equal(r.status, 200, `${action}: ${JSON.stringify(r.json)}`); return r.json; };
@@ -584,4 +589,31 @@ test('sync puts each product in a section by its name, and a section you chose y
   ov = (await w.ok(w.O, 'shopAdminOverview')).imported;
   assert.equal(ov.find((x) => x.key === 'pf_' + PID2).section, 'home');
   assert.equal((await w.call(w.O, 'shopAdminToggle', { key: 'pf_' + PID2, enabled: false, section: 'bogus' })).status, 200);
+});
+
+test('cart preview: makes a temporary Printify product, keeps its picture for the buyer, deletes the product', async () => {
+  const w = world({ cfgOver: {} }); await seed(w);
+  const d = (await design(w)).design;
+  assert.equal(d.preview, '');
+  let r = await w.ok(w.A, 'shopPreview', { familyId: 'fam1', designId: d.id });
+  assert.equal(r.status, 'pending');
+  const made = w.pcalls.find((c) => c[0] === 'createProduct')[1];
+  assert.deepEqual(made.tags, ['fc-preview']); assert.equal(made.variants.length, 1); assert.equal(made.print_areas[0].placeholders[0].position, 'front');
+  r = await w.ok(w.A, 'shopPreview', { familyId: 'fam1', designId: d.id });
+  assert.equal(r.status, 'ready'); assert.ok(r.fileId);
+  assert.ok(w.pcalls.some((c) => c[0] === 'deleteProduct' && c[1] === 'tmp1'), 'temporary product removed');
+  const list = await w.ok(w.A, 'shopDesigns', { familyId: 'fam1' });
+  assert.equal(list.designs[0].preview, r.fileId);
+  assert.equal((await w.call(w.B, 'shopPreview', { familyId: 'fam1', designId: d.id })).status, 404, 'only the owner');
+  await w.ok(w.A, 'shopUpdateDesign', { designId: d.id, remove: true });
+  assert.equal(w.storage.files.has(r.fileId), false, 'preview picture deleted with the design');
+});
+
+test('cart preview: a Printify failure never blocks the cart', async () => {
+  const w = world({ noProduct: true }); await seed(w);
+  const d = (await design(w)).design;
+  const r = await w.ok(w.A, 'shopPreview', { familyId: 'fam1', designId: d.id });
+  assert.equal(r.status, 'unavailable');
+  assert.equal((await w.ok(w.A, 'shopPreview', { familyId: 'fam1', designId: d.id })).status, 'unavailable');
+  assert.equal((await w.ok(w.A, 'shopDesigns', { familyId: 'fam1' })).designs.length, 1);
 });

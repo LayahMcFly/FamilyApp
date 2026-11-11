@@ -66,6 +66,10 @@ export function createPrintify({ token, shopId, fetchImpl = fetch, sleep = (ms) 
     listVariantsCached: (bp, pr) => cached(`va${bp}:${pr}`, 600e3, () => call('GET', `/catalog/blueprints/${encodeURIComponent(bp)}/print_providers/${encodeURIComponent(pr)}/variants.json`)),
     probe: (path) => call('GET', path, undefined, 1),
     shopId: () => shopId,
+    // Temporary products used only to get Printify's own picture of a buyer's design on the product (the preview in the cart).
+    createProduct: (product) => call('POST', `${shop()}/products.json`, product, 1),
+    getProduct: (id) => call('GET', `${shop()}/products/${encodeURIComponent(id)}.json`),
+    deleteProduct: (id) => call('DELETE', `${shop()}/products/${encodeURIComponent(id)}.json`),
     uploadImageBase64: (fileName, contents) => call('POST', '/uploads/images.json', { file_name: fileName, contents }),
     shippingCost: (lineItems, addressTo) => call('POST', `${shop()}/orders/shipping.json`, { line_items: lineItems, address_to: addressTo }),
     createOrder: (order) => call('POST', `${shop()}/orders.json`, order, 1),     // never retried blindly: external_id makes a repeat safe, but we decide
