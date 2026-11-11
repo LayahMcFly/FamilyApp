@@ -181,6 +181,20 @@
       extra || null));
   }
 
+  // The "Maintenance" screen: shown while the owner is updating (the switch is the file maintenance.json) or while the server is being redeployed.
+  function maintenanceScreen(message) {
+    screenMessage('Maintenance', [message || 'Family Circle is being updated. This page will open again by itself in a moment.'],
+      h('p', null, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'sr-only', text: 'Loading' })));
+  }
+  async function maintenanceFlag() {
+    try {
+      var r = await fetch('maintenance.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return null;
+      var j = await r.json();
+      return j && j.on === true ? { message: String(j.message || '').slice(0, 240) } : null;
+    } catch (e) { return null; }
+  }
+
   /* =====================================================================
    * 3. APPWRITE CONNECTION
    * ===================================================================== */
@@ -1177,11 +1191,16 @@
     authCard('Choose a new password').appendChild(form);
   }
 
+  var retryTimer = null;
   function renderConnectionProblem() {
-    var card = authCard("We couldn't check your access", friendly(S.memberError));
+    clearTimeout(retryTimer);
+    var card = authCard('Maintenance', 'Family Circle can\u2019t reach its server right now. It may be getting an update. This page tries again by itself every 15 seconds.');
+    card.appendChild(h('p', null, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'sr-only', text: 'Trying again' })));
+    card.appendChild(h('p', { class: 'small muted', text: friendly(S.memberError) }));
     card.appendChild(h('div', { class: 'row' },
-      h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function (ev) { busy(ev.currentTarget, async function () { await loadSession(); render(); }); } }),
+      h('button', { class: 'btn', type: 'button', text: 'Try again now', onclick: function (ev) { busy(ev.currentTarget, async function () { await loadSession(); render(); }); } }),
       h('button', { class: 'btn secondary', type: 'button', text: 'Sign out', onclick: signOut })));
+    retryTimer = setTimeout(async function () { if (!S.memberError) return; await loadSession(); render(); }, 15000);
   }
 
   function resendVerificationButton() {
@@ -3791,6 +3810,12 @@
 
   async function boot() {
     applyPrefs();
+    var maint = await maintenanceFlag();
+    if (maint) {
+      maintenanceScreen(maint.message);
+      var timer = setInterval(async function () { if (!(await maintenanceFlag())) { clearInterval(timer); location.reload(); } }, 15000);
+      return;
+    }
     if (!window.Appwrite || !window.Appwrite.Client || !window.Appwrite.TablesDB || !window.Appwrite.Functions) {
       return screenMessage("We couldn't load the Appwrite library", [
         'This page needs a small code library from cdn.jsdelivr.net. Check your internet connection, or any ad/content blocker, and refresh.'

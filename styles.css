@@ -1305,3 +1305,4 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* Room between the seek line and the time, and between the time and the speed button. */
 .pl-seek { margin: 0 12px 0 8px; }
 .pl-time { margin-right: 6px; }
+.center-card .spinner { display: block; margin: 8px auto; width: 32px; height: 32px; box-sizing: border-box; }
