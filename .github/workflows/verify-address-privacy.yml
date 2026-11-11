@@ -1,0 +1,28 @@
+name: Check address privacy
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner_id:
+        description: "User ID of someone who saved an address (Appwrite, Auth, Users)"
+        required: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Try to read the address the way an outsider would
+        working-directory: setup
+        env:
+          APPWRITE_ENDPOINT: https://nyc.cloud.appwrite.io/v1
+          APPWRITE_PROJECT: 6aef6a03002636be44c2
+          OWNER_ID: ${{ github.event.inputs.owner_id }}
+          OTHER_EMAIL: ${{ secrets.OTHER_EMAIL }}
+          OTHER_PASSWORD: ${{ secrets.OTHER_PASSWORD }}
+        run: |
+          npm install
+          node verify-address-privacy.mjs
