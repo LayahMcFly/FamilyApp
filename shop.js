@@ -67,9 +67,17 @@
   var PER_PAGE = 12;
   var SORTS = [['featured', 'Featured first'], ['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low'], ['name', 'Name: A to Z']];
   var COUNTRY_NAMES = { US: 'the United States', CN: 'China', GB: 'the United Kingdom', DE: 'Germany', FR: 'France', CA: 'Canada', AU: 'Australia' };
-  function freshFilters() { return { q: '', sort: 'featured', cat: 'all', kind: 'all', stock: false, page: 1 }; }
+  var BANDS = [['u10', 'Under $10', 0, 1000], ['10-25', '$10 to $25', 1000, 2500], ['25-50', '$25 to $50', 2500, 5000], ['50p', '$50 and over', 5000, Infinity]];
+  function freshFilters() { return { q: '', sort: 'featured', cat: 'all', kind: 'all', stock: false, band: '', min: '', max: '', page: 1 }; }
   function filtersFor(id) { var s = st(); s.filters = s.filters || {}; return s.filters[id] || (s.filters[id] = freshFilters()); }
-  function isFiltered(f) { return !!(f.q || f.cat !== 'all' || f.kind !== 'all' || f.stock); }
+  function isFiltered(f) { return !!(f.q || f.cat !== 'all' || f.kind !== 'all' || f.stock || f.band || f.min || f.max); }
+  function dollarsToCents(v) { var t = String(v || '').replace(/[$,\s]/g, ''); if (!t) return null; var n = Math.round(parseFloat(t) * 100); return isFinite(n) && n >= 0 ? n : null; }
+  function priceOk(it, f) {
+    var b = BANDS.filter(function (x) { return x[0] === f.band; })[0];
+    if (b && !(it.fromCents >= b[2] && it.fromCents < b[3])) return false;
+    var lo = dollarsToCents(f.min), hi = dollarsToCents(f.max);
+    return !((lo !== null && it.fromCents < lo) || (hi !== null && it.fromCents > hi));
+  }
   function norm(s) { return String(s || '').toLowerCase(); }
   function priceText(it) { return (it.hasRange ? 'From ' : '') + money(it.fromCents); }
   function itemCard(it) {
@@ -94,18 +102,84 @@
     });
   }
   function famCatTitle(fam, id) { var c = (fam.categories || []).filter(function (x) { return x.id === id; })[0]; return c ? c.title : 'More finds'; }
-  function applyFilters(items, f) {
+  function applyFilters(items, f, skip) {
     var words = norm(f.q).split(/\s+/).filter(Boolean);
     var out = items.filter(function (it) {
-      return words.every(function (w) { return it.text.indexOf(w) !== -1; }) && (f.cat === 'all' || it.cat === f.cat) && (f.kind === 'all' || it.kind === f.kind) && (!f.stock || it.availability === 'in_stock');
+      return words.every(function (w) { return it.text.indexOf(w) !== -1; }) && (skip === 'cat' || f.cat === 'all' || it.cat === f.cat) && (skip === 'kind' || f.kind === 'all' || it.kind === f.kind)
+        && (skip === 'stock' || !f.stock || it.availability === 'in_stock') && (skip === 'price' || priceOk(it, f));
     });
+    if (skip) return out;
     var by = { 'price-asc': function (a, b) { return a.fromCents - b.fromCents; }, 'price-desc': function (a, b) { return b.fromCents - a.fromCents; }, name: function (a, b) { return a.title.localeCompare(b.title); },
       featured: function (a, b) { return (b.featured ? 1 : 0) - (a.featured ? 1 : 0); } }[f.sort] || null;
     if (by) out = out.map(function (x, i) { return [x, i]; }).sort(function (a, b) { return by(a[0], b[0]) || a[1] - b[1]; }).map(function (p) { return p[0]; });
     return out;
   }
 
+  function priceLabel(f) {
+    var b = BANDS.filter(function (x) { return x[0] === f.band; })[0];
+    if (b) return b[1];
+    var lo = dollarsToCents(f.min), hi = dollarsToCents(f.max);
+    return lo !== null && hi !== null ? money(lo) + ' to ' + money(hi) : (lo !== null ? money(lo) + ' and over' : 'Up to ' + money(hi));
+  }
+  /* Amazon-style filter sheet: opens over the shop, changes apply at once, the button at the bottom says how many results you will see. */
+  var sheetEl = null, sheetKey = null;
+  function closeSheet() { if (sheetEl) { sheetEl.remove(); sheetEl = null; document.removeEventListener('keydown', sheetKey); window.removeEventListener('hashchange', closeSheet); document.body.style.overflow = ''; } }
+  function openSheet(id, items, cats, anyStock, f, redraw) {
+    closeSheet();
+    var opener = document.activeElement;
+    sheetEl = h('div', { class: 'sheet-backdrop' });
+    var box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Filters' }); sheetEl.appendChild(box);
+    sheetKey = function (ev) { if (ev.key === 'Escape') { closeSheet(); if (opener && opener.focus) opener.focus(); } };
+    document.addEventListener('keydown', sheetKey); window.addEventListener('hashchange', closeSheet);
+    sheetEl.addEventListener('click', function (ev) { if (ev.target === sheetEl) closeSheet(); });
+    function group(title, kids) { return h('fieldset', { class: 'filter-group' }, h('legend', { text: title }), kids); }
+    function radio(name, label, n, checked, onpick) {
+      var r = h('input', { type: 'radio', name: name }); r.checked = checked; r.addEventListener('change', function () { onpick(); f.page = 1; redraw(); render(); });
+      return h('label', { class: 'filter-opt' }, r, h('span', null, label), n == null ? null : h('span', { class: 'small muted', text: ' (' + n + ')' }));
+    }
+    function render() {
+      var scroll = box.querySelector('.sheet-body'), top = scroll ? scroll.scrollTop : 0;
+      clear(box);
+      var body = h('div', { class: 'sheet-body' });
+      if (cats.length > 1) {
+        var byCat = applyFilters(items, f, 'cat');
+        body.appendChild(group('Department', [radio('cat', 'All departments', byCat.length, f.cat === 'all', function () { f.cat = 'all'; })].concat(cats.map(function (c) {
+          var n = byCat.filter(function (it) { return it.cat === c.id; }).length;
+          return n || f.cat === c.id ? radio('cat', c.title, n, f.cat === c.id, function () { f.cat = c.id; }) : null;
+        }))));
+      }
+      if (id === 'photo-gifts') {
+        var byKind = applyFilters(items, f, 'kind');
+        body.appendChild(group('Personalize with', [['all', 'Anything'], ['photo', 'Your photo'], ['words', 'Your words']].map(function (k) {
+          return radio('kind', k[1], byKind.filter(function (it) { return k[0] === 'all' || it.kind === k[0]; }).length, f.kind === k[0], function () { f.kind = k[0]; });
+        })));
+      }
+      var byPrice = applyFilters(items, f, 'price');
+      var bands = [radio('band', 'Any price', byPrice.length, !f.band && !f.min && !f.max, function () { f.band = ''; f.min = ''; f.max = ''; })];
+      BANDS.forEach(function (b) { var n = byPrice.filter(function (it) { return it.fromCents >= b[2] && it.fromCents < b[3]; }).length; if (n || f.band === b[0]) bands.push(radio('band', b[1], n, f.band === b[0], function () { f.band = b[0]; f.min = ''; f.max = ''; })); });
+      var lo = h('input', { type: 'text', inputmode: 'decimal', maxlength: 7, placeholder: 'Min $', 'aria-label': 'Lowest price', value: f.min }), hi = h('input', { type: 'text', inputmode: 'decimal', maxlength: 7, placeholder: 'Max $', 'aria-label': 'Highest price', value: f.max });
+      bands.push(h('div', { class: 'row price-range' }, lo, h('span', { text: 'to' }), hi, h('button', { class: 'btn secondary small', type: 'button', text: 'Go', onclick: function () {
+        f.min = dollarsToCents(lo.value) === null ? '' : lo.value; f.max = dollarsToCents(hi.value) === null ? '' : hi.value; f.band = ''; f.page = 1; redraw(); render(); } })));
+      bands.push(h('p', { class: 'small muted', text: 'Prices are the starting price shown on each product.' }));
+      body.appendChild(group('Price', bands));
+      if (id === 'family-shop' && anyStock) {
+        var cb = h('input', { type: 'checkbox' }); cb.checked = f.stock; cb.addEventListener('change', function () { f.stock = cb.checked; f.page = 1; redraw(); render(); });
+        body.appendChild(group('Availability', [h('label', { class: 'filter-opt' }, cb, h('span', { text: 'In stock only' })), h('p', { class: 'small muted', text: 'Only items where the supplier lists a stock number can be matched.' })]));
+      }
+      var total = applyFilters(items, f).length;
+      var close = h('button', { class: 'btn small secondary', type: 'button', 'aria-label': 'Close filters', text: 'Close', onclick: function () { closeSheet(); if (opener && opener.focus) opener.focus(); } });
+      box.appendChild(h('div', { class: 'sheet-head' }, h('strong', { text: 'Filters' }), close));
+      box.appendChild(body);
+      box.appendChild(h('div', { class: 'sheet-foot' }, isFiltered(f) ? h('button', { class: 'btn secondary', type: 'button', text: 'Clear all', onclick: function () { st().filters[id] = freshFilters(); Object.assign(f, freshFilters()); var si = document.querySelector('.shop-search'); if (si) si.value = ''; redraw(); render(); } }) : null,
+        h('button', { class: 'btn grow', type: 'button', text: 'Show ' + total + (total === 1 ? ' result' : ' results'), onclick: function () { closeSheet(); if (opener && opener.focus) opener.focus(); } })));
+      var nb = box.querySelector('.sheet-body'); if (nb) nb.scrollTop = top;
+    }
+    render(); document.body.appendChild(sheetEl); document.body.style.overflow = 'hidden';
+    var first = box.querySelector('input'); if (first) first.focus();
+  }
+
   async function viewShop(main, token) {
+    closeSheet();
     var holder = h('div', null, X.spinnerLine('Loading the shop…')); main.appendChild(holder);
     var cat;
     try { cat = await loadCatalog(true); } catch (e) { if (token === X.S.nav) setupNeeded(main, e); return; }
@@ -194,22 +268,23 @@
       }
       var anyStock = items.some(function (it) { return it.availability === 'in_stock' || it.availability === 'out_of_stock'; });
       var results = h('div', { id: 'shop-results' });
-      var bar = h('div', { class: 'shop-toolbar' });
       var sortSel = h('select', { 'aria-label': 'Sort by', onchange: function () { f.sort = sortSel.value; f.page = 1; drawPanel(); } }, SORTS.map(function (s) { return h('option', { value: s[0], text: s[1] }); })); sortSel.value = f.sort;
-      var catSel = h('select', { 'aria-label': 'Department', onchange: function () { f.cat = catSel.value; f.page = 1; drawPanel(); } }, [h('option', { value: 'all', text: 'All departments' })].concat(cats.map(function (c) { return h('option', { value: c.id, text: c.title + ' (' + c.count + ')' }); }))); catSel.value = f.cat;
-      bar.appendChild(h('label', { class: 'small' }, 'Sort ', sortSel)); if (cats.length > 1) bar.appendChild(h('label', { class: 'small' }, 'Department ', catSel));
-      if (id === 'photo-gifts') {
-        bar.appendChild(h('div', { class: 'chips', role: 'group', 'aria-label': 'What you personalize with' }, [['all', 'All'], ['photo', 'Photo'], ['words', 'Words']].map(function (k) {
-          return h('button', { class: 'chip', type: 'button', 'aria-pressed': f.kind === k[0] ? 'true' : 'false', text: k[1], onclick: function () { f.kind = k[0]; f.page = 1; drawPanel(); } });
-        })));
-      } else if (anyStock) {
-        bar.appendChild(h('button', { class: 'chip', type: 'button', 'aria-pressed': f.stock ? 'true' : 'false', text: 'In stock only', onclick: function () { f.stock = !f.stock; f.page = 1; drawPanel(); } }));
-      }
-      panelHost.appendChild(bar);
+      var nActive = [f.cat !== 'all', f.kind !== 'all', f.stock, !!f.band || !!f.min || !!f.max].filter(Boolean).length;
+      var filtBtn = h('button', { class: 'btn secondary small', type: 'button', 'aria-haspopup': 'dialog', text: nActive ? 'Filters (' + nActive + ')' : 'Filters', onclick: function () { openSheet(id, items, cats, anyStock, f, drawPanel); } });
+      panelHost.appendChild(h('div', { class: 'shop-toolbar' }, filtBtn, h('label', { class: 'small' }, 'Sort ', sortSel)));
+      // what is switched on, each removable with one tap
+      var chips = [];
+      function chip(label, clear1) { chips.push(h('button', { class: 'chip on', type: 'button', 'aria-label': 'Remove filter: ' + label, onclick: function () { clear1(); f.page = 1; if (!f.q) search.value = ''; drawPanel(); } }, label + ' ×')); }
+      if (f.q) chip('“' + f.q + '”', function () { f.q = ''; search.value = ''; });
+      if (f.cat !== 'all') chip((cats.filter(function (c) { return c.id === f.cat; })[0] || {}).title || f.cat, function () { f.cat = 'all'; });
+      if (f.kind !== 'all') chip(f.kind === 'words' ? 'Add your words' : 'Add your photo', function () { f.kind = 'all'; });
+      if (f.stock) chip('In stock', function () { f.stock = false; });
+      if (f.band || f.min || f.max) chip(priceLabel(f), function () { f.band = ''; f.min = ''; f.max = ''; });
+      if (chips.length) panelHost.appendChild(h('div', { class: 'chips active-filters', role: 'group', 'aria-label': 'Active filters' }, chips, chips.length > 1 ? h('button', { class: 'link-btn', type: 'button', text: 'Clear all', onclick: function () { st().filters[id] = freshFilters(); search.value = ''; drawPanel(); } }) : null));
       var list = applyFilters(items, f), pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
       if (f.page > pages) f.page = pages;
-      var count = h('div', { class: 'row shop-count' }, h('span', { role: 'status', text: list.length + (list.length === 1 ? ' product' : ' products') + (isFiltered(f) ? ' match' : '') }),
-        isFiltered(f) ? h('button', { class: 'link-btn', type: 'button', text: 'Reset filters', onclick: function () { st().filters[id] = freshFilters(); search.value = ''; drawPanel(); } }) : null);
+      var from0 = list.length ? (f.page - 1) * PER_PAGE + 1 : 0, to0 = Math.min(list.length, f.page * PER_PAGE);
+      var count = h('div', { class: 'shop-count' }, h('span', { role: 'status', text: list.length ? from0 + '-' + to0 + ' of ' + list.length + (list.length === 1 ? ' result' : ' results') : '0 results' }));
       results.appendChild(count);
       if (!list.length) results.appendChild(h('div', { class: 'empty' }, h('p', { text: 'Nothing matches that.' }), h('p', { class: 'small muted', text: 'Try another word' + (id === 'photo-gifts' ? ', like mug or necklace,' : '') + ' or reset the filters.' })));
       else {
