@@ -289,7 +289,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       try { await storage.deleteFile({ bucketId: cfg.designBucketId, fileId: d.fileId }); } catch (e) { if (sdkCode(e) !== 404) throw e; }
       let sp = {}; try { sp = JSON.parse(d.spec || '{}'); } catch { sp = {}; }
       if (sp.pv) { try { await storage.deleteFile({ bucketId: cfg.designBucketId, fileId: String(sp.pv) }); } catch { /* already gone */ } }
-      if (sp.pvp) { try { await printify.deleteProduct(sp.pvp); } catch { /* already gone */ } }
+      if (sp.pvp && sp.pvp !== 'creating') { try { await printify.deleteProduct(sp.pvp); } catch { /* already gone */ } }
       return { removed: true };
     }
     await updateRow(T.designs, d.$id, { quantity: intIn(body.quantity, 'Quantity', 1, LIMITS.maxQty) });
@@ -321,13 +321,18 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       await updateRow(T.designs, d.$id, { spec: JSON.stringify(spec) });
     };
     const giveUp = async (why) => {
-      if (spec.pvp) { try { await printify.deleteProduct(spec.pvp); } catch { /* the owner can delete "FC preview" products by hand */ } }
+      if (spec.pvp && spec.pvp !== 'creating') { try { await printify.deleteProduct(spec.pvp); } catch { /* the owner can delete "FC preview" products by hand */ } }
       await save({ pvFail: String(why).slice(0, 80), pvp: undefined });
       // Only the owner is told why, and only in words that do not reveal anything secret.
       return { status: 'unavailable', ...(isAdmin(user) ? { hint: why === 'printify_403' || why === 'printify_401' ? 'Owner: Printify refused to make the preview. The token needs the products.write permission (and uploads.write). Make a new token with it and update PRINTIFY_API_TOKEN.' : 'Owner: the preview could not be made (' + String(why).slice(0, 40) + '). The cart still works.' } : {}) };
     };
     try {
+      if (spec.pvp === 'creating') {                       // another call is making the product right now (the add-to-cart call and the cart page can overlap)
+        if (now() - Number(spec.pvAt || 0) < 45e3) return { status: 'pending' };
+        return await giveUp('create_stuck');
+      }
       if (!spec.pvp) {
+        await save({ pvp: 'creating', pvAt: now() });
         const bytes = await toBuffer(await storage.getFileDownload({ bucketId: cfg.designBucketId, fileId: d.fileId }));
         const up = await printify.uploadImageBase64(`fc-preview-${d.$id.slice(0, 8)}.jpg`, bytes.toString('base64'));
         if (!up || !up.id) return await giveUp('upload_no_id');
@@ -358,7 +363,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       return { status: 'ready', fileId: file.$id };
     } catch (e) {
       log('preview failed: ' + (e && e.message));
-      if (e instanceof PrintifyError && (e.status === 429 || e.status >= 500)) return { status: 'pending' };     // try again on the next call
+      if (e instanceof PrintifyError && (e.status === 429 || e.status >= 500)) { if (spec.pvp === 'creating') await save({ pvp: undefined }).catch(() => {}); return { status: 'pending' }; }     // try again on the next call
       return await giveUp(e instanceof PrintifyError ? 'printify_' + e.status : 'error');
     }
   }

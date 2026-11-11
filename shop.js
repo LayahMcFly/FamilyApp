@@ -323,9 +323,12 @@
           uploaded = await X.storage.createFile({ bucketId: X.CFG.shopBucketId || 'family-media', fileId: X.ID.unique(), file: new File([blob], 'design.jpg', { type: 'image/jpeg' }),
             permissions: [X.Permission.read(X.Role.user(uid)), X.Permission.update(X.Role.user(uid)), X.Permission.delete(X.Role.user(uid))] });
           if (fid !== X.S.familyId) throw new Error('You switched families. Nothing was added.');
-          await shopApi('shopSaveDesign', { familyId: fid, postId: photo.postId, ownPhoto: photo.own ? true : undefined, productKey: prod.key, variantId: variant.id, fileId: uploaded.$id, quantity: Number(qtyEl.value),
+          var saved = await shopApi('shopSaveDesign', { familyId: fid, postId: photo.postId, ownPhoto: photo.own ? true : undefined, productKey: prod.key, variantId: variant.id, fileId: uploaded.$id, quantity: Number(qtyEl.value),
             spec: { fit: spec.fit, zoom: spec.zoom, ox: spec.ox, oy: spec.oy, caption: spec.caption, srcW: photo.bmp.width, srcH: photo.bmp.height } });
-          st().designs = null; toast('Added to your cart.'); location.hash = '#/shop/cart';
+          st().designs = null;
+          // Start Printify's picture now, so it is further along by the time the cart opens. Not waited for; the cart keeps checking.
+          try { if (saved && saved.design) shopApi('shopPreview', { familyId: fid, designId: saved.design.id }).catch(function () {}); } catch (e1) { /* the cart will start it */ }
+          toast('Added to your cart.'); location.hash = '#/shop/cart';
         } catch (e) {
           if (uploaded) X.storage.deleteFile({ bucketId: X.CFG.shopBucketId || 'family-media', fileId: uploaded.$id }).catch(function () {});
           X.showAlert(msg, 'error', msgOf(e));
@@ -395,7 +398,7 @@
     holder.appendChild(optsEl); holder.appendChild(priceEl);
     drawOptions();
     holder.appendChild(pickEl); holder.appendChild(stage); holder.appendChild(controls);
-    holder.appendChild(h('p', { class: 'small muted', text: 'Layout preview: made on your phone from the print area of the product. Printify’s own product mockups are not used, so it is not a picture of the finished item.' }));
+    holder.appendChild(h('p', { class: 'small muted', text: 'Layout preview: made on your phone from the print area of the product, so it is not a picture of the finished item. After you add it to the cart, Printify makes a picture of the real product with your photo on it.' }));
     repaint();
     if (postId) {
       var found = (await X.listRows('posts', [X.Query.equal('$id', [postId]), X.Query.limit(1)])).rows[0];
@@ -411,9 +414,9 @@
   async function runPreviews(items, token) {
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      it.note.hidden = false; it.note.textContent = 'Making your product preview…';
+      it.note.hidden = false; it.note.textContent = 'Making your product preview… framed pieces can take a minute.';
       var done = false;
-      for (var n = 0; n < 24 && !done; n++) {
+      for (var n = 0; n < 50 && !done; n++) {
         if (token !== X.S.nav) return;
         try {
           var r = await shopApi('shopPreview', { familyId: X.S.familyId, designId: it.d.id });
