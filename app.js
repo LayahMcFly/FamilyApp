@@ -184,7 +184,7 @@
   // The "Maintenance" screen: shown while the owner is updating (the switch is the file maintenance.json) or while the server is being redeployed.
   function maintenanceScreen(message) {
     screenMessage('Maintenance', [message || 'Family Circle is being updated. This page will open again by itself in a moment.'],
-      h('p', null, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'sr-only', text: 'Loading' })));
+      h('div', { class: 'ld' }, loaderArt('gear'), h('span', { class: 'sr-only', text: 'Loading' })));
   }
   async function maintenanceFlag() {
     try {
@@ -508,14 +508,42 @@
     el.__load = fn;
     S.io.observe(el);
   }
-  function spinnerLine(text) { return h('div', null, h('span', { class: 'spinner sm', 'aria-hidden': 'true' }), ' ', text); }
+  /* ---------- LOADING SCENES: each part of the site has its own small animation (see .ld in styles.css) ---------- */
+  var LOADER_ART = {
+  "site": "<circle cx=\"32\" cy=\"32\" r=\"21\" fill=\"none\" stroke=\"currentColor\" stroke-opacity=\".2\" stroke-width=\"2\" stroke-dasharray=\"2 5\"/><g class=\"ld-orbit\"><circle cx=\"32\" cy=\"11\" r=\"5\"/><circle cx=\"53\" cy=\"27\" r=\"4\" opacity=\".75\"/><circle cx=\"45\" cy=\"52\" r=\"4.5\" opacity=\".85\"/><circle cx=\"19\" cy=\"52\" r=\"4\" opacity=\".7\"/><circle cx=\"11\" cy=\"27\" r=\"4.5\" opacity=\".9\"/></g><path class=\"ld-beat\" d=\"M32 45C21 37 19 29 24 26c4-2 7 0 8 3 1-3 4-5 8-3 5 3 3 11-8 19z\"/>",
+  "cart": "<rect class=\"ld-drop d1\" x=\"21\" y=\"4\" width=\"10\" height=\"10\" rx=\"2\"/><circle class=\"ld-drop d2\" cx=\"40\" cy=\"9\" r=\"5.5\"/><path class=\"ld-drop d3\" d=\"M12 4l3 6h-6z\"/><g class=\"ld-roll\"><path d=\"M6 14h8l6 26h25l6-19H17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"24\" cy=\"49\" r=\"4.5\"/><circle cx=\"42\" cy=\"49\" r=\"4.5\"/></g>",
+  "orders": "<g class=\"ld-box\"><rect x=\"13\" y=\"28\" width=\"38\" height=\"25\" rx=\"3\"/><rect x=\"29\" y=\"28\" width=\"6\" height=\"25\" fill=\"#fff\" fill-opacity=\".35\"/></g><g class=\"ld-lid\"><rect x=\"11\" y=\"20\" width=\"42\" height=\"8\" rx=\"2.5\"/></g><path class=\"ld-rise\" d=\"M32 24C27 20 26 16 28 14c2-1 3.500 0 4 1.500.5-1.500 2-2.500 4-1.500 2 2 1 6-4 10z\"/>",
+  "profile": "<circle class=\"ld-ring\" cx=\"32\" cy=\"32\" r=\"26\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"32\" cy=\"26\" r=\"8\"/><path d=\"M17 50c1-9 7-13 15-13s14 4 15 13c-4 5-9 7-15 7s-11-2-15-7z\"/>",
+  "saved": "<path class=\"ld-mark\" d=\"M20 8h24v46L32 44 20 54z\"/><path class=\"ld-spark\" d=\"M50 12l1.500 4 4 1.500-4 1.500L50 23l-1.500-4-4-1.500 4-1.500z\"/>",
+  "feed": "<rect class=\"ld-card c1\" x=\"10\" y=\"8\" width=\"44\" height=\"14\" rx=\"4\"/><rect class=\"ld-card c2\" x=\"10\" y=\"26\" width=\"44\" height=\"14\" rx=\"4\"/><rect class=\"ld-card c3\" x=\"10\" y=\"44\" width=\"44\" height=\"14\" rx=\"4\"/>",
+  "shorts": "<rect x=\"19\" y=\"4\" width=\"26\" height=\"56\" rx=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.500\"/><path class=\"ld-play\" d=\"M28 22l11 8-11 8z\"/><rect class=\"ld-prog\" x=\"24\" y=\"50\" width=\"16\" height=\"3\" rx=\"1.500\"/>",
+  "tree": "<path d=\"M32 58V30M32 44l-9-8M32 38l9-9\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.500\" stroke-linecap=\"round\"/><circle class=\"ld-leaf l1\" cx=\"32\" cy=\"22\" r=\"8\"/><circle class=\"ld-leaf l2\" cx=\"21\" cy=\"31\" r=\"6.500\"/><circle class=\"ld-leaf l3\" cx=\"43\" cy=\"27\" r=\"6.500\"/><circle class=\"ld-leaf l4\" cx=\"14\" cy=\"22\" r=\"5\"/><circle class=\"ld-leaf l5\" cx=\"50\" cy=\"16\" r=\"5\"/>",
+  "bell": "<g class=\"ld-swing\"><path d=\"M32 8c-9 0-14 7-14 16v10l-5 7h38l-5-7V24c0-9-5-16-14-16z\"/><circle class=\"ld-clap\" cx=\"32\" cy=\"53\" r=\"4.500\"/></g>",
+  "gear": "<g class=\"ld-spin\"><circle cx=\"32\" cy=\"32\" r=\"19\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"7\" stroke-dasharray=\"7.500 7.130\"/><circle cx=\"32\" cy=\"32\" r=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"5\"/></g><circle cx=\"32\" cy=\"32\" r=\"5\"/>",
+  "comments": "<path d=\"M10 12h44a4 4 0 0 1 4 4v22a4 4 0 0 1-4 4H30l-10 10V42h-10a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z\"/><circle class=\"ld-dot a\" cx=\"22\" cy=\"27\" r=\"3\" fill=\"#fff\"/><circle class=\"ld-dot b\" cx=\"32\" cy=\"27\" r=\"3\" fill=\"#fff\"/><circle class=\"ld-dot c\" cx=\"42\" cy=\"27\" r=\"3\" fill=\"#fff\"/>",
+  "photo": "<rect x=\"8\" y=\"10\" width=\"48\" height=\"44\" rx=\"5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.500\"/><circle class=\"ld-sun\" cx=\"23\" cy=\"25\" r=\"5\"/><path class=\"ld-hill\" d=\"M12 48l14-14 9 9 8-8 9 13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.500\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+  "video": "<rect x=\"19\" y=\"4\" width=\"26\" height=\"56\" rx=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.500\"/><path class=\"ld-play\" d=\"M28 22l11 8-11 8z\"/><rect class=\"ld-prog\" x=\"24\" y=\"50\" width=\"16\" height=\"3\" rx=\"1.500\"/>"
+};
+  var LOADER_FOR_VIEW = { home: 'feed', post: 'feed', shorts: 'shorts', saved: 'saved', profile: 'profile', settings: 'gear', shop: 'cart', orders: 'orders', tree: 'tree', family: 'tree', activity: 'bell', create: 'photo' };
+  function loaderKind(kind) {
+    if (kind && LOADER_ART[kind]) return kind;
+    var v = S.main && S.main.getAttribute('data-view');
+    return LOADER_FOR_VIEW[v] || 'site';
+  }
+  function loaderArt(kind) {
+    var k = loaderKind(kind), art = document.createElement('span');
+    art.className = 'ld-art ld-' + k; art.setAttribute('aria-hidden', 'true');
+    art.innerHTML = '<svg viewBox="0 0 64 64" width="100%" height="100%" fill="currentColor" focusable="false">' + LOADER_ART[k] + '</svg>';
+    return art;
+  }
+  function spinnerLine(text, kind) { return h('div', { class: 'ld', role: 'status' }, loaderArt(kind), h('span', { class: 'ld-text', text: text })); }
 
   function imageBlock(post) {
     var token = S.nav;
     var mime = OK_IMAGE.indexOf(post.mediaMime) >= 0 ? post.mediaMime : 'image/jpeg';
-    var box = h('div', { class: 'media placeholder' }, spinnerLine('Loading photo…'));
+    var box = h('div', { class: 'media placeholder' }, spinnerLine('Loading photo…', 'photo'));
     function load() {
-      clear(box); box.className = 'media placeholder'; box.appendChild(spinnerLine('Loading photo…'));
+      clear(box); box.className = 'media placeholder'; box.appendChild(spinnerLine('Loading photo…', 'photo'));
       fetchMedia(post.mediaFileId, true).then(function (blob) {
         if (token !== S.nav) return;
         clear(box); box.className = 'media';
@@ -712,7 +740,7 @@
         var q = v.play(); if (q && q.catch) q.catch(function () {});
       });
     }
-    function wait(text) { clear(box); box.className = 'media placeholder reel-media'; box.appendChild(spinnerLine(text)); }
+    function wait(text) { clear(box); box.className = 'media placeholder reel-media'; box.appendChild(spinnerLine(text, 'shorts')); }
     function idle() {                    // autoplay is off: nothing downloads until the person taps
       clear(box); box.className = 'media placeholder reel-media';
       box.appendChild(h('div', null,
@@ -865,7 +893,7 @@
     }
     function start(play) {
       clear(box); box.className = 'media placeholder' + (vertical ? ' vertical' : '');
-      box.appendChild(spinnerLine(play === false ? 'Opening video…' : 'Downloading video…'));
+      box.appendChild(spinnerLine(play === false ? 'Opening video…' : 'Downloading video…', 'video'));
       fetchMedia(post.mediaFileId, true).then(function (blob) {
         if (token !== S.nav) return;
         clear(box); box.className = 'media' + (vertical ? ' vertical' : '');
@@ -1024,7 +1052,7 @@
   async function switchFamily(id) {
     if (id === S.familyId) return;
     var tok = ++S.nav;
-    if (S.main) { clear(S.main); S.main.appendChild(h('div', { class: 'empty' }, spinnerLine('Opening family…'))); }
+    if (S.main) { clear(S.main); S.main.appendChild(h('div', { class: 'empty' }, spinnerLine('Opening family…', 'site'))); }
     try {
       await loadFamilies();                       // the server re-checks my membership before anything loads
       if (!(await enterFamily(id))) {
@@ -1212,7 +1240,7 @@
   function renderConnectionProblem() {
     clearTimeout(retryTimer);
     var card = authCard('Maintenance', 'Family Circle can\u2019t reach its server right now. It may be getting an update. This page tries again by itself every 15 seconds.');
-    card.appendChild(h('p', null, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'sr-only', text: 'Trying again' })));
+    card.appendChild(h('div', { class: 'ld' }, loaderArt('site'), h('span', { class: 'sr-only', text: 'Trying again' })));
     card.appendChild(h('p', { class: 'small muted', text: friendly(S.memberError) }));
     card.appendChild(h('div', { class: 'row' },
       h('button', { class: 'btn', type: 'button', text: 'Try again now', onclick: function (ev) { busy(ev.currentTarget, async function () { await loadSession(); render(); }); } }),
@@ -1380,7 +1408,7 @@
     // Before showing family content again after a while, ask the server whether I am still a member.
     if (Date.now() - S.validatedAt > REVALIDATE_MS) {
       var tok = ++S.nav;
-      clear(S.main); S.main.appendChild(h('div', { class: 'empty' }, spinnerLine('Checking your access…')));
+      clear(S.main); S.main.appendChild(h('div', { class: 'empty' }, spinnerLine('Checking your access…', 'site')));
       revalidate().then(function (ok) {
         if (tok !== S.nav) return;
         if (!ok) return render();
@@ -2358,7 +2386,7 @@
     }
     var loaded = [];
 
-    status.appendChild(spinnerLine('Loading comments…'));
+    status.appendChild(spinnerLine('Loading comments…', 'comments'));
     (async function () {
       try {
         var rows = await listAllRows('comments', [Query.equal('postId', [post.$id]), Query.orderAsc('$createdAt')], 200);
@@ -2654,7 +2682,7 @@
 
   VIEWS.tree = async function (main, token, focusId) {
     main.appendChild(h('h1', { text: 'Family Tree' }));
-    var holder = h('div', { class: 'tree-box' }, spinnerLine('Loading the family tree…'));
+    var holder = h('div', { class: 'tree-box' }, spinnerLine('Loading the family tree…', 'tree'));
     main.appendChild(holder);
     var tree;
     try { tree = await loadTree(true); }
@@ -3582,7 +3610,7 @@
       modelInfoP, modelBtn));
 
     // 2. My uploads in the cloud
-    var upBox = h('section', { class: 'card', 'aria-label': 'My uploads' }, h('h2', { text: 'My photos and videos in the cloud' }), spinnerLine('Loading your uploads…'));
+    var upBox = h('section', { class: 'card', 'aria-label': 'My uploads' }, h('h2', { text: 'My photos and videos in the cloud' }), spinnerLine('Loading your uploads…', 'photo'));
     var famBox = h('section', { class: 'card', 'aria-label': 'Family space' }, h('h2', { text: 'Shared family space' }));
     main.appendChild(upBox); main.appendChild(famBox);
     var famUse = h('div'); famBox.appendChild(famUse);
@@ -3655,7 +3683,7 @@
 
   /* ---------- FAMILY TREE ---------- */
   async function familyTree(main, token, focusId) {
-    var box = h('div', { class: 'tree-box' }, spinnerLine('Loading the family tree…'));
+    var box = h('div', { class: 'tree-box' }, spinnerLine('Loading the family tree…', 'tree'));
     main.appendChild(box);
     async function draw(focus, force) {
       var tree;

@@ -112,7 +112,7 @@
   /* ================= "MAKE A GIFT" ENTRY ================= */
   async function viewGift(main, token, postId) {
     main.appendChild(head('Make a gift', '#/shop', 'Photo Gifts'));
-    var holder = h('div', null, X.spinnerLine('Checking this photo…')); main.appendChild(holder);
+    var holder = h('div', null, X.spinnerLine('Checking this photo…', 'photo')); main.appendChild(holder);
     try {
       var cat = await loadCatalog(false);
       var ok = await shopApi('shopGiftStatus', { familyId: X.S.familyId, postIds: [postId] });
@@ -334,7 +334,7 @@
     }
 
     async function usePhoto(post) {
-      clear(pickEl); pickEl.appendChild(X.spinnerLine('Opening the photo…'));
+      clear(pickEl); pickEl.appendChild(X.spinnerLine('Opening the photo…', 'photo'));
       try {
         var blob = await X.fetchMedia(post.mediaFileId, true);
         var bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
@@ -349,7 +349,7 @@
       if (!file) return;
       if (!/^image\//.test(file.type || '')) return X.showAlert(pickEl, 'error', 'Please choose a picture (JPEG, PNG or WebP).');
       if (file.size > 40 * 1048576) return X.showAlert(pickEl, 'error', 'That picture is too large (over 40 MB). Try a smaller one.');
-      clear(pickEl); pickEl.appendChild(X.spinnerLine('Opening your photo…'));
+      clear(pickEl); pickEl.appendChild(X.spinnerLine('Opening your photo…', 'photo'));
       try {
         var bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
         if (Math.max(bmp.width, bmp.height) > 4096) {
@@ -370,7 +370,7 @@
         h('button', { class: 'btn secondary', type: 'button', text: 'Take a photo', onclick: function () { cam.click(); } }));
     }
     async function showPicker() {
-      clear(pickEl); pickEl.appendChild(X.spinnerLine('Finding photos you can use…'));
+      clear(pickEl); pickEl.appendChild(X.spinnerLine('Finding photos you can use…', 'photo'));
       try {
         var rows = (await X.listRows('posts', [X.Query.equal('familyId', [X.S.familyId]), X.Query.equal('kind', ['photo']), X.Query.orderDesc('$createdAt'), X.Query.limit(30)])).rows;
         var ok = rows.length ? (await shopApi('shopGiftStatus', { familyId: X.S.familyId, postIds: rows.map(function (r) { return r.$id; }) })).allowed : {};
