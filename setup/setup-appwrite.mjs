@@ -130,8 +130,10 @@ for (const [tableId, def] of Object.entries(schema)) {
 
 console.log('\nStorage bucket');
 let bucketThere = false;
-try { await storage.getBucket({ bucketId: 'family-media' }); bucketThere = true; } catch (e) { bucketThere = false; }
-if (bucketThere) console.log('  exists   bucket "family-media"');
+let bucketSkip = false;
+try { await storage.getBucket({ bucketId: 'family-media' }); bucketThere = true; } catch (e) { bucketThere = false; bucketSkip = e && e.code === 401; }
+if (bucketSkip) console.log('  skipped  bucket "family-media" (this key has no Storage permission; not needed if the bucket already exists)');
+else if (bucketThere) console.log('  exists   bucket "family-media"');
 else await step('bucket "family-media"', () =>
   storage.createBucket({
     bucketId: 'family-media',
