@@ -497,7 +497,7 @@
     var sc = h('div', { class: 'side-scroll' }); side.appendChild(sc);
     var showCh = wide() || c.route.mode === 'channels', showDm = wide() || c.route.mode === 'dms';
     if (showCh) {
-      sc.appendChild(h('h2', { class: 'side-h', text: 'Channels' }));
+      sc.appendChild(h('h2', { class: 'side-h', text: 'Text channels' }));
       var active = c.channels.filter(function (x) { return !x.archived; }), arch = c.channels.filter(function (x) { return x.archived; });
       active.forEach(function (ch) {
         var on = c.cur && c.cur.id === ch.id, n = (c.unread[ch.id] || {}).n || 0;
@@ -625,7 +625,11 @@
     if (cv.err) { list.appendChild(h('div', { class: 'chat-empty' }, X.alertBox('error', cv.err.code === 404 || cv.err.code === 401 ? 'You do not have access to this conversation.' : msgOf(cv.err)), h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { cv.err = null; cv.ready = false; openConv(c, cv.kind, cv.id); } }))); return; }
     if (!cv.ready) { list.appendChild(h('div', { class: 'chat-empty' }, X.spinnerLine('Loading messages…', 'site'))); return; }
     if (cv.hasMore) list.appendChild(h('div', { class: 'older' }, h('button', { class: 'btn secondary small', type: 'button', disabled: cv.loadingOlder ? true : null, text: cv.loadingOlder ? 'Loading…' : 'Load older messages', onclick: function () { loadOlder(c, cv); } })));
-    else if (cv.msgs.length) list.appendChild(h('div', { class: 'older small muted', text: 'This is the start of the conversation.' }));
+    else {
+      var wch = cv.kind === 'channel' ? channelById(c, cv.id) : null, wdm = cv.kind === 'dm' ? dmById(c, cv.id) : null;
+      if (wch) list.appendChild(h('div', { class: 'welcome' }, h('div', { class: 'welcome-ic', 'aria-hidden': 'true', text: '#' }), h('h2', { text: 'Welcome to #' + wch.name + '!' }), h('p', { class: 'muted', text: 'This is the start of the #' + wch.name + ' channel.' + (wch.description ? ' ' + wch.description : '') })));
+      else if (wdm) list.appendChild(h('div', { class: 'welcome' }, avatar(wdm.otherId, 'sm'), h('h2', { text: realName(wdm.otherId) }), h('p', { class: 'muted', text: 'This is the start of your direct message history with ' + realName(wdm.otherId) + '. Only the two of you can read it.' })));
+    }
     if (!cv.msgs.length) {
       var ch = cv.kind === 'channel' ? channelById(c, cv.id) : null;
       list.appendChild(h('div', { class: 'chat-empty' }, h('p', { class: 'muted', text: ch ? 'No messages in #' + ch.name + ' yet. ' + (ch.readOnly && !isManager(c) ? 'Only owners and chat admins can post here.' : 'Say hello!') : 'No messages yet. Say hello!' })));
@@ -660,7 +664,7 @@
     var ta = h('textarea', { rows: 1, maxlength: c.limits.body, 'aria-label': 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), placeholder: 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), enterkeyhint: 'send', autocomplete: 'off' });
     ta.value = c.drafts[cv.id] || '';
     var count = h('div', { class: 'small muted count', hidden: true, 'aria-live': 'off' });
-    var send = h('button', { class: 'btn send-btn', type: 'submit', 'aria-label': 'Send message' }, icon('send'));
+    var send = h('button', { class: 'btn ghost send-btn', type: 'submit', 'aria-label': 'Send message' }, icon('send'));
     function grow() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; var n = ta.value.length; count.hidden = n < c.limits.body - 150; count.textContent = n + ' / ' + c.limits.body; c.drafts[cv.id] = ta.value; send.disabled = !ta.value.trim(); }
     function setReply(m) { reply = m; replyBar.hidden = !m; clear(replyBar); if (m) { replyBar.appendChild(h('span', { class: 'clamp' }, 'Replying to ', h('strong', { text: realName(m.authorId) }), ': ' + m.body)); replyBar.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Cancel reply', text: '×', onclick: function () { setReply(null); ta.focus(); } })); ta.focus(); } }
     cv.setReply = setReply;
