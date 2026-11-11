@@ -1399,7 +1399,7 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .tnode-actions .link-btn.small { min-height: 40px; padding: 0 14px; line-height: 1.2; white-space: nowrap; justify-content: center; }
 @media (max-width: 480px) { .tnode { flex-wrap: wrap; } .tnode > .grow { flex: 1 1 140px; min-width: 0; } .tnode-actions { flex: 1 1 100%; justify-content: flex-start; } }
 
-/* v1.48.3 — comments sheet: nothing dims the page or the sheet; the backdrop only catches taps to close */
+/* v1.48.6 — comments sheet: the page behind it is dimmed, the sheet itself never is.
+   The dim is the sheet's own huge shadow, which can only ever paint behind the sheet. The backdrop just catches taps. */
 .sheet-backdrop, .reel + .sheet-backdrop, .reel .sheet-backdrop { background: transparent !important; animation: none !important; }
-.sheet { z-index: 61 !important; box-shadow: 0 -6px 24px rgba(0,0,0,.25) !important; opacity: 1 !important; filter: none !important; }
-.reel .sheet { box-shadow: 0 -6px 24px rgba(0,0,0,.45) !important; }
+.sheet, .reel .sheet { z-index: 61 !important; box-shadow: 0 0 0 100vmax rgba(0,0,0,.5) !important; opacity: 1 !important; filter: none !important; }
