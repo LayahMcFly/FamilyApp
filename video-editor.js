@@ -570,7 +570,7 @@
         if (eng) eng.stop(); paintPlayBtn(); say('');
         var tot = total();
         if (opts.shortMaxSeconds && tot > opts.shortMaxSeconds + 0.05) return say('Shorts must be ' + opts.shortMaxSeconds + ' seconds or less. Your edited video is ' + tot.toFixed(1) + ' seconds. Cut or trim more.', 'error');
-        if (quality.bytes > opts.maxBytes * 3) return say('At this size the video will be far over the ' + mb(opts.maxBytes) + ' MB limit. Choose a smaller size or cut more.', 'error');
+        if (quality.bytes > opts.maxBytes * 1.25) return say('At this size the video would be about ' + (quality.bytes / 1048576).toFixed(0) + ' MB, over the ' + mb(opts.maxBytes) + ' MB limit, so the export is not started. Choose a smaller size from the list, or cut the video shorter.', 'error');
         if (document.hidden) return say('Keep this page open and on screen while exporting.', 'error');
         var mime = opts.mimeOverride || pickMime(); if (!mime) return say('This device cannot record a video file, so it cannot export edits.', 'error');
         var useAudio = !!audioBuf && !muteExport;
@@ -628,7 +628,7 @@
       var o_onTick = null;
 
       /* ----- buttons ----- */
-      var closeBtn = h('button', { class: 'btn secondary small', type: 'button', text: 'Cancel', onclick: tryCancel });
+      var closeBtn = h('button', { class: 'btn secondary', type: 'button', text: '\u2190 Cancel', 'aria-label': 'Cancel and go back', onclick: tryCancel });
       var exportBtn = h('button', { class: 'btn', type: 'button', text: 'Export and post', onclick: doExport });
       var resetBtn = h('button', { class: 'btn secondary', type: 'button', text: 'Reset edits', onclick: async function () {
         if (busy) return; if (eng) eng.stop(); paintPlayBtn();

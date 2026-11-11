@@ -2612,6 +2612,11 @@
       }
 
       var btn = h('button', { class: 'btn block', type: 'submit', text: 'Post' });
+      var cancelled = false, posting = false;
+      var cancelBtn = h('button', { class: 'btn secondary block', type: 'button', text: 'Cancel', onclick: function () {
+        if (posting) { cancelled = true; cancelBtn.disabled = true; cancelBtn.textContent = 'Canceling…'; return; }
+        dropPreview(); location.hash = '#/home';
+      } });
       var form = h('form', { novalidate: true, class: 'card', onsubmit: function (ev) {
         ev.preventDefault();
         var text = ta.value.trim(), uid = S.user.$id;
@@ -2621,8 +2626,10 @@
         if (text.length > (L.bodyMax || 2000)) return showAlert(msg, 'error', 'That is too long. The limit is ' + (L.bodyMax || 2000) + ' characters.');
         showAlert(msg, 'error', '');
         var fid = S.familyId;
+        cancelled = false; posting = true; cancelBtn.textContent = 'Cancel upload';
         busy(btn, async function () {
           var uploaded = null;
+          function chk() { if (cancelled) throw new Error('__cancelled'); }
           try {
             var payload = { familyId: fid, kind: kind, body: text };
             function onProg(p) { bar.hidden = false; bar.value = Math.round(p.progress || 0); }
@@ -2630,21 +2637,23 @@
               btn.textContent = 'Preparing photo…';
               var jf = await imageToJpegFile(file, L.imageMaxEdge || 1600, L.imageQuality || 0.82, false, 'photo.jpg');
               btn.textContent = 'Uploading…';
-              uploaded = await uploadFile(jf, onProg);
+              chk();
+              uploaded = await uploadFile(jf, onProg); chk();
               payload.mediaFileId = uploaded.$id;
             } else if (kind === 'video' || kind === 'short') {
               var mime = videoMime(file);
               var ext = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' }[mime];
               if (ccBox && ccBox.checked) {
                 btn.textContent = 'Making captions…';
-                var cc = await makeCaptionCues(file);
+                var cc = await makeCaptionCues(file); chk();
                 if (cc) payload.captions = cc; else toast('Posting without captions. You can add them later from the ⋯ menu.');
               }
               btn.textContent = 'Uploading…';
-              uploaded = await uploadFile(new File([file], 'video.' + ext, { type: mime }), onProg);
+              chk();
+              uploaded = await uploadFile(new File([file], 'video.' + ext, { type: mime }), onProg); chk();
               payload.mediaFileId = uploaded.$id;
             }
-            btn.textContent = 'Posting…';
+            btn.textContent = 'Posting…'; cancelBtn.disabled = true; chk();
             if (fid !== S.familyId) throw new Error('You switched families while uploading. Nothing was posted.');
             var made = await api('createPost', payload);
             if (kind === 'photo' && giftBox && giftBox.checked && shopEnabled()) { var mid = made && (made.postId || (made.post && made.post.$id) || (made.row && made.row.$id) || made.id); if (mid) await window.FCShop.setGiftAfterPost(mid, true); }
@@ -2653,14 +2662,15 @@
             location.hash = kind === 'short' ? '#/shorts' : '#/home';
           } catch (e) {
             if (uploaded) storage.deleteFile({ bucketId: CFG.bucketId, fileId: uploaded.$id }).catch(function () {});   // best effort; the server also sweeps leftovers
-            bar.hidden = true;
+            bar.hidden = true; posting = false; cancelBtn.disabled = false; cancelBtn.textContent = 'Cancel';
+            if (e && e.message === '__cancelled') { toast('Upload canceled. Nothing was posted.'); draft = ta.value; file = null; build(); return; }
             showAlert(msg, 'error', e.message && !e.type ? e.message : friendly(e));
           }
         }, 'Posting…');
       } },
         h('label', { for: 'body', text: kind === 'text' ? 'Your note' : 'Caption' }), ta,
         fileInput ? h('div', null, h('label', { for: 'file', text: kind === 'photo' ? 'Photo' : kind === 'short' ? 'Short video' : 'Video' }), fileInput, info, limitsBox, prev) : null,
-        ccRow, giftRow, bar, msg, h('div', { class: 'stack' }, btn));
+        ccRow, giftRow, bar, msg, h('div', { class: 'stack' }, btn, cancelBtn));
       holder.appendChild(tabs); holder.appendChild(form);
     }
     build();
