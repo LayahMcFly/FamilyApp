@@ -565,6 +565,19 @@
       zip: f('zip', 'ZIP code', { ac: 'postal-code', max: 10 }), phone: f('phone', 'Phone (optional)', { ac: 'tel', max: 25 }) };
     form.appendChild(h('h2', { text: 'Delivery' }));
     form.appendChild(h('p', { class: 'hint', text: 'Delivery to: ' + cat.config.countries.join(', ') + '. Receipts and updates go to ' + (X.S.user.email || 'your account email') + '.' }));
+    // Optional: fill the delivery fields from the address saved in Settings. Only on this tap; nothing is sent to the shop until Pay, and every field can be changed.
+    var useMsg = h('div');
+    form.appendChild(h('div', { class: 'stack' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Use my saved address', onclick: async function (ev) {
+      await X.busy(ev.currentTarget, async function () {
+        try {
+          var r = await X.api('addressGet');
+          if (!r.address) return X.showAlert(useMsg, 'error', 'You have not saved an address. You can add one under Settings, Privacy and personal information, or type it below.');
+          var ad = r.address, set = function (k, v) { F[k].inp.value = v || ''; };
+          set('address1', ad.line1); set('address2', ad.line2); set('city', ad.city); set('region', ad.region); set('zip', ad.postal);
+          X.showAlert(useMsg, 'ok', 'Filled in from your saved address. Please check every line, and add your name, before you continue. Your profile address is not sent to the shop until you pay.');
+        } catch (e) { X.showAlert(useMsg, 'error', msgOf(e)); }
+      }, 'Filling in…');
+    } }), useMsg));
     Object.keys(F).forEach(function (k) { form.appendChild(F[k].wrap); });
     var cbDel = h('input', { type: 'checkbox' }), cbImg = h('input', { type: 'checkbox' });
     form.appendChild(h('label', { class: 'check' }, cbDel, ' ', CONSENT_DELIVERY));

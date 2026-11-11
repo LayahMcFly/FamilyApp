@@ -59,6 +59,12 @@ const schema = {
     columns: [S('familyId', 36, true), S('authorId', 36, true), S('personId', 36, false), S('text', 500, true), S('status', 12, true)],
     indexes: [['idx_familyId', 'key', ['familyId']], ['idx_authorId', 'key', ['authorId']], ['idx_status', 'key', ['status']]]
   },
+  // Optional home address. Row id = the owner's user id. No indexes on purpose (nothing can search addresses). Rows are created with NO
+  // permissions, so no browser session can read them; only the family-api function can. See ADDRESS-GUIDE.md.
+  addresses: {
+    columns: [S('ownerId', 36, true), S('line1', 200, true), S('line2', 200, false), S('city', 120, false), S('region', 120, false), S('postal', 40, false), S('country', 100, true), S('sharedWith', 2000, false)],
+    indexes: []
+  },
   bookmarks: {
     columns: [S('familyId', 36, true), S('userId', 36, true), S('postId', 36, true), S('bookmarkKey', 80, true), S('collectionId', 24, false)],
     indexes: [['idx_user_family', 'key', ['userId', 'familyId']], ['idx_postId', 'key', ['postId']], ['idx_familyId', 'key', ['familyId']], ['uniq_bookmarkKey', 'unique', ['bookmarkKey']]]

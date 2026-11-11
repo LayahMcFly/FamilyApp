@@ -12,7 +12,7 @@ const cfg = {
   databaseId: process.env.DATABASE_ID || 'family',
   bucketId: process.env.BUCKET_ID || 'family-media',
   maxOwnedFamilies: Number(process.env.MAX_OWNED_FAMILIES || 3),
-  maxVideoMB: Number(process.env.MAX_VIDEO_MB || 25),
+  maxVideoMB: Number(process.env.MAX_VIDEO_MB || 15),
   familyStorageMB: Number(process.env.FAMILY_STORAGE_MB || 500)
 };
 

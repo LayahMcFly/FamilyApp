@@ -22,6 +22,7 @@ export const TABLES = {
   bookmarks: 'bookmarks',
   people: 'people',
   suggestions: 'suggestions',
+  addresses: 'addresses',      // private home addresses: NO client permissions at all, only this function reads or writes them
   shopDesigns: 'shopDesigns'   // optional shop: its print files share this bucket, so the cleanup must not delete them
 };
 
@@ -376,7 +377,81 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   }
 
   /* ================= actions ================= */
+
+  /* ---------- optional home address (sensitive) ----------
+   * Stored in its own table with NO row or table permissions, so no browser or SDK session can read it, even with the row id.
+   * Only this function (using its API key) reads and writes it, and every read re-checks who is asking and which family they ask in.
+   * Row id = the owner's user id, taken from the verified login and never from the request. Sharing is a list of family ids the
+   * owner picked; access also requires the viewer AND the owner to still be confirmed members of that family right now, so leaving
+   * or being removed from a family ends access at once. Family owners and tree admins get nothing extra. Nothing here is logged. */
+  const ADDRESS_FIELDS = { line1: 200, line2: 200, city: 120, region: 120, postal: 40, country: 100 };
+  function cleanAddressText(v, label, max, required) {
+    if (v === undefined || v === null || v === '') { if (required) throw bad(`${label} is required.`); return ''; }
+    if (typeof v !== 'string') throw bad(`${label} must be text.`);
+    // keep letters from every language; drop control characters and collapse spaces
+    const t = v.normalize('NFC').replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ').replace(/\s+/g, ' ').trim();
+    if (required && !t) throw bad(`${label} is required.`);
+    if (t.length > max) throw bad(`${label} is too long (max ${max}).`);
+    return t;
+  }
+  const readShared = (row) => { try { const a = JSON.parse(row.sharedWith || '[]'); return Array.isArray(a) ? a.filter((x) => typeof x === 'string' && ID_RE.test(x)) : []; } catch { return []; } };
+  const addressFields = (row) => ({ line1: row.line1 || '', line2: row.line2 || '', city: row.city || '', region: row.region || '', postal: row.postal || '', country: row.country || '' });
+
+  async function addressGet({ user }) {
+    const row = await getRowOrNull(TABLES.addresses, user.$id);
+    if (!row) return { address: null };
+    const mine = new Set((await confirmedMemberships(user)).map((m) => m.teamId));
+    // only families the owner is still in count; stale entries are not shown (and are dropped on the next save)
+    return { address: { ...addressFields(row), sharedWith: readShared(row).filter((f) => mine.has(f)), updatedAt: row.$updatedAt || '' } };
+  }
+  async function addressSave({ user, body }) {
+    const data = {};
+    const LABEL = { line1: 'Address line 1', line2: 'Address line 2', city: 'City', region: 'State or region', postal: 'ZIP or postal code', country: 'Country' };
+    for (const [k, max] of Object.entries(ADDRESS_FIELDS)) data[k] = cleanAddressText(body[k], LABEL[k], max, k === 'line1' || k === 'country');
+    const visibility = body.visibility === 'families' ? 'families' : 'private';
+    let shared = [];
+    if (visibility === 'families') {
+      const picked = Array.isArray(body.familyIds) ? [...new Set(body.familyIds)].slice(0, 30) : [];
+      if (!picked.length) throw bad('Choose at least one family, or choose Only me.');
+      if (body.confirmShare !== true) throw bad('Please confirm the families you are sharing with.');
+      const mine = new Set((await confirmedMemberships(user)).map((m) => m.teamId));
+      for (const f of picked) {
+        idOf(f, 'familyId');
+        if (!mine.has(f)) throw forbidden('You can only share with families you belong to.');
+      }
+      shared = picked;
+    }
+    const row = { ownerId: user.$id, ...data, sharedWith: JSON.stringify(shared) };
+    try {
+      const existing = await getRowOrNull(TABLES.addresses, user.$id);
+      if (existing) await updateRow(TABLES.addresses, user.$id, row);
+      else await createRow(TABLES.addresses, user.$id, row, []);       // [] = nobody but this function can read it
+    } catch (e) {
+      if (e instanceof ApiError) throw e;
+      if (sdkCode(e) === 404 || sdkCode(e) === 400) throw new ApiError(503, 'not_set_up', 'Saving addresses is not set up on the server yet. The app owner needs to finish ADDRESS-GUIDE.md.');
+      throw e;
+    }
+    return { saved: true, address: { ...data, sharedWith: shared } };
+  }
+  async function addressDelete({ user }) {
+    const existing = await getRowOrNull(TABLES.addresses, user.$id);
+    if (existing) await deleteRow(TABLES.addresses, user.$id);
+    return { deleted: true };
+  }
+  /** Someone else's shared address, asked for inside one family. Same empty answer whether there is none or it is not shared with this viewer. */
+  async function addressView({ user, body }) {
+    const { familyId } = await requireMember(user, body.familyId);
+    const ownerId = idOf(body.userId, 'userId');
+    if (ownerId === user.$id) return { address: null, own: true };
+    const theirs = await users.listMemberships({ userId: ownerId, queries: [Query.limit(100)] }).catch(() => ({ memberships: [] }));
+    if (!theirs.memberships.some((m) => m.teamId === familyId && m.confirm === true)) return { address: null };
+    const row = await getRowOrNull(TABLES.addresses, ownerId);
+    if (!row || !readShared(row).includes(familyId)) return { address: null };
+    return { address: addressFields(row) };
+  }
+
   const actions = {
+    addressGet, addressSave, addressDelete, addressView,
     /** Lists the caller's confirmed, registered families. Also keeps the `family` label in sync. */
     async listFamilies({ user }) {
       const mine = await confirmedMemberships(user);

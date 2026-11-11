@@ -1362,3 +1362,13 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 @keyframes ld-bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-7px); } }
 @keyframes ld-hill { 0% { stroke-dashoffset: 90; } 60%, 100% { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) { .ld-art * { animation: none !important; } .ld-ring, .ld-hill { stroke-dashoffset: 0; } .ld-card, .ld-drop { opacity: 1; } }
+
+/* ---------- optional home address ---------- */
+.addr-lines { font-style: normal; display: grid; gap: 2px; margin: 8px 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+.addr-who { padding: 10px 12px; border-radius: var(--radius-sm, 12px); background: var(--surface-2); margin-bottom: 8px; }
+.addr-actions { margin: 10px 0; }
+.addr-card fieldset { border: 1px solid var(--border); border-radius: var(--radius-sm, 12px); padding: 10px 12px; margin: 0; min-width: 0; }
+.addr-card legend { font-weight: 700; padding: 0 6px; }
+.addr-radio { align-items: flex-start; }
+.addr-radio > span { display: grid; gap: 2px; }
+.addr-card .field { display: grid; gap: 4px; }

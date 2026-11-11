@@ -3265,7 +3265,9 @@
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
     if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
+    if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/settings/privacy', text: 'My address (private)' }));
     if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block', href: '#/orders', text: 'My orders', onclick: function () { S.ordersFrom = '#/profile'; } }));
+    if (!own && !preview) { var addrHolder = h('div'); main.appendChild(addrHolder); addressOnProfile(addrHolder, token, uid); }
     // Switching families (or starting another one) lives here, not in the top bar.
     if (mine) main.appendChild(h('section', { class: 'card profile-fam', 'aria-label': 'Family' }, h('h2', { text: 'Family' }), h('p', { class: 'muted small', text: 'You are in ' + famName() + '.' + (S.families.length > 1 || S.canCreateFamily ? ' Switch to another family, or start a new one:' : '') }), familySwitcher()));
 
@@ -3403,7 +3405,7 @@
     { id: 'account', label: 'Account and security', note: 'Email, password' },
     { id: 'appearance', label: 'Appearance', note: 'Light or dark, style, accent color' },
     { id: 'storage', label: 'Storage and downloads', note: 'My uploads, family space, data use' },
-    { id: 'privacy', label: 'Privacy and data', note: 'Who can see what' }
+    { id: 'privacy', label: 'Privacy and personal information', note: 'Your address, who can see what' }
   ];
   // Settings > About you: my own name, birthday and gender. Saved on my account too, so any family I join can use it.
   async function settingsAboutMe(main, token) {
@@ -3470,7 +3472,7 @@
         h('li', null, h('i', { class: 'k-rainbow' }), 'Rainbow: everyone'), h('li', null, h('i', { class: 'k-married' }), 'Gold: has a partner in the tree'), h('li', null, h('i', { class: 'k-grand' }), 'Double ring: grandparent'))); await familyTree(main, token, p2); }
     else if (sec.id === 'appearance') settingsAppearance(main);
     else if (sec.id === 'storage') await settingsStorage(main, token);
-    else settingsPrivacy(main);
+    else settingsPrivacy(main, token);
   };
 
   function settingsAccount(main) {
@@ -3538,13 +3540,170 @@
     paintLook();
   }
 
-  function settingsPrivacy(main) {
+
+  /* =====================================================================
+   * OPTIONAL HOME ADDRESS
+   * The address lives in its own table that no browser session can read; the family-api function is the only way in, and it checks
+   * who is asking every time. Nothing here is saved in localStorage, sessionStorage or any cache. The text is only ever held in the
+   * page while it is on screen. Google Maps is contacted only after a button tap, with a link built at that moment.
+   * ===================================================================== */
+  function addrOneLine(a) { return [a.line1, a.line2, a.city, a.region, a.postal, a.country].filter(function (x) { return x; }).join(', '); }
+  function addrLines(a) { return [a.line1, a.line2, [a.city, a.region, a.postal].filter(Boolean).join(', '), a.country].filter(function (x) { return x; }); }
+  function mapsUrl(kind, a) {
+    var u = new URL(kind === 'dir' ? 'https://www.google.com/maps/dir/' : 'https://www.google.com/maps/search/');
+    u.searchParams.set('api', '1');
+    u.searchParams.set(kind === 'dir' ? 'destination' : 'query', addrOneLine(a));   // no origin for directions: Google Maps lets the person choose where they start
+    return u.href;
+  }
+  function copyText(text) {
+    function fallback() {
+      var ta = h('textarea', { 'aria-hidden': 'true', readonly: true, style: 'position:fixed;left:-9999px;top:0' }); ta.value = text; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; } document.body.removeChild(ta); return ok;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return fallback(); });
+    return Promise.resolve(fallback());
+  }
+  function addrMapButtons(a) {
+    function go(kind) {
+      var url = mapsUrl(kind, a);
+      if (url.length > 2000) { toast('This address is too long for a Google Maps link. Use Copy address instead.'); return; }   // Google Maps URLs are limited to 2,048 characters
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+    return h('div', { class: 'addr-actions' },
+      h('div', { class: 'row' },
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Open in Google Maps', onclick: function () { go('search'); } }),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Get directions', onclick: function () { go('dir'); } }),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Copy address', onclick: function () { copyText(addrOneLine(a)).then(function (ok) { toast(ok ? 'Address copied.' : 'Could not copy. Select the address and copy it by hand.'); }); } })),
+      h('p', { class: 'small muted', text: 'Tapping Open in Google Maps or Get directions opens Google Maps in a new tab and sends this address to Google. Nothing is sent to Google until you tap. Family Circle never asks for or tracks your location, but Google Maps itself may offer to use your device location as the starting point for directions.' }));
+  }
+  function addrBlock(a) { return h('address', { class: 'addr-lines' }, addrLines(a).map(function (l) { return h('div', { text: l }); })); }
+
+  /* Settings > Privacy and personal information: my own address */
+  async function addressCard(main, token) {
+    var box = h('section', { class: 'card addr-card', 'aria-label': 'My address' }, h('h2', { text: 'My address' }), spinnerLine('Loading…', 'profile'));
+    main.appendChild(box);
+    function shell() { clear(box); box.appendChild(h('h2', { text: 'My address' })); }
+    function famNames(ids) { return ids.map(function (id) { var f = S.families.filter(function (x) { return x.id === id; })[0]; return f ? f.name : null; }).filter(Boolean); }
+    async function load() {
+      try {
+        var r = await api('addressGet');
+        if (token !== S.nav) return;
+        if (r.address) showSaved(r.address); else showEmpty();
+      } catch (e) {
+        if (token !== S.nav) return;
+        shell(); box.appendChild(alertBox('error', e && e.code === 403 ? 'You do not have access to this.' : friendly(e)));
+        box.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Try again', onclick: function () { clear(box); box.appendChild(h('h2', { text: 'My address' })); box.appendChild(spinnerLine('Loading…', 'profile')); load(); } }));
+      }
+    }
+    function showEmpty() {
+      shell();
+      box.appendChild(h('p', { text: 'You have not saved an address. This is optional, and nothing in Family Circle needs one.' }));
+      box.appendChild(h('p', { class: 'small muted', text: 'If you add one, only you can see it unless you choose families to share it with.' }));
+      box.appendChild(h('button', { class: 'btn', type: 'button', text: 'Add an address', onclick: function () { showForm(null); } }));
+    }
+    function showSaved(a) {
+      shell();
+      var names = famNames(a.sharedWith || []);
+      box.appendChild(h('div', { class: 'addr-who', role: 'status' }, names.length
+        ? h('span', null, h('strong', { text: 'Shared with family: ' }), names.join(', '), '. Members of ' + (names.length === 1 ? 'that family' : 'those families') + ' can see it on your profile. It is not public on the internet.')
+        : h('span', null, h('strong', { text: 'Only me. ' }), 'Nobody else can see this address.')));
+      box.appendChild(addrBlock(a));
+      box.appendChild(addrMapButtons(a));
+      box.appendChild(h('div', { class: 'row' },
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Edit address', onclick: function () { showForm(a); } }),
+        h('button', { class: 'btn danger small', type: 'button', text: 'Delete saved address', onclick: async function (ev) {
+          var ok = await confirmDialog('Delete your saved address?', 'This removes it from Family Circle and stops every family from seeing it. It cannot be undone. It does not remove delivery details that were kept separately for shop orders you already placed, and it cannot erase copies someone already made.', 'Delete address');
+          if (!ok) return;
+          await busy(ev.currentTarget, async function () { try { await api('addressDelete'); toast('Address deleted.'); showEmpty(); } catch (e) { toast(friendly(e)); } }, 'Deleting…');
+        } })));
+      box.appendChild(h('p', { class: 'small muted', text: 'Saving an address here does not give it to the shop, Printify or Square. In the shop you choose whether to use it for a delivery.' }));
+    }
+    function showForm(a) {
+      shell();
+      a = a || { line1: '', line2: '', city: '', region: '', postal: '', country: '', sharedWith: [] };
+      var msg = h('div'), ids = {};
+      function field(key, label, opts) {
+        opts = opts || {};
+        var id = 'addr-' + key;
+        var inp = h('input', { type: 'text', id: id, maxlength: opts.max || 120, autocomplete: opts.ac || 'off', spellcheck: 'false', 'aria-required': opts.req ? 'true' : null });
+        inp.value = a[key] || ''; ids[key] = inp;
+        return h('div', { class: 'field' }, h('label', { for: id, text: label + (opts.req ? ' (required)' : ' (optional)') }), inp);
+      }
+      var form = h('form', { class: 'stack', novalidate: true });
+      form.appendChild(field('line1', 'Address line 1', { req: true, max: 200, ac: 'address-line1' }));
+      form.appendChild(field('line2', 'Apartment, unit or address line 2', { max: 200, ac: 'address-line2' }));
+      form.appendChild(field('city', 'City or locality', { ac: 'address-level2' }));
+      form.appendChild(field('region', 'State, province or region', { ac: 'address-level1' }));
+      form.appendChild(field('postal', 'ZIP or postal code', { max: 40, ac: 'postal-code' }));
+      form.appendChild(field('country', 'Country', { req: true, max: 100, ac: 'country-name' }));
+      form.appendChild(h('p', { class: 'hint', text: 'Use the format of your own country. Only address line 1 and country are needed. Nothing is looked up or checked online while you type.' }));
+
+      var mode = (a.sharedWith && a.sharedWith.length) ? 'families' : 'private';
+      var picks = {};
+      var famBox = h('fieldset', { class: 'addr-fams', hidden: mode !== 'families' }, h('legend', { text: 'Choose the families that can see it' }));
+      S.families.forEach(function (f) {
+        var cb = h('input', { type: 'checkbox', id: 'addr-fam-' + f.id }); cb.checked = (a.sharedWith || []).indexOf(f.id) >= 0; picks[f.id] = cb;
+        famBox.appendChild(h('label', { class: 'check', for: 'addr-fam-' + f.id }, cb, ' ' + f.name));
+      });
+      famBox.appendChild(h('p', { class: 'small muted', text: 'Families you join later are not added automatically. Anyone you share with could copy or screenshot your address, and removing them later cannot erase copies they already made.' }));
+      function radio(val, title, sub) {
+        var r = h('input', { type: 'radio', name: 'addr-vis', id: 'addr-vis-' + val, value: val }); r.checked = mode === val;
+        r.addEventListener('change', function () { mode = val; famBox.hidden = mode !== 'families'; });
+        return h('label', { class: 'check addr-radio', for: 'addr-vis-' + val }, r, h('span', null, h('strong', { text: title }), h('span', { class: 'small muted', text: ' ' + sub })));
+      }
+      form.appendChild(h('fieldset', { class: 'addr-vis' }, h('legend', { text: 'Who can see this address?' }),
+        radio('private', 'Only me', '(default) Nobody else can see it.'),
+        radio('families', 'Share with selected families', 'Members of the families you tick. This is not public on the internet.')));
+      form.appendChild(famBox);
+      var save = h('button', { class: 'btn', type: 'submit', text: 'Save address' });
+      form.appendChild(h('div', { class: 'row' }, save, h('button', { class: 'btn ghost', type: 'button', text: 'Cancel', onclick: function () { if (a.line1) showSaved(a); else showEmpty(); } })));
+      form.appendChild(msg);
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var data = {}; Object.keys(ids).forEach(function (k) { data[k] = ids[k].value; });
+        if (!data.line1.trim()) { showAlert(msg, 'error', 'Enter address line 1, or cancel.'); ids.line1.focus(); return; }
+        if (!data.country.trim()) { showAlert(msg, 'error', 'Enter the country.'); ids.country.focus(); return; }
+        var chosen = Object.keys(picks).filter(function (id) { return picks[id].checked; });
+        if (mode === 'families' && !chosen.length) { showAlert(msg, 'error', 'Tick at least one family, or choose Only me.'); return; }
+        if (mode === 'families') {
+          var go = await confirmDialog('Share your address?', 'Everyone in ' + famNames(chosen).join(', ') + ' will be able to see this address on your profile. They could copy or screenshot it, and stopping sharing later cannot erase copies they already made. It is not public on the internet.', 'Share it');
+          if (!go) return;
+        }
+        await busy(save, async function () {
+          try {
+            var r = await api('addressSave', Object.assign({}, data, { visibility: mode, familyIds: mode === 'families' ? chosen : [], confirmShare: mode === 'families' ? true : undefined }));
+            toast('Address saved.');
+            showSaved(r.address);
+          } catch (e) { showAlert(msg, 'error', friendly(e)); }
+        }, 'Saving…');
+      });
+      box.appendChild(form);
+      ids.line1.focus();
+    }
+    load();
+  }
+
+  /* On someone else's profile: appears only if the server says this viewer may see it. Otherwise nothing is drawn at all. */
+  async function addressOnProfile(holder, token, userId) {
+    try {
+      var r = await api('addressView', { familyId: S.familyId, userId: userId });
+      if (token !== S.nav || !r.address) return;
+      holder.appendChild(h('section', { class: 'card addr-card', 'aria-label': 'Address' },
+        h('h2', { text: 'Address' }),
+        h('p', { class: 'small muted', text: 'Shared with ' + famName() + ' by its owner. Not public on the internet. Please be thoughtful with it.' }),
+        addrBlock(r.address), addrMapButtons(r.address)));
+    } catch (e) { /* no access, or not set up: show nothing */ }
+  }
+
+  function settingsPrivacy(main, token) {
+    addressCard(main, token);
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Who can see what' },
       h('h2', { text: 'Who can see what' }),
       h('ul', { class: 'plain' },
         h('li', { text: 'Posts, comments, your profile, About me and the family tree are visible only to members of the family they belong to. Nothing is public.' }),
         h('li', { text: 'Your profile is separate in each family. Each family only sees the one you made there.' }),
         h('li', { text: 'Your email address and account settings are visible only to you.' }),
+        h('li', { text: 'A home address is optional. It is visible only to you unless you pick families to share it with, and it is kept apart from your profile.' }),
         h('li', { text: 'Your saved posts and library names are visible only to you.' }),
         h('li', { text: 'No ads, no trackers, no face recognition or AI photo processing.' })),
       h('p', { class: 'small muted', text: 'Anyone who can see a photo could still take a screenshot or share it, so share thoughtfully.' })));
@@ -3900,7 +4059,7 @@
     }
     initAppwrite();
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
-      textDialog: textDialog, confirmDialog: confirmDialog, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
+      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
     var action = readActionParams();
     if (action) await handleAction(action);
