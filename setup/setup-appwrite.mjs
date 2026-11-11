@@ -31,7 +31,7 @@ const schema = {
     indexes: [['idx_ownerId', 'key', ['ownerId']]]
   },
   profiles: {
-    columns: [S('familyId', 36, true), S('userId', 36, true), S('profileKey', 80, true), S('displayName', 60, true), S('avatarFileId', 36, false), S('bio', 200, false), S('about', 8000, false), { type: 'boolean', key: 'treeAdmin', required: false }],
+    columns: [S('familyId', 36, true), S('userId', 36, true), S('profileKey', 80, true), S('displayName', 60, true), S('avatarFileId', 36, false), S('bio', 200, false), { type: 'text', key: 'about', required: false }, { type: 'boolean', key: 'treeAdmin', required: false }],
     indexes: [['idx_familyId', 'key', ['familyId']], ['uniq_profileKey', 'unique', ['profileKey']], ['idx_avatarFileId', 'key', ['avatarFileId']]]
   },
   posts: {
