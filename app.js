@@ -567,7 +567,10 @@
     });
   }
   // Autoplay Shorts is a per-device switch in Settings (on by default). Off means: tap to download and play.
-  function autoplayOn() { try { return localStorage.getItem('fc_autoplay') !== 'off'; } catch (e) { return true; } }
+  // Until the person chooses, Shorts do not download by themselves on mobile data, a slow connection or when the phone's data saver is on.
+  function dataSaverDevice() { var c = navigator.connection; return !!(c && (c.saveData || c.type === 'cellular' || /(^|-)2g$/.test(c.effectiveType || ''))); }
+  function autoplayChosen() { try { var v = localStorage.getItem('fc_autoplay'); return v === 'on' || v === 'off'; } catch (e) { return false; } }
+  function autoplayOn() { try { var v = localStorage.getItem('fc_autoplay'); if (v === 'on') return true; if (v === 'off') return false; } catch (e) { /* fall through */ } return !dataSaverDevice(); }
   function observeReel(box) {
     if (!('IntersectionObserver' in window)) { box.__activate(); return; }
     if (!S.reelIO) {
@@ -745,7 +748,7 @@
       clear(box); box.className = 'media placeholder reel-media';
       box.appendChild(h('div', null,
         h('button', { class: 'btn', type: 'button', text: 'Play video' + (post.mediaSize ? ' (' + fmtMB(post.mediaSize) + ')' : ''), onclick: function (ev) { ev.stopPropagation(); load(true); } }),
-        h('p', { class: 'hint', text: 'Autoplay is off, so this video downloads only when you tap play. You can change this in Settings.' })));
+        h('p', { class: 'hint', text: autoplayChosen() ? 'Autoplay is off, so this video downloads only when you tap play. You can change this in Settings.' : 'You seem to be on mobile data, so videos wait for a tap to save your data. You can turn autoplay on in Settings, under Storage and downloads.' })));
     }
     function fail(e) {
       clear(box); box.className = 'media placeholder reel-media';
