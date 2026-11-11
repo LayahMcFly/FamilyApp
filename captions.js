@@ -34,11 +34,11 @@
     return p(h, 2) + ':' + p(m, 2) + ':' + p(s, 2) + '.' + p(r, 3);
   }
   /** Cues -> WebVTT text, which is what a <track> element reads. */
-  function toVtt(cues) {
+  function toVtt(cues, place) {
     var out = ['WEBVTT', ''];
     cues.forEach(function (c, i) {
       var text = String(c[2]).replace(/[<>&]/g, ' ').replace(/-->/g, '- >');
-      out.push(String(i + 1), stamp(c[0]) + ' --> ' + stamp(c[1]), text, '');
+      out.push(String(i + 1), stamp(c[0]) + ' --> ' + stamp(c[1]) + (place ? ' ' + place : ''), text, '');
     });
     return out.join('\n');
   }

@@ -658,7 +658,7 @@
     if (!cues.length) return;
     var tr = document.createElement('track');
     tr.kind = 'captions'; tr.srclang = 'en'; tr.label = 'English (automatic)';
-    tr.__url = URL.createObjectURL(new Blob([window.Captions.toVtt(cues)], { type: 'text/vtt' }));
+    tr.__url = URL.createObjectURL(new Blob([window.Captions.toVtt(cues, box.classList.contains('reel-media') ? 'line:68% position:42% size:70% align:center' : '')], { type: 'text/vtt' }));
     tr.src = tr.__url; v.appendChild(tr);
     function paint(on) {
       tr.track.mode = on ? 'showing' : 'hidden';
