@@ -12,6 +12,7 @@ import { Client, Account, Users, TablesDB, Storage } from 'node-appwrite';
 import { createShop } from './shop.js';
 import { createSquare } from './square.js';
 import { createPrintify } from './printify.js';
+import { createCj } from './cj.js';
 
 const env = (k, d = '') => (process.env[k] === undefined || process.env[k] === '' ? d : process.env[k]);
 
@@ -43,13 +44,29 @@ export default async ({ req, res, log, error }) => {
     squareNotificationUrl: env('SQUARE_NOTIFICATION_URL'),
     printifyConfigured: !!env('PRINTIFY_API_TOKEN'),
     printifyShopId: env('PRINTIFY_SHOP_ID'),
-    printifyWebhookSecret: env('PRINTIFY_WEBHOOK_SECRET')
+    printifyWebhookSecret: env('PRINTIFY_WEBHOOK_SECRET'),
+    cjConfigured: !!env('CJ_API_KEY'),
+    cjSandbox: env('CJ_SANDBOX', 'true') !== 'false',           // default ON: CJ orders are sandbox orders until you set CJ_SANDBOX=false
+    cjAutoPay: env('CJ_AUTO_PAY', 'false') === 'true',          // default OFF: you press "Pay supplier" yourself
+    returnPolicy: env('SHOP_RETURN_POLICY').slice(0, 1500)
   };
   const admin = new Client().setEndpoint(endpoint).setProject(projectId).setKey(key);
+  const dbApi = new TablesDB(admin);
+  // CJ's login tokens are kept in a private row (no permissions, so only this function can read it). Never sent to the browser.
+  const cj = cfg.cjConfigured ? createCj({
+    apiKey: env('CJ_API_KEY'),
+    loadTokens: async () => { try { const r = await dbApi.getRow({ databaseId: cfg.databaseId, tableId: 'shopSettings', rowId: 'cj' }); return JSON.parse(r.value || '{}'); } catch { return {}; } },
+    saveTokens: async (t) => {
+      const data = { value: JSON.stringify(t) };
+      try { await dbApi.updateRow({ databaseId: cfg.databaseId, tableId: 'shopSettings', rowId: 'cj', data }); }
+      catch { try { await dbApi.createRow({ databaseId: cfg.databaseId, tableId: 'shopSettings', rowId: 'cj', data, permissions: [] }); } catch (e) { log('cj token save failed ' + String(e && e.message)); } }
+    }
+  }) : null;
   const shop = createShop({
     users: new Users(admin), db: new TablesDB(admin), storage: new Storage(admin),
     square: createSquare({ accessToken: squareToken, environment: squareEnvironment }),
     printify: createPrintify({ token: env('PRINTIFY_API_TOKEN'), shopId: cfg.printifyShopId }),
+    cj,
     cfg,
     log: (...a) => log(a.join(' '))
   });

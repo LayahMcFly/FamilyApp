@@ -17,11 +17,13 @@ import { verifySquareSignature, SquareError } from './square.js';
 import { PrintifyError, verifyPrintifySignature } from './printify.js';
 import { safeImage, planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure, SECTION_IDS, cleanSection, cleanKind, KIND_IDS } from './sync.js';
 import { imageSize } from './images.js';
+import { createCjShop } from './cjShop.js';
 import { PUBLIC_SECTIONS, sectionIsOpen, supplierOfProduct, supplierOfLine, supplierOfOrder, sectionOfSupplier } from './suppliers.js';
 
 export const T = {
   families: 'families', posts: 'posts',
-  catalog: 'shopCatalog', designs: 'shopDesigns', orders: 'shopOrders', events: 'shopEvents', gifts: 'giftPermissions'
+  catalog: 'shopCatalog', designs: 'shopDesigns', orders: 'shopOrders', events: 'shopEvents', gifts: 'giftPermissions',
+  cjProducts: 'shopCj', cjCart: 'shopCjCart', settings: 'shopSettings'
 };
 
 /** The only product slots that can ever be sold. The Printify blueprint/provider/variant IDs for each are saved by the owner
@@ -66,8 +68,13 @@ export function stageOf(o) {
   if (p === 'expired' || p === 'payment_failed') return { label: 'Payment was not completed. You were not charged for this order.', tone: 'stop' };
   if (p === 'refunded') return { label: 'Refunded', tone: 'stop' };
   const part = p === 'partially_refunded' ? ' A partial refund was issued.' : '';
-  const r = stageByFulfillment(f);
+  const r = supplierOfOrder(o) === 'cj' ? stageForCj(f) : stageByFulfillment(f);
   return part ? { ...r, label: r.label + part } : r;
+}
+function stageForCj(f) {
+  if (f === 'created' || f === 'sending') return { label: 'Payment received. The supplier is getting your order ready.', tone: 'ok' };
+  if (f === 'in_production') return { label: 'Being prepared at the warehouse', tone: 'ok' };
+  return stageByFulfillment(f);
 }
 function stageByFulfillment(f) {
   if (f === 'canceled') return { label: 'Canceled. The shop owner will handle any refund.', tone: 'stop' };
@@ -79,11 +86,12 @@ function stageByFulfillment(f) {
   return { label: 'Payment received. We are preparing your order.', tone: 'ok' };
 }
 
-export function createShop({ users, db, storage, square, printify, cfg, now = () => Date.now(), log = () => {}, fetchImpl = fetch }) {
+export function createShop({ users, db, storage, square, printify, cj = null, cfg, now = () => Date.now(), log = () => {}, fetchImpl = fetch }) {
   const databaseId = cfg.databaseId;
   const listRows = (tableId, queries) => db.listRows({ databaseId, tableId, queries });
   const createRow = (tableId, id, data, permissions) => db.createRow({ databaseId, tableId, rowId: id, data, permissions });
   const updateRow = (tableId, id, data) => db.updateRow({ databaseId, tableId, rowId: id, data });
+  const deleteRow = (tableId, id) => db.deleteRow({ databaseId, tableId, rowId: id });
   async function getRowOrNull(tableId, id) {
     try { return await db.getRow({ databaseId, tableId, rowId: id }); } catch (e) { if (sdkCode(e) === 404) return null; throw e; }
   }
@@ -200,7 +208,8 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     } catch (e) { /* pictures are optional */ }
     return {
       products,
-      sections: PUBLIC_SECTIONS,
+      featuredKeys: await cjShop.photoFeatured().catch(() => []),
+      sections: PUBLIC_SECTIONS.map((x) => (x.id === 'family-shop' ? { ...x, ready: cjShop.configured() } : x)),
       slots: [
         ...Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, section: s.section || 'gifts', available: products.some((p) => p.key === key) })),
         ...enabled.filter(({ row }) => isImportedKey(row.$id)).map(({ row }) => ({ key: row.$id, title: titleOf(row, row.$id), section: cleanSection((metaOf(row) || {}).section), available: true }))
@@ -495,7 +504,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     const detail = `Checkout failed at "${why}"${sq ? '. ' + sq : ''}.`.slice(0, 560);
     log('square checkout failed', why, sq);
     await updateRow(T.orders, orderId, { paymentStatus: 'payment_failed', lastError: detail });
-    for (const l of lines) await updateRow(T.designs, l.designId, { orderId: '' });
+    for (const l of lines) if (l.designId) await updateRow(T.designs, l.designId, { orderId: '' });
     // The shop owner also sees the reason on screen, so a test payment can be fixed without digging through logs.
     throw new ApiError(502, 'checkout_failed', 'Payment could not be started. You were not charged. Please try again.' + (user && isAdmin(user) ? ` (Owner only: ${detail})` : ''));
   }
@@ -522,6 +531,10 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     };
     await createRow(T.orders, orderId, row, ownerRead(user.$id));
     for (const l of lines) await updateRow(T.designs, l.designId, { orderId });
+    return beginSquare({ orderId, lines, address, user, familyId, subtotalCents, shippingCents });
+  }
+  /** Shared by Photo Gifts and Family Shop: builds the Square hosted-checkout link for an order row that already exists, and checks Square's order matches what we priced. */
+  async function beginSquare({ orderId, lines, address, user, familyId, subtotalCents, shippingCents }) {
     const short = orderId.slice(0, 8);
     const request = {
       idempotency_key: orderId,
@@ -531,7 +544,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
         location_id: cfg.squareLocationId,
         reference_id: orderId,
         metadata: { orderId, familyId },
-        line_items: lines.map((l) => ({ name: `${l.title} (${l.variantLabel})`.slice(0, 500), quantity: String(l.quantity), base_price_money: { amount: l.unitCents, currency: CUR }, metadata: { designId: l.designId } })),
+        line_items: lines.map((l) => ({ name: `${l.title} (${l.variantLabel})`.slice(0, 500), quantity: String(l.quantity), base_price_money: { amount: l.unitCents, currency: CUR }, metadata: { ref: String(l.designId || l.vid || '').slice(0, 60) } })),
         ...(taxPercent > 0 ? { taxes: [{ uid: 'sales-tax', name: 'Sales tax', type: 'ADDITIVE', percentage: String(taxPercent), scope: 'ORDER' }] } : {})
       },
       checkout_options: {
@@ -693,6 +706,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     let o = await getRowOrNull(T.orders, orderId);
     if (!o) throw missing('Order not found.');
     if (o.paymentStatus !== 'paid') return o;
+    if (supplierOfOrder(o) === 'cj') return cjShop.fulfillCj(o, { force });
     if (['creating', 'created', 'sending', 'in_production', 'shipped', 'delivered', 'canceled'].includes(o.fulfillmentStatus)) return o;
     if (orderIsHeld(o) && !force) return o;
     if (supplierOfOrder(o) !== 'printify') {         // never send an order to Printify unless it is positively a Printify order
@@ -792,6 +806,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     if (body.refresh === true) {
       try {
         if (o.paymentStatus === 'pending_payment' || o.paymentStatus === 'processing') o = await reconcile(o);
+        else if (supplierOfOrder(o) === 'cj') { if (o.supplierOrderId && now() - new Date(o.$updatedAt).getTime() > 20000) o = await cjShop.syncFromCj(o); }
         else if (o.printifyOrderId && now() - new Date(o.$updatedAt).getTime() > 20000) o = await syncFromPrintify(o);
       } catch (e) { log('refresh failed', String(e && e.message)); }
     }
@@ -857,7 +872,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   }
 
   /* ---------- store owner only ---------- */
-  const adminOrderRow = (o) => ({ ...publicOrder(o), buyerId: o.ownerId, printifyOrderId: o.printifyOrderId || '', printifyStatus: o.printifyStatus || '', printifyCostCents: o.printifyCostCents || 0, lastError: o.lastError || '', paymentProvider: o.paymentProvider || 'stripe (old order)', squareOrderId: o.squareOrderId || '', squarePaymentId: o.squarePaymentId || '', oldStripeRef: o.paymentProvider ? '' : (o.stripePaymentIntent || o.stripeSessionId || ''), refundedCents: o.refundedCents || 0 });
+  const adminOrderRow = (o) => ({ ...publicOrder(o), buyerId: o.ownerId, supplier: supplierOfOrder(o), supplierOrderId: o.supplierOrderId || '', supplierStatus: o.supplierStatus || '', printifyOrderId: o.printifyOrderId || '', printifyStatus: o.printifyStatus || '', printifyCostCents: o.printifyCostCents || 0, lastError: o.lastError || '', paymentProvider: o.paymentProvider || 'stripe (old order)', squareOrderId: o.squareOrderId || '', squarePaymentId: o.squarePaymentId || '', oldStripeRef: o.paymentProvider ? '' : (o.stripePaymentIntent || o.stripeSessionId || ''), refundedCents: o.refundedCents || 0 });
   async function adminCheck({ user }) {
     requireAdmin(user);
     let printifyShops = null, printifyShopsError = '';
@@ -1060,8 +1075,11 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     let o = await getRowOrNull(T.orders, idOf(body.orderId, 'orderId'));
     if (!o) throw missing('Order not found.');
     const act = String(body.act || '');
+    const isCj = supplierOfOrder(o) === 'cj';
+    if (act.startsWith('cj_') !== isCj) throw conflict('wrong_supplier', isCj ? 'This is a Family Shop order. Use the CJ buttons.' : 'This is a Photo Gifts order. Use the Printify buttons.');
     try {
-      if (act === 'retry') {
+      if (isCj) o = await cjShop.adminAct(o, act);
+      else if (act === 'retry') {
         if (o.printifyOrderId) throw conflict('already_created', 'A Printify order already exists. Use Approve or Refresh.');
         const stuck = o.fulfillmentStatus === 'creating' && now() - new Date(o.$updatedAt).getTime() > 10 * 60e3;
         if (!['failed', 'needs_review'].includes(o.fulfillmentStatus) && !stuck) throw conflict('not_retryable', 'This order is not waiting for a retry.');
@@ -1080,6 +1098,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       } else throw bad('Unknown action.');
     } catch (e) {
       if (e instanceof ApiError) throw e;
+      if (isCj && !(e instanceof SquareError)) throw new ApiError(502, 'provider_error', 'CJ did not answer that. Nothing changed here. Check the order in your CJ account.');
       if (e instanceof SquareError) throw new ApiError(502, 'provider_error', `Square did not answer that (error ${e.status}). Nothing changed here. Check the order in the Square dashboard.`);
       throw new ApiError(502, 'provider_error', `Printify did not accept that (${e instanceof PrintifyError ? 'error ' + e.status : 'no answer'}). Nothing changed here. Check the order in the Printify dashboard.`);
     }
@@ -1096,7 +1115,12 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     return { url, added, alreadyThere: [...have] };
   }
 
+  const cjShop = createCjShop({
+    cfg, cj, T, listRows, createRow, updateRow, deleteRow, getRowOrNull, requireMember, requireAdmin, cleanAddress, beginSquare, closeUnpaid, now, nowIso, log, CUR, currency, taxPercent,
+    squareReady, refreshRefunds, reconcile
+  });
   const actions = {
+    ...cjShop.actions,
     shopCatalog: catalogAction, shopSetGift: setGift, shopGiftStatus: giftStatus,
     shopSaveDesign: saveDesign, shopPreview: previewDesign, shopDesigns: listDesigns, shopUpdateDesign: updateDesign,
     shopQuote: quote, shopCheckout: checkout, shopCancelOrder: cancelOrder, shopOrders: myOrders, shopOrder: getOrder,
@@ -1111,7 +1135,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       if (typeof name !== 'string' || !Object.prototype.hasOwnProperty.call(actions, name)) throw bad('Unknown action.');
       return { status: 200, json: { ok: true, ...(await actions[name]({ user, body: body || {} })) } };
     } catch (e) {
-      if (e instanceof ApiError) return { status: e.status, json: { ok: false, error: e.code, message: e.message } };
+      if (e instanceof ApiError) return { status: e.status, json: { ok: false, error: e.code, message: e.message, ...(e.extra || {}) } };
       return { status: 500, json: { ok: false, error: 'server_error', message: 'Something went wrong on the server.' }, cause: e };
     }
   }

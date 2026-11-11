@@ -1,0 +1,25 @@
+name: Add the Family Shop tables (one-time)
+
+# Creates the shop tables that are missing (shopCj, shopCjCart, shopSettings) and the new order columns.
+# Safe to run twice: anything that exists is skipped. Delete this file after it succeeds (CJ-GUIDE.md, topic 6).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Create missing shop tables and columns
+        working-directory: setup
+        env:
+          APPWRITE_ENDPOINT: https://nyc.cloud.appwrite.io/v1
+          APPWRITE_PROJECT: 6aef6a03002636be44c2
+          APPWRITE_KEY: ${{ secrets.APPWRITE_KEY }}
+        run: |
+          npm install
+          node setup-shop.mjs

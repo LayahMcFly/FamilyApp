@@ -1,6 +1,6 @@
 /*
  * One-time Appwrite setup for the optional Photo Gifts shop.
- * Adds five tables (shopCatalog, shopDesigns, shopOrders, shopEvents, giftPermissions) to the
+ * Adds the shop tables (shopCatalog, shopDesigns, shopOrders, shopEvents, giftPermissions, and for the Family Shop: shopCj, shopCjCart, shopSettings) to the
  * existing `family` database and an index so the family-api cleanup can recognise gift designs. No bucket is created: the free plan allows one, so designs live in `family-media`.
  * Safe to run again: anything that already exists is skipped.
  *
@@ -21,6 +21,7 @@ const databaseId = 'family';
 const S = (key, size, required, def) => ({ type: 'string', key, size, required: !!required, def });
 const TX = (key, required) => ({ type: 'text', key, required: !!required });
 const I = (key, required, def) => ({ type: 'integer', key, required: !!required, def, min: 0, max: 2000000000 });
+const MT = (key, required) => ({ type: 'mediumtext', key, required: !!required });
 const B = (key, required, def) => ({ type: 'boolean', key, required: !!required, def });
 const schema = {
   shopCatalog: {
@@ -34,8 +35,22 @@ const schema = {
   shopOrders: {
     columns: [S('ownerId', 36, true), S('familyId', 36, true), S('paymentStatus', 24, true), S('fulfillmentStatus', 24, true), TX('items', true), TX('address', true),
       I('subtotalCents', true), I('shippingCents', true), I('taxCents', false, 0), I('totalCents', true), S('currency', 3, true), S('stripeSessionId', 120, false, ''), S('stripePaymentIntent', 120, false, ''), TX('checkoutUrl', false),
-      S('printifyOrderId', 40, false, ''), S('printifyStatus', 40, false, ''), I('printifyCostCents', false, 0), TX('tracking', false), S('lastError', 600, false, ''), S('consentAt', 32, false), I('consentVersion', false, 1), S('needsReview', 24, false, ''), S('paidAt', 32, false)],
+      S('printifyOrderId', 40, false, ''), S('printifyStatus', 40, false, ''), I('printifyCostCents', false, 0), TX('tracking', false), S('lastError', 600, false, ''), S('consentAt', 32, false), I('consentVersion', false, 1), S('needsReview', 24, false, ''), S('paidAt', 32, false),
+      S('paymentProvider', 12, false, ''), S('squarePaymentLinkId', 60, false, ''), S('squareOrderId', 60, false, ''), S('squarePaymentId', 60, false, ''), I('refundedCents', false, 0),
+      S('supplierOrderId', 60, false, ''), S('supplierStatus', 40, false, '')],
     indexes: [['idx_ownerId', 'key', ['ownerId']], ['idx_printifyOrderId', 'key', ['printifyOrderId']]]
+  },
+  shopCj: {
+    columns: [S('pid', 64, true), S('sku', 80, false, ''), S('supplier', 12, false, 'cj'), S('title', 120, true), TX('description', false), S('category', 24, false, 'other'), S('status', 12, true), B('featured', false, false), S('fromCountry', 2, false, ''), MT('supplierData', true), TX('retail', true), S('lastSyncAt', 32, false, ''), S('syncNote', 200, false, '')],
+    indexes: [['idx_pid', 'key', ['pid']], ['idx_status', 'key', ['status']]]
+  },
+  shopCjCart: {
+    columns: [S('ownerId', 36, true), S('familyId', 36, true), S('productId', 40, true), S('vid', 64, true), I('quantity', true)],
+    indexes: [['idx_ownerId', 'key', ['ownerId']]]
+  },
+  shopSettings: {
+    columns: [TX('value', false)],
+    indexes: []
   },
   shopEvents: {
     columns: [S('source', 12, true), S('eventId', 80, true), S('type', 80, false), S('note', 200, false)],
@@ -73,6 +88,7 @@ for (const [tableId, def] of Object.entries(schema)) {
     await step('column ' + c.key, () => {
       const base = { databaseId, tableId, key: c.key, required: c.required };
       if (c.type === 'text') return db.createTextColumn(base);
+      if (c.type === 'mediumtext') return db.createMediumtextColumn(base);
       if (c.type === 'string') return db.createStringColumn({ ...base, size: c.size, ...(c.def !== undefined && !c.required ? { xdefault: c.def } : {}) });
       if (c.type === 'boolean') return db.createBooleanColumn({ ...base, ...(c.def !== undefined && !c.required ? { xdefault: c.def } : {}) });
       return db.createIntegerColumn({ ...base, min: c.min, max: c.max, ...(c.def !== undefined && !c.required ? { xdefault: c.def } : {}) });

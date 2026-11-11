@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto';
 import { createShop, T, stageOf } from '../src/shop.js';
 import { PrintifyError } from '../src/printify.js';
 import { SquareError } from '../src/square.js';
+import { CjError } from '../src/cj.js';
 
 /* ---------- fakes ---------- */
 class FakeDb {
@@ -79,14 +80,34 @@ function world(over = {}) {
     listProviders: async () => [{ id: 3, title: 'Prov', production_time: { average: 4 } }],
     listVariants: async () => ({ variants: [VAR, { id: 102, title: '16x20 / Black', options: {}, placeholders: [{ position: 'front', width: 1600, height: 2000 }] }] })
   };
-  const cfg = { databaseId: 'family', designBucketId: 'shop-designs', siteUrl: 'https://x.test/FamilyCircle/', adminIds: ['owner'], countries: ['US'], squareConfigured: true, squareEnvironment: 'sandbox', squareLocationId: 'LOC1', squareWebhookSignatureKey: 'sigkey', printifyWebhookSecret: 'pfy1', printifyConfigured: true, printifyShopId: '15930678', webhookBase: 'https://fn.test', autoSubmit: false, ...over.cfg };
+  const cjs = { calls: [], orders: new Map(), failCreate: null, recordOnFail: false, failPay: null, amount: '13.00', status: 'CREATED', track: '', stockV1: 5,
+    freight: [{ name: 'CJPacket Ordinary', priceCents: 499, aging: '8-12' }, { name: 'Express', priceCents: 1500, aging: '3-5' }], gone: false };
+  const cjProduct = () => ({ pid: 'P1', sku: 'CJ-SKU-1', title: 'Picnic blanket', description: 'Soft and big.', images: ['https://cj.test/a.jpg'], specs: [['Weight', '600 g']], categoryName: 'Home',
+    variants: [{ vid: 'v1', sku: 'CJ-SKU-1-A', name: 'Blue', image: 'https://cj.test/v1.jpg', costCents: over.cjCost ?? 800, stock: { US: cjs.stockV1 }, stockKnown: true },
+      ...(cjs.gone ? [] : [{ vid: 'v2', sku: 'CJ-SKU-1-B', name: 'Red', image: '', costCents: 1200, stock: { US: 0 }, stockKnown: true }])] });
+  const nfe = () => new CjError(200, '1600404', 'product not exist', 'not_found');
+  const cj = {
+    checkLogin: async () => { cjs.calls.push(['login']); return true; },
+    product: async (q) => { cjs.calls.push(['product', q]); if (!['P1', 'CJ-SKU-1'].includes(q)) throw nfe(); return cjProduct(); },
+    search: async (k) => { cjs.calls.push(['search', k]); return { total: 1, items: [{ pid: 'P1', sku: 'CJ-SKU-1', title: 'Picnic blanket', image: '', priceText: '8.00' }] }; },
+    freight: async (a) => { cjs.calls.push(['freight', a]); return cjs.freight; },
+    createOrder: async (b) => {
+      cjs.calls.push(['create', b]);
+      if (cjs.failCreate) { if (cjs.recordOnFail) cjs.orders.set(b.orderNumber, { orderId: 'CJO-' + b.orderNumber.slice(0, 6), orderStatus: 'CREATED', orderAmount: cjs.amount }); throw cjs.failCreate; }
+      const d = { orderId: 'CJO-' + b.orderNumber.slice(0, 6), orderStatus: cjs.status, orderAmount: cjs.amount }; cjs.orders.set(b.orderNumber, d); return d;
+    },
+    payBalance: async (id) => { cjs.calls.push(['pay', id]); if (cjs.failPay) throw cjs.failPay; for (const d of cjs.orders.values()) if (d.orderId === id) d.orderStatus = 'UNSHIPPED'; return true; },
+    orderDetail: async (id) => { cjs.calls.push(['detail', id]); const d = cjs.orders.get(id) || [...cjs.orders.values()].find((x) => x.orderId === id); if (!d) throw new CjError(200, '1600404', 'order not exist', 'not_found'); return { ...d, ...(cjs.track ? { trackNumber: cjs.track, trackingProvider: 'USPS' } : {}) }; },
+    cancelOrder: async (id) => { cjs.calls.push(['cancel', id]); return { status: cjs.cancelStatus || 'SUCCESS' }; }
+  };
+  const cfg = { databaseId: 'family', cjConfigured: true, cjSandbox: true, cjAutoPay: false, returnPolicy: 'Contact us within 14 days.', designBucketId: 'shop-designs', siteUrl: 'https://x.test/FamilyCircle/', adminIds: ['owner'], countries: ['US'], squareConfigured: true, squareEnvironment: 'sandbox', squareLocationId: 'LOC1', squareWebhookSignatureKey: 'sigkey', printifyWebhookSecret: 'pfy1', printifyConfigured: true, printifyShopId: '15930678', webhookBase: 'https://fn.test', autoSubmit: false, ...over.cfg };
   let t = 1700000000000;
   const fetchImpl = async (u) => { pcalls.push(['fetchImage', u]); return { ok: true, headers: { get: () => 'image/jpeg' }, arrayBuffer: async () => new Uint8Array(3000).buffer }; };
-  const shop = createShop({ users, db, storage, square, printify, cfg, now: () => t, fetchImpl });
+  const shop = createShop({ users, db, storage, square, printify, cj: over.noCj ? null : cj, cfg, now: () => t, fetchImpl });
   const A = { $id: 'alice', email: 'a@x.test', emailVerification: true }, B = { $id: 'bob', email: 'b@x.test', emailVerification: true }, C = { $id: 'carol', email: 'c@x.test', emailVerification: true }, O = { $id: 'owner', email: 'o@x.test', emailVerification: true };
   const call = async (user, action, body = {}) => { const r = await shop.handle({ user, body: { action, ...body } }); return r; };
   const ok = async (user, action, body) => { const r = await call(user, action, body); assert.equal(r.status, 200, `${action}: ${JSON.stringify(r.json)}`); return r.json; };
-  return { db, storage, shop, square, sq, printify, pcalls, cfg, A, B, C, O, call, ok, setFail: (e) => { pFail = e; }, advance: (ms) => { t += ms; }, sign: (body, url = 'https://fn.test/webhooks/square', key = 'sigkey') => createHmac('sha256', key).update(url + body).digest('base64') };
+  return { db, storage, shop, square, sq, printify, pcalls, cfg, cjs, A, B, C, O, call, ok, setFail: (e) => { pFail = e; }, advance: (ms) => { t += ms; }, sign: (body, url = 'https://fn.test/webhooks/square', key = 'sigkey') => createHmac('sha256', key).update(url + body).digest('base64') };
 }
 async function seed(w) {
   await w.db.createRow({ tableId: T.families, rowId: 'fam1', data: {}, permissions: [] });
@@ -643,8 +664,8 @@ test('words products: typed words instead of a photo; kind is guessed from the n
 });
 
 /* ---------- Photo Gifts / Family Shop sections ---------- */
-test('catalog names two sections; Family Shop is not open and shows no products', async () => {
-  const w = world(); await seed(w);
+test('catalog names two sections; Family Shop is not open until CJ is set up, and shows no Photo Gifts products', async () => {
+  const w = world({ cfg: { cjConfigured: false } }); await seed(w);
   const c = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' });
   assert.deepEqual(c.sections.map((s) => [s.id, s.title, s.ready]), [['photo-gifts', 'Photo Gifts', true], ['family-shop', 'Family Shop', false]]);
   assert.ok(c.products.length >= 1 && c.products.every((p) => p.shopSection === 'photo-gifts'));
@@ -696,4 +717,186 @@ test('kind guess: the product title decides first, so a generic "photo" blank na
   assert.equal(guessKind('Engraved Bar Bracelet', 'Family Bracelet'), 'words');
   assert.equal(guessKind('Mug', 'Coffee Mug'), 'photo');
   assert.equal(guessKind('Name Necklace', 'Necklace with your photo'), 'photo');
+});
+
+/* ================= Family Shop (CJ) ================= */
+const SAVE = { pid: 'P1', status: 'published', title: 'Picnic blanket for the reunion', category: 'party', percent: 100, round99: true, selected: [{ vid: 'v1' }, { vid: 'v2', retailCents: 2500 }] };
+async function cjSeed(w, over = {}) {
+  if (!w.db.tab(T.families).has('fam1')) await w.db.createRow({ tableId: T.families, rowId: 'fam1', data: {}, permissions: [] });
+  const r = await w.ok(w.O, 'shopAdminCjSave', { ...SAVE, ...over });
+  return r.product.id;
+}
+async function cjCheckout(w, pid, qty = 2, requestId = 'req-cj-aaaa') {
+  await w.ok(w.A, 'shopCjCartSet', { familyId: 'fam1', productId: pid, vid: 'v1', quantity: qty });
+  const q = await w.ok(w.A, 'shopCjQuote', { familyId: 'fam1', address: ADDR });
+  const c = await w.ok(w.A, 'shopCjCheckout', { familyId: 'fam1', address: ADDR, requestId, consentDelivery: true, expectedTotalCents: q.totalCents });
+  return { q, orderId: c.orderId };
+}
+async function cjPaid(w, orderId, n = 1) { const sid = pay(w, orderId); await hook(w, 'cjevt_' + n, 'payment.updated', sid); return w.db.tab(T.orders).get(orderId); }
+
+test('CJ: only the shop owner can look up, save or list CJ products', async () => {
+  const w = world(); await w.db.createRow({ tableId: T.families, rowId: 'fam1', data: {}, permissions: [] });
+  for (const a of ['shopAdminCjLookup', 'shopAdminCjSave', 'shopAdminCjList', 'shopAdminCjSearch', 'shopAdminCjCheck', 'shopAdminCjSync']) {
+    const r = await w.call(w.A, a, { query: 'P1', pid: 'P1', keyword: 'blanket', id: 'x' }); assert.equal(r.status, 403, a);
+  }
+  assert.equal(w.cjs.calls.length, 0, 'no CJ call is made for a non-owner');
+});
+test('CJ: lookup is read-only, a missing SKU gives a clear message, and a draft is not shown to shoppers', async () => {
+  const w = world(); const id = await cjSeed(w, { status: 'draft' });
+  const l = await w.ok(w.O, 'shopAdminCjLookup', { query: 'CJ-SKU-1' }); assert.equal(l.product.variants.length, 2); assert.equal(l.existing.id, id);
+  const nf = await w.call(w.O, 'shopAdminCjLookup', { query: 'NOPE' }); assert.equal(nf.status, 404); assert.equal(nf.json.error, 'cj_not_found');
+  assert.equal(w.cjs.calls.some((c) => ['create', 'pay', 'cancel'].includes(c[0])), false);
+  const b = await w.ok(w.A, 'shopCjBrowse', { familyId: 'fam1' }); assert.equal(b.products.length, 0);
+  assert.equal((await w.call(w.A, 'shopCjItem', { familyId: 'fam1', id })).status, 404);
+});
+test('CJ: publishing needs variants and prices above CJ cost; saving twice never makes a duplicate', async () => {
+  const w = world(); await w.db.createRow({ tableId: T.families, rowId: 'fam1', data: {}, permissions: [] });
+  assert.equal((await w.call(w.O, 'shopAdminCjSave', { ...SAVE, selected: [] })).status, 400);
+  const low = await w.call(w.O, 'shopAdminCjSave', { ...SAVE, percent: null, selected: [{ vid: 'v1', retailCents: 700 }] });
+  assert.equal(low.status, 400); assert.match(low.json.message, /not above CJ/);
+  const a = await w.ok(w.O, 'shopAdminCjSave', SAVE); const b = await w.ok(w.O, 'shopAdminCjSave', { ...SAVE, title: 'New title' });
+  assert.equal(a.product.id, b.product.id); assert.equal(b.updated, true); assert.equal(w.db.tab(T.cjProducts).size, 1);
+  const browse = await w.ok(w.A, 'shopCjBrowse', { familyId: 'fam1' });
+  assert.equal(browse.products[0].title, 'New title'); assert.equal(browse.products[0].fromCents, 1699);
+  assert.deepEqual(browse.products[0].variants.map((v) => v.priceCents), [1699, 2500]);
+  assert.equal(JSON.stringify(browse).includes('costCents'), false, 'supplier cost never reaches shoppers');
+  assert.equal(JSON.stringify(browse).includes('"vid"'), false);
+});
+test('CJ: a sync refreshes supplier facts but never overwrites edited title, text, category or prices; a removed variant stops selling', async () => {
+  const w = world(); const id = await cjSeed(w); w.cjs.stockV1 = 2; w.cfg.cjCostChange = true;
+  const row = w.db.tab(T.cjProducts).get(id); const before = { title: row.title, description: row.description, category: row.category, retail: row.retail, status: row.status };
+  w.cjs.gone = true;
+  const r = await w.ok(w.O, 'shopAdminCjSync', { id });
+  const after = w.db.tab(T.cjProducts).get(id);
+  for (const k of Object.keys(before)) assert.equal(after[k], before[k], k);
+  assert.match(r.changes.join(' '), /no longer at CJ/);
+  const pub = (await w.ok(w.A, 'shopCjItem', { familyId: 'fam1', id })).product; assert.equal(pub.variants.length, 1); assert.equal(pub.variants[0].maxQty, 2);
+  assert.equal((await w.call(w.A, 'shopCjCartSet', { familyId: 'fam1', productId: id, vid: 'v2', quantity: 1 })).status, 409);
+});
+test('CJ: cart, quote and checkout use server prices; a changed total must be confirmed again; Square gets no design ids', async () => {
+  const w = world(); const id = await cjSeed(w);
+  await w.ok(w.A, 'shopCjCartSet', { familyId: 'fam1', productId: id, vid: 'v1', quantity: 2 });
+  const q = await w.ok(w.A, 'shopCjQuote', { familyId: 'fam1', address: ADDR });
+  assert.equal(q.subtotalCents, 3398); assert.equal(q.shippingCents, 499); assert.equal(q.totalCents, 3897); assert.match(q.shipping.supplierEstimate, /estimate/);
+  const stale = await w.call(w.A, 'shopCjCheckout', { familyId: 'fam1', address: ADDR, requestId: 'req-cj-bbbb', consentDelivery: true, expectedTotalCents: 3000 });
+  assert.equal(stale.status, 409); assert.equal(stale.json.error, 'total_changed'); assert.equal(stale.json.totalCents, 3897);
+  assert.equal(w.db.tab(T.orders).size, 0, 'nothing is created until the shopper confirms the new total');
+  assert.equal((await w.call(w.A, 'shopCjCheckout', { familyId: 'fam1', address: ADDR, requestId: 'req-cj-bbbb', expectedTotalCents: 3897 })).status, 400, 'delivery permission needed');
+  const c = await w.ok(w.A, 'shopCjCheckout', { familyId: 'fam1', address: ADDR, requestId: 'req-cj-bbbb', consentDelivery: true, expectedTotalCents: 3897 });
+  const again = await w.ok(w.A, 'shopCjCheckout', { familyId: 'fam1', address: ADDR, requestId: 'req-cj-bbbb', consentDelivery: true, expectedTotalCents: 3897 });
+  assert.equal(again.orderId, c.orderId); assert.equal(w.db.tab(T.orders).size, 1);
+  const li = w.sq.created[0].order.line_items; assert.equal(li[0].metadata.ref, 'v1'); assert.equal(li[0].base_price_money.amount, 1699);
+  assert.equal(w.sq.created[0].checkout_options.shipping_fee.charge.amount, 499);
+  assert.equal(w.cjs.calls.some((x) => ['create', 'pay'].includes(x[0])), false, 'no CJ order before payment');
+  const o = w.db.tab(T.orders).get(c.orderId); assert.equal(JSON.parse(o.items)[0].supplier, 'cj');
+});
+test('CJ: stock or shipping that changes before payment is caught', async () => {
+  const w = world(); const id = await cjSeed(w);
+  await w.ok(w.A, 'shopCjCartSet', { familyId: 'fam1', productId: id, vid: 'v1', quantity: 2 });
+  w.cjs.stockV1 = 1; let r = await w.call(w.A, 'shopCjQuote', { familyId: 'fam1', address: ADDR }); assert.equal(r.status, 409); assert.equal(r.json.error, 'out_of_stock');
+  w.cjs.stockV1 = 5; w.cjs.freight = []; r = await w.call(w.A, 'shopCjQuote', { familyId: 'fam1', address: ADDR }); assert.equal(r.json.error, 'shipping_unavailable');
+  w.cjs.freight = [{ name: 'CJPacket Ordinary', priceCents: 650, aging: '' }]; r = await w.ok(w.A, 'shopCjQuote', { familyId: 'fam1', address: ADDR }); assert.equal(r.totalCents, 3398 + 650);
+});
+test('CJ: a cost rise that makes the price lose money pauses the item at checkout', async () => {
+  const w = world({ cjCost: 800 }); const id = await cjSeed(w);
+  await w.ok(w.A, 'shopCjCartSet', { familyId: 'fam1', productId: id, vid: 'v1', quantity: 1 });
+  const row = w.db.tab(T.cjProducts).get(id); const rt = JSON.parse(row.retail); rt.manual = { v1: 900 }; row.retail = JSON.stringify(rt);
+  w.cfg.dummy = 1; // live cost is still 800 here, so 900 is fine
+  assert.equal((await w.call(w.A, 'shopCjQuote', { familyId: 'fam1', address: ADDR })).status, 200);
+  rt.manual = { v1: 800 }; row.retail = JSON.stringify(rt);
+  assert.equal((await w.call(w.A, 'shopCjQuote', { familyId: 'fam1', address: ADDR })).json.error, 'price_changed');
+});
+test('CJ: a paid order creates ONE create-only sandbox CJ order, is not paid at CJ, and waits for the owner', async () => {
+  const w = world(); const id = await cjSeed(w); const { orderId } = await cjCheckout(w, id);
+  const o = await cjPaid(w, orderId); await hook(w, 'cjevt_dup', 'payment.created', o.squarePaymentId);
+  const creates = w.cjs.calls.filter((c) => c[0] === 'create'); assert.equal(creates.length, 1);
+  const b = creates[0][1]; assert.equal(b.orderNumber, orderId); assert.equal(b.payType, 3); assert.equal(b.isSandbox, 1); assert.equal(b.shippingProvince, 'Georgia'); assert.equal(b.logisticName, 'CJPacket Ordinary');
+  assert.deepEqual(b.products, [{ vid: 'v1', quantity: 2 }]); assert.equal(b.fromCountryCode, 'US'); assert.equal(JSON.stringify(b).includes('photo'), false);
+  const fin = w.db.tab(T.orders).get(orderId); assert.equal(fin.fulfillmentStatus, 'created'); assert.match(fin.lastError, /Pay supplier/);
+  assert.equal(w.cjs.calls.some((c) => c[0] === 'pay'), false); assert.equal(w.db.tab(T.cjCart).size, 0, 'cart emptied after payment');
+  assert.equal(w.pcalls.filter((c) => c[0] === 'create').length, 0, 'Printify untouched');
+  await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_pay' });
+  assert.equal(w.cjs.calls.filter((c) => c[0] === 'pay').length, 1); assert.equal(w.db.tab(T.orders).get(orderId).fulfillmentStatus, 'sending');
+});
+test('CJ: with auto-pay on, the wallet is charged once after the customer paid', async () => {
+  const w = world({ cfg: { cjAutoPay: true } }); const id = await cjSeed(w); const { orderId } = await cjCheckout(w, id);
+  await cjPaid(w, orderId); assert.equal(w.cjs.calls.filter((c) => c[0] === 'pay').length, 1); assert.equal(w.db.tab(T.orders).get(orderId).fulfillmentStatus, 'sending');
+});
+test('CJ: practice payments never buy real goods, and real payments are not silently sandboxed', async () => {
+  let w = world({ cfg: { cjSandbox: false } }); let id = await cjSeed(w); let { orderId } = await cjCheckout(w, id);
+  let o = await cjPaid(w, orderId); assert.equal(o.fulfillmentStatus, 'needs_review'); assert.match(o.lastError, /test mode/); assert.equal(w.cjs.calls.some((c) => c[0] === 'create'), false);
+  w = world({ cfg: { squareEnvironment: 'production' } }); id = await cjSeed(w); ({ orderId } = await cjCheckout(w, id));
+  o = await cjPaid(w, orderId); assert.equal(o.fulfillmentStatus, 'needs_review'); assert.match(o.lastError, /sandbox/); assert.equal(w.cjs.calls.some((c) => c[0] === 'create'), false);
+  w = world({ cfg: { cjSandbox: false, squareEnvironment: 'production' } }); id = await cjSeed(w); ({ orderId } = await cjCheckout(w, id));
+  await cjPaid(w, orderId); assert.equal(w.cjs.calls.find((c) => c[0] === 'create')[1].isSandbox, undefined);
+});
+test('CJ: an uncertain create is looked up by order number first and never blindly repeated', async () => {
+  let w = world(); let id = await cjSeed(w); let { orderId } = await cjCheckout(w, id);
+  w.cjs.failCreate = new CjError(0, 'network', 'timeout', 'network'); w.cjs.recordOnFail = true;
+  let o = await cjPaid(w, orderId);
+  assert.equal(w.cjs.calls.filter((c) => c[0] === 'create').length, 1); assert.equal(o.fulfillmentStatus, 'created'); assert.match(o.supplierOrderId, /^CJO-/);
+  w = world(); id = await cjSeed(w); ({ orderId } = await cjCheckout(w, id));
+  w.cjs.failCreate = new CjError(0, 'network', 'timeout', 'network');
+  o = await cjPaid(w, orderId); assert.equal(o.fulfillmentStatus, 'needs_review'); assert.match(o.lastError, /NOT retried automatically/);
+  await hook(w, 'cjevt_again', 'payment.updated', o.squarePaymentId); assert.equal(w.cjs.calls.filter((c) => c[0] === 'create').length, 1, 'a repeated payment event does not retry');
+  w.cjs.failCreate = null; await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_retry' });
+  assert.equal(w.cjs.calls.filter((c) => c[0] === 'create').length, 2); assert.equal(w.db.tab(T.orders).get(orderId).fulfillmentStatus, 'created');
+  assert.equal((await w.call(w.O, 'shopAdminResolve', { orderId, act: 'cj_retry' })).status, 409, 'cannot retry once CJ has the order');
+});
+test('CJ: if CJ prices the order above what the customer paid, it is held and not paid', async () => {
+  const w = world({ cfg: { cjAutoPay: true } }); const id = await cjSeed(w); w.cjs.amount = '99.00'; const { orderId } = await cjCheckout(w, id);
+  const o = await cjPaid(w, orderId); assert.equal(o.fulfillmentStatus, 'needs_review'); assert.match(o.lastError, /NOT paid/); assert.equal(w.cjs.calls.some((c) => c[0] === 'pay'), false);
+});
+test('CJ: a wallet that is too low holds the order, and paying again later works once', async () => {
+  const w = world(); const id = await cjSeed(w); const { orderId } = await cjCheckout(w, id); await cjPaid(w, orderId);
+  w.cjs.failPay = new CjError(200, '1603000', 'Insufficient balance', 'api');
+  await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_pay' });
+  let o = w.db.tab(T.orders).get(orderId); assert.equal(o.fulfillmentStatus, 'needs_review'); assert.match(o.lastError, /wallet/);
+  w.cjs.failPay = null; await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_pay' });
+  assert.equal(w.db.tab(T.orders).get(orderId).fulfillmentStatus, 'sending');
+});
+test('CJ: refresh moves status forward only, waits for a tracking number, and holds a CJ cancel of a paid order', async () => {
+  const w = world(); const id = await cjSeed(w); const { orderId } = await cjCheckout(w, id); await cjPaid(w, orderId);
+  await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_pay' });
+  const d = [...w.cjs.orders.values()][0];
+  d.orderStatus = 'SHIPPED'; await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_refresh' });
+  assert.equal(w.db.tab(T.orders).get(orderId).fulfillmentStatus, 'sending', 'shipped without tracking is not shown as shipped');
+  w.cjs.track = '9400TEST'; await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_refresh' });
+  let o = w.db.tab(T.orders).get(orderId); assert.equal(o.fulfillmentStatus, 'shipped'); assert.equal(JSON.parse(o.tracking)[0].number, '9400TEST');
+  d.orderStatus = 'UNSHIPPED'; await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_refresh' }); assert.equal(w.db.tab(T.orders).get(orderId).fulfillmentStatus, 'shipped', 'never backwards');
+  d.orderStatus = 'CANCELLED'; await w.ok(w.O, 'shopAdminResolve', { orderId, act: 'cj_refresh' });
+  o = w.db.tab(T.orders).get(orderId); assert.equal(o.fulfillmentStatus, 'needs_review'); assert.match(o.lastError, /canceled/);
+});
+test('CJ: Printify buttons are refused on Family Shop orders and the reverse; buyers see only their own order', async () => {
+  const w = world(); const id = await cjSeed(w); const { orderId } = await cjCheckout(w, id); await cjPaid(w, orderId);
+  assert.equal((await w.call(w.O, 'shopAdminResolve', { orderId, act: 'retry' })).json.error, 'wrong_supplier');
+  assert.equal((await w.call(w.O, 'shopAdminResolve', { orderId, act: 'approve' })).json.error, 'wrong_supplier');
+  assert.equal((await w.call(w.B, 'shopOrder', { orderId })).status, 404);
+  const mine = await w.ok(w.A, 'shopOrder', { orderId }); assert.equal(mine.order.section, 'family-shop'); assert.equal(JSON.stringify(mine).includes('supplierOrderId'), false);
+  const adm = await w.ok(w.O, 'shopAdminOrder', { orderId }); assert.equal(adm.order.supplier, 'cj');
+});
+test('CJ: not configured means no browsing, quoting or lookups, and no CJ call', async () => {
+  const w = world({ noCj: true, cfg: { cjConfigured: false } });
+  await w.db.createRow({ tableId: T.families, rowId: 'fam1', data: {}, permissions: [] });
+  assert.equal((await w.call(w.O, 'shopAdminCjLookup', { query: 'P1' })).json.error, 'cj_not_ready');
+  assert.equal((await w.ok(w.A, 'shopCjBrowse', { familyId: 'fam1' })).open, false);
+  const cat = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' }); assert.equal(cat.sections.find((x) => x.id === 'family-shop').ready, false);
+  assert.equal(w.cjs.calls.length, 0);
+});
+test('CJ: Photo Gifts checkout is untouched when a Family Shop cart exists (separate carts)', async () => {
+  const w = world(); await seed(w); const id = await cjSeed(w);
+  await w.ok(w.A, 'shopCjCartSet', { familyId: 'fam1', productId: id, vid: 'v1', quantity: 1 });
+  const d = await design(w); const { orderId } = await w.ok(w.A, 'shopCheckout', { familyId: 'fam1', designIds: [d.design.id], address: ADDR, requestId: 'req-gift-1', consentImage: true, consentDelivery: true });
+  assert.equal(w.db.tab(T.orders).get(orderId).printifyOrderId, ''); assert.equal(w.db.tab(T.cjCart).size, 1, 'the Family Shop cart is still there');
+  await cjPaid(w, orderId); assert.equal(w.cjs.calls.some((c) => c[0] === 'create'), false, 'a Photo Gifts payment never creates a CJ order');
+  assert.equal(w.pcalls.filter((c) => c[0] === 'create').length, 1);
+});
+test('featured Photo Gifts are the owner\'s choice, owner-only, and listed in the catalog', async () => {
+  const w = world(); await seed(w);
+  assert.equal((await w.call(w.A, 'shopAdminFeaturePhoto', { key: 'framed-print', featured: true })).status, 403);
+  assert.equal((await w.call(w.O, 'shopAdminFeaturePhoto', { key: 'nope', featured: true })).status, 404);
+  await w.ok(w.O, 'shopAdminFeaturePhoto', { key: 'framed-print', featured: true });
+  assert.deepEqual((await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' })).featuredKeys, ['framed-print']);
+  await w.ok(w.O, 'shopAdminFeaturePhoto', { key: 'framed-print', featured: false });
+  assert.deepEqual((await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' })).featuredKeys, []);
 });

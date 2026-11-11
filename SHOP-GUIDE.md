@@ -324,3 +324,7 @@ How it is kept safe:
 - **Separate checkouts.** A cart with items from two suppliers is refused, and checking out the Family Shop section is refused with a "coming soon" answer, so no payment link is made.
 - **Where the code is.** `shop/function/src/suppliers.js` holds the supplier and section rules. The Printify code is unchanged and still lives in `printify.js` and `shop.js`.
 - **What the next step must add.** A CJ product source, its own cart and checkout, its own fulfillment and tracking, and a change of the Family Shop section's `ready` flag. See `suppliers.js`.
+
+## Family Shop (CJdropshipping), version 1.46.0
+
+The Family Shop section is now built. It has its own setup guide, `CJ-GUIDE.md` (24 topics and checklists), and a technical companion, `CJ-REFERENCE.md`. The Photo Gifts steps in this file are unchanged. The Family Shop stays closed ("Coming soon") until `CJ_API_KEY` is set.
