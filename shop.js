@@ -251,7 +251,8 @@
       try { if (Date.now() - Number(localStorage.getItem(AUTO_KEY) || 0) < AUTO_EVERY) { if (lastAuto) autoStatus(token, lastAuto, true); return; } } catch (e) { /* no storage: sync every time */ }
     }
     autoRunning = true;
-    autoStatus(token, 'Updating the shop from Printify and CJ…', false);
+    var cjOn = ((st().catalog && st().catalog.sections) || []).some(function (x) { return x.id === 'family-shop' && x.ready; }), who = cjOn ? 'Printify and CJ' : 'Printify';
+    autoStatus(token, 'Updating the shop from ' + who + '…', false);
     var changed = 0, parts = [], failed = false;
     try {
       try {
@@ -265,7 +266,7 @@
         if (bad) { failed = true; parts.push('Printify: ' + bad); }
         else { var f = await shopApi('shopAdminSyncFinish', { seen: seen }); changed += (f.deleted || 0); parts.push('Printify: ' + total + ' products read' + (f.deleted ? ', ' + f.deleted + ' removed' : '')); }
       } catch (e) { failed = true; parts.push('Printify: ' + msgOf(e)); }
-      try {
+      if (cjOn) try {
         var ov = await shopApi('shopAdminCjList');
         if (ov.configured) {
           var list = ov.products.slice(0, 30), done = 0;
@@ -281,7 +282,7 @@
     if (!failed) { try { localStorage.setItem(AUTO_KEY, String(Date.now())); } catch (e) { /* ignore */ } }
     if (token !== X.S.nav) return;
     autoStatus(token, lastAuto, true);
-    if (changed && !force) { toast('The shop was updated from Printify and CJ.'); X.route(false); }
+    if (changed && !force) { toast('The shop was updated from ' + who + '.'); X.route(false); }
     else if (changed) { toast('Updated. Reopen the shop to see the changes.'); X.route(false); }
   }
 
