@@ -1936,7 +1936,7 @@
       if (y0 === null) return; y0 = null;
       var fast = dy / Math.max(1, Date.now() - t0) > 0.6;
       sheet.style.transition = 'transform .2s ease';
-      if (dy > 110 || (fast && dy > 40)) {
+      if (moved && (dy > 110 || (fast && dy > 60))) {
         sheet.classList.add('dragged');   // already sliding away under the finger: do not replay the close animation
         setY(sheet.offsetHeight + 40); fadeBack(0); setTimeout(close, 200);
       } else { setY(0); fadeBack(1); }
@@ -1946,7 +1946,9 @@
       var t = ev.touches[0]; start(t.clientY, !!(head && head.contains(ev.target)), ev.target);
     }, { passive: true });
     sheet.addEventListener('touchmove', function (ev) { move(ev.touches[0].clientY, ev); }, { passive: false });
-    sheet.addEventListener('touchend', end); sheet.addEventListener('touchcancel', end);
+    sheet.addEventListener('touchend', end);
+    // If the browser takes the gesture over (it starts scrolling the page behind) it cancels the touch: put the sheet back, never close it.
+    sheet.addEventListener('touchcancel', function () { if (y0 === null) return; y0 = null; dy = 0; sheet.style.transition = 'transform .2s ease'; setY(0); fadeBack(1); });
     // mouse / pen: drag the top bar
     if (head) {
       head.addEventListener('pointerdown', function (ev) { if (ev.pointerType === 'touch' || ev.target.closest('button')) return; head.setPointerCapture(ev.pointerId); start(ev.clientY, true); });

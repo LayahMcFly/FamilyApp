@@ -1403,3 +1403,7 @@ input, textarea { -webkit-user-select: text; user-select: text; }
    The dim is the sheet's own huge shadow, which can only ever paint behind the sheet. The backdrop just catches taps. */
 .sheet-backdrop, .reel + .sheet-backdrop, .reel .sheet-backdrop { background: transparent !important; animation: none !important; }
 .sheet, .reel .sheet { z-index: 61 !important; box-shadow: 0 0 0 100vmax rgba(0,0,0,.5) !important; opacity: 1 !important; filter: none !important; }
+
+/* v1.48.11 — a press or wiggle on the comments sheet never scrolls the Shorts list behind it */
+.sheet { overscroll-behavior: contain; touch-action: pan-y; }
+.sheet .comment-form, .sheet .comment-form * { touch-action: manipulation; }
