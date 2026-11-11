@@ -13,7 +13,9 @@
  *  - Chat roles are their own thing: family owner (Team role), chat admin (profiles.chatAdmin) and member.
  *    A family-tree relationship, `treeAdmin` or any shop permission never grants chat powers.
  */
+import { createHash } from 'node:crypto';
 import { Query, Permission, Role, ID } from 'node-appwrite';
+import { fetchPreview, checkUrl } from './preview.js';
 
 export const CHAT_TABLES = {
   channels: 'chatChannels',
@@ -36,7 +38,12 @@ export const CHAT_LIMITS = {
   editGapMs: 1000,
   historyPage: 100
 };
-export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];   // the quick row; any single emoji is allowed (see emojiOk)
+export const EMOJI_MAX_UNITS = 8;          // the chatReactions.emoji column holds 8 UTF-16 units: a few long combinations (families, England's flag) do not fit
+export const MAX_REACTION_KINDS = 20;      // different emoji on one message
+const EMOJI_RE = /^(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*)$/u;
+/** One emoji and nothing else: no letters, no text, no two emoji in a row. */
+export function emojiOk(s) { return typeof s === 'string' && s.length > 0 && s.length <= EMOJI_MAX_UNITS && EMOJI_RE.test(s); }
 export const DEFAULT_CHANNELS = [
   { slug: 'general', name: 'general', description: 'Everyday conversation for the whole family.', readOnly: false },
   { slug: 'announcements', name: 'announcements', description: 'News from the family owner and chat admins. Everyone can read it; only admins can post.', readOnly: true },
@@ -49,6 +56,9 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$
 export function createChat(c) {
   const { listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf,
     bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable } = c;
+  const doPreview = c.fetchPreview || fetchPreview;
+  const doFetch = c.httpFetch || ((...a) => fetch(...a));
+  const giphyKey = c.giphyKey || '', giphyRating = /^(g|pg|pg-13|r)$/.test(c.giphyRating || '') ? c.giphyRating : 'g';
   const T = CHAT_TABLES;
   const L = CHAT_LIMITS;
 
@@ -134,6 +144,16 @@ export function createChat(c) {
     return r.rows.length > win.count - 1;   // already at the limit
   }
   const pubMessage = (r) => ({ id: r.$id, convId: r.convId, kind: r.kind, authorId: r.authorId, body: r.body, replyToId: r.replyToId || '', clientId: r.clientId || '', editedAt: r.editedAt || '', createdAt: r.$createdAt });
+  // Light per-person limiter for the two actions that call other websites. It lives in memory, so it is a brake rather than a guarantee.
+  const hits = new Map();
+  function softLimit(kind, userId, count, seconds) {
+    const k = `${kind}:${userId}`, t = now(), from = t - seconds * 1000;
+    const list = (hits.get(k) || []).filter((x) => x > from);
+    if (list.length >= count) { hits.set(k, list); return false; }
+    list.push(t); hits.set(k, list);
+    if (hits.size > 2000) hits.delete(hits.keys().next().value);
+    return true;
+  }
   async function dropReactions(messageId) {
     for (let i = 0; i < 20; i++) {
       const page = await listRows(T.reactions, [Query.equal('messageId', [messageId]), Query.limit(100)]);
@@ -338,19 +358,59 @@ export function createChat(c) {
     async chatReact({ user, body }) {
       const ctx = await requireMember(user, body.familyId);
       const id = idOf(body.messageId, 'message');
-      const idx = REACTIONS.indexOf(body.emoji);
-      if (idx < 0) throw bad('That reaction is not available.');
+      const emoji = typeof body.emoji === 'string' ? body.emoji : '';
+      if (!emojiOk(emoji)) throw bad('Choose a single emoji to react with.');
       const row = await getRowOrNull(T.messages, id);
       if (!row || row.familyId !== ctx.familyId) throw missing('That message was not found.');
       const conv = await resolveConv(user, ctx.familyId, row.kind, row.convId);
       if (!conv.open) throw forbidden('This conversation is read-only now.');
-      const reactionKey = `${id}_${user.$id}_${idx}`;
+      // The six quick emoji keep their original key; every other emoji is keyed by a short hash of itself (one row per person per emoji per message).
+      const idx = REACTIONS.indexOf(emoji);
+      const reactionKey = `${id}_${user.$id}_${idx >= 0 ? idx : 'x' + createHash('sha1').update(emoji).digest('hex').slice(0, 12)}`;
       const ex = await firstRow(T.reactions, [Query.equal('reactionKey', [reactionKey])]);
       if (ex) { await deleteRow(T.reactions, ex.$id); return { on: false }; }
       if (await rateCheck(T.reactions, 'userId', user.$id, L.reactBurst)) throw tooMany('reacting');
-      try { await createRow(T.reactions, ID.unique(), { familyId: ctx.familyId, convId: row.convId, messageId: id, userId: user.$id, emoji: body.emoji, reactionKey }, conv.perms); }
+      const existing = await listRows(T.reactions, [Query.equal('messageId', [id]), Query.limit(100)]);
+      const kinds = new Set(existing.rows.map((r) => r.emoji));
+      if (!kinds.has(emoji) && kinds.size >= MAX_REACTION_KINDS) throw bad(`This message already has ${MAX_REACTION_KINDS} different reactions.`);
+      try { await createRow(T.reactions, ID.unique(), { familyId: ctx.familyId, convId: row.convId, messageId: id, userId: user.$id, emoji, reactionKey }, conv.perms); }
       catch (e) { if (sdkCode(e) !== 409) throw e; }
       return { on: true };
+    },
+
+
+    /* ----- link previews and GIF search (the server talks to the other websites, never the family's phones) ----- */
+    async chatPreview({ user, body }) {
+      await requireMember(user, body.familyId);
+      const url = typeof body.url === 'string' ? body.url.trim() : '';
+      if (!url || url.length > 500 || !checkUrl(url)) throw bad('That link cannot be previewed.');
+      if (!softLimit('preview', user.$id, 12, 60)) throw tooMany('asking for link previews');
+      return { preview: await doPreview(url) };
+    },
+
+    async chatGifs({ user, body }) {
+      await requireMember(user, body.familyId);
+      if (!giphyKey) return { configured: false, results: [], next: 0 };
+      const kind = body.kind === 'stickers' ? 'stickers' : 'gifs';
+      const q = typeof body.q === 'string' ? body.q.replace(/\s+/g, ' ').trim().slice(0, 50) : '';
+      const offset = Math.min(Math.max(parseInt(body.offset, 10) || 0, 0), 200);
+      if (!softLimit('gifs', user.$id, 30, 60)) throw tooMany('searching for GIFs');
+      const p = new URLSearchParams({ api_key: giphyKey, limit: '24', offset: String(offset), rating: giphyRating, bundle: 'messaging_non_clips' });
+      if (q) { p.set('q', q); p.set('lang', 'en'); }
+      let res;
+      try { res = await doFetch(`https://api.giphy.com/v1/${kind}/${q ? 'search' : 'trending'}?${p}`, { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } }); }
+      catch (e) { return { configured: true, results: [], next: 0, unavailable: true }; }
+      if (res.status === 429) throw tooMany('searching for GIFs');
+      if (!res.ok) return { configured: true, results: [], next: 0, unavailable: true };
+      let json; try { json = await res.json(); } catch (e) { return { configured: true, results: [], next: 0, unavailable: true }; }
+      const okUrl = (u) => { try { const x = new URL(u); return x.protocol === 'https:' && /^(media\d*|i)\.giphy\.com$/.test(x.hostname) ? x.toString() : ''; } catch (e) { return ''; } };
+      const results = (Array.isArray(json.data) ? json.data : []).map((g) => {
+        const im = g.images || {}, thumb = okUrl((im.fixed_width_small || im.fixed_width || {}).url), full = okUrl((im.fixed_width || im.downsized || {}).url);
+        const w = Number((im.fixed_width || {}).width) || 200, h = Number((im.fixed_width || {}).height) || 200;
+        return thumb && full && full.length <= 600 ? { id: String(g.id || '').slice(0, 40), title: String(g.title || '').slice(0, 80), thumb, url: full, w, h } : null;
+      }).filter(Boolean);
+      const total = Number((json.pagination || {}).total_count) || 0;
+      return { configured: true, results, next: offset + 24 < total && offset + 24 <= 200 ? offset + 24 : 0 };
     },
 
     /* ----- channel management (family owner or chat admin) ----- */

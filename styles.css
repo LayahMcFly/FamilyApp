@@ -1020,7 +1020,7 @@ dialog input[type="date"] { border-color: transparent; }
 /* v1.19.3 — no replayed animation after a swipe; lighter dim behind the sheet */
 .sheet.dragged, .sheet.dragged.closing { animation: none !important; }
 .sheet-backdrop { background: rgba(0, 0, 0, .32); }
-.reel + .sheet-backdrop, .reel .sheet-backdrop { background: rgba(0, 0, 0, .45); }
+.reel + .sheet-backdrop, .reel .sheet-backdrop { background: transparent; }   /* Shorts: the video stays bright; only the sheet is dark */
 .sheet .sheet-head { min-height: 48px; }
 
 /* v1.20 — tree toolbar (view switch, jump-to) and relationship labels */

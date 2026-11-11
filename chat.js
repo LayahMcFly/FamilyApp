@@ -178,6 +178,7 @@
       try { if (c.rt && c.rt.disconnect) Promise.resolve(c.rt.disconnect()).catch(function () {}); } catch (e) { /* closing */ }
       c.convs = {};   // message text is dropped from memory
     }
+    pvReset();
     document.body.classList.remove('chat-mode');
     document.documentElement.style.removeProperty('--vvh');
     closeSheets();
@@ -521,18 +522,14 @@
   /* ----- side panel: channels and direct messages ----- */
   function unreadPill(n) { return n > 0 ? h('span', { class: 'unread', 'aria-label': n + ' unread', text: n > 9 ? '9+' : String(n) }) : null; }
   function buildSide(c) {
-    var side = h('aside', { class: 'chat-side', 'aria-label': 'Channels and direct messages' });
+    var side = h('aside', { class: 'chat-side', 'aria-label': 'Channels' });
     var multi = X.S.families.length > 1;
     side.appendChild(h('div', { class: 'side-head' },
       h('a', { class: 'btn secondary small only-narrow', href: '#/home', 'aria-label': 'Back to Home' }, icon('back')),
       h('button', { class: 'fam-btn', type: 'button', 'aria-label': 'Family: ' + famLabel() + (multi ? '. Switch family' : ''), disabled: multi ? null : true, onclick: familySheet }, h('strong', { text: famLabel() }), multi ? icon('more') : null),
       h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Chat settings', onclick: function () { settingsSheet(c); } }, icon('gear'))));
-    side.appendChild(h('div', { class: 'tabs only-narrow', role: 'tablist' },
-      h('a', { class: 'tab', role: 'tab', 'aria-selected': c.route.mode === 'channels' ? 'true' : 'false', href: '#/chat', text: 'Channels' + (TOTALS.ch ? ' (' + (TOTALS.ch > 9 ? '9+' : TOTALS.ch) + ')' : '') }),
-      h('a', { class: 'tab', role: 'tab', 'aria-selected': c.route.mode === 'dms' ? 'true' : 'false', href: '#/dms', text: 'Direct messages' + (TOTALS.dm ? ' (' + (TOTALS.dm > 9 ? '9+' : TOTALS.dm) + ')' : '') })));
     var sc = h('div', { class: 'side-scroll' }); side.appendChild(sc);
-    var showCh = wide() || c.route.mode === 'channels', showDm = wide() || c.route.mode === 'dms';
-    if (showCh) {
+    {
       sc.appendChild(h('h2', { class: 'side-h', text: 'Text channels' }));
       var active = c.channels.filter(function (x) { return !x.archived; }), arch = c.channels.filter(function (x) { return x.archived; });
       active.forEach(function (ch) {
@@ -547,16 +544,12 @@
       }
       sc.appendChild(h('div', { class: 'row side-actions' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Family members', onclick: function () { membersSheet(c); } }), isManager(c) ? h('button', { class: 'btn secondary small', type: 'button', text: 'Manage channels', onclick: function () { channelsSheet(c); } }) : null));
     }
-    if (showDm) {
-      sc.appendChild(h('h2', { class: 'side-h', text: 'Direct messages' }));
-      sc.appendChild(h('button', { class: 'btn secondary small new-dm', type: 'button', text: 'New message', onclick: function () { newDmSheet(c); } }));
-      if (!c.dms.length) sc.appendChild(h('p', { class: 'muted small pad', text: 'No direct messages yet. Start one with someone in ' + famLabel() + '.' }));
-      c.dms.forEach(function (d) {
-        var on = c.cur && c.cur.id === d.id, n = (c.unread[d.id] || {}).n || 0;
-        sc.appendChild(h('a', { class: 'side-item' + (on ? ' on' : '') + (n ? ' has-unread' : ''), href: '#/dms/' + d.id, 'aria-current': on ? 'page' : null },
-          avatar(d.otherId, 'sm'), h('span', { class: 'grow' }, h('span', { text: realName(d.otherId) }), d.status !== 'open' ? h('span', { class: 'small muted', text: ' · closed' }) : null), unreadPill(n)));
-      });
-      sc.appendChild(h('p', { class: 'small muted pad', text: 'Direct messages are private to the two people in them. Owners and chat admins cannot read them.' }));
+    // People are in the rail on the left. Only conversations with someone who left the family are listed here, read-only.
+    var closed = c.dms.filter(function (d) { return d.status !== 'open'; });
+    if (closed.length) {
+      var cd = h('details', { class: 'arch' }, h('summary', { text: 'Closed conversations (' + closed.length + ')' }));
+      closed.forEach(function (d) { var on = c.cur && c.cur.id === d.id; cd.appendChild(h('a', { class: 'side-item dim' + (on ? ' on' : ''), href: '#/dms/' + d.id, 'aria-current': on ? 'page' : null }, avatar(d.otherId, 'sm'), h('span', { class: 'grow', text: realName(d.otherId) }))); });
+      sc.appendChild(cd);
     }
     return side;
   }
@@ -569,7 +562,7 @@
     var cv = c.cur;
     host.classList.toggle('has-conv', !!c.route.id);
     if (!cv) {
-      pane.appendChild(h('div', { class: 'chat-empty' }, h('p', { class: 'muted', text: c.route.mode === 'dms' ? 'Choose a conversation, or start a new one.' : 'Choose a channel to start reading.' })));
+      pane.appendChild(h('div', { class: 'chat-empty' }, h('p', { class: 'muted', text: c.route.mode === 'dms' ? 'Pick someone on the left to message.' : 'Choose a channel to start reading.' })));
       return;
     }
     var title = curTitle(c), ch = cv.kind === 'channel' ? channelById(c, cv.id) : null, dm = cv.kind === 'dm' ? dmById(c, cv.id) : null;
@@ -605,7 +598,81 @@
     else b.hidden = true;
   }
 
-  function msgText(m) { return h('div', { class: 'msg-text', text: m.body }); }
+  /* ----- links, link previews and GIFs ----- */
+  var URL_RE = /https?:\/\/[^\s<>"']+/g;
+  var GIF_RE = /^https:\/\/(?:media\d*|i)\.giphy\.com\/[A-Za-z0-9_\-\/.%]+\.(?:gif|webp)(?:\?[A-Za-z0-9_\-=&.%]*)?$/;
+  function previewsOn() { return lsGet('fc_chat_previews', true) !== false; }
+  /** Splits a message into text and web addresses; trailing punctuation stays outside the link. */
+  function splitLinks(text) {
+    var out = [], last = 0, mt;
+    URL_RE.lastIndex = 0;
+    while ((mt = URL_RE.exec(text))) {
+      var u = mt[0], trail = (u.match(/[.,!?;:)\]]+$/) || [''])[0];
+      if (trail) u = u.slice(0, u.length - trail.length);
+      try { var x = new URL(u); if (x.protocol !== 'http:' && x.protocol !== 'https:') continue; } catch (e) { continue; }
+      if (mt.index > last) out.push({ t: text.slice(last, mt.index) });
+      out.push({ u: u }); last = mt.index + u.length; URL_RE.lastIndex = last;
+    }
+    if (last < text.length) out.push({ t: text.slice(last) });
+    return out;
+  }
+  function gifOf(m) { var b = String(m.body || '').trim(); return GIF_RE.test(b) ? b : ''; }
+  function msgText(m) {
+    var el = h('div', { class: 'msg-text' });
+    if (gifOf(m) && previewsOn()) { el.classList.add('is-gif'); return el; }
+    splitLinks(String(m.body || '')).forEach(function (p) {
+      if (p.u) el.appendChild(h('a', { href: p.u, target: '_blank', rel: 'noopener noreferrer nofollow ugc', class: 'msg-link', text: p.u }));
+      else el.appendChild(document.createTextNode(p.t));
+    });
+    return el;
+  }
+  var PV = { cache: {}, queue: [], running: 0, io: null };
+  function pvReset() { PV.cache = {}; PV.queue = []; PV.running = 0; if (PV.io) { try { PV.io.disconnect(); } catch (e) { /* ok */ } PV.io = null; } }
+  function pvPump() {
+    while (PV.running < 2 && PV.queue.length) {
+      var job = PV.queue.shift(); PV.running++;
+      (function (j) {
+        api('chatPreview', { url: j.url }).then(function (r) { return r && r.preview ? r.preview : null; }, function () { return null; }).then(function (p) {
+          PV.running--; var e = PV.cache[j.url]; if (e) { e.state = p ? 'ok' : 'none'; e.data = p; e.subs.forEach(function (f) { f(e); }); e.subs = []; } pvPump();
+        });
+      })(job);
+    }
+  }
+  function pvRequest(url, cb) {
+    var e = PV.cache[url];
+    if (!e) { e = PV.cache[url] = { state: 'wait', data: null, subs: [] }; }
+    if (e.state === 'ok' || e.state === 'none') { cb(e); return; }
+    e.subs.push(cb);
+    if (e.state === 'wait') { e.state = 'queued'; PV.queue.push({ url: url }); pvPump(); }
+  }
+  function previewCard(url) {
+    var card = h('a', { class: 'link-card', href: url, target: '_blank', rel: 'noopener noreferrer nofollow ugc', 'aria-busy': 'true' }, h('span', { class: 'lc-skel', 'aria-hidden': 'true' }));
+    function fill(e) {
+      if (!card.parentNode) return;
+      if (e.state !== 'ok') { card.remove(); return; }
+      var d = e.data; clear(card); card.removeAttribute('aria-busy');
+      if (d.image) card.appendChild(h('img', { class: 'lc-img', src: d.image, alt: '', loading: 'lazy', decoding: 'async' }));
+      var tx = h('span', { class: 'lc-text' });
+      if (d.siteName) tx.appendChild(h('span', { class: 'lc-site small muted', text: d.siteName }));
+      if (d.title) tx.appendChild(h('strong', { class: 'lc-title', text: d.title }));
+      if (d.description) tx.appendChild(h('span', { class: 'lc-desc small', text: d.description }));
+      card.appendChild(tx);
+    }
+    var e0 = PV.cache[url];
+    if (e0 && (e0.state === 'ok' || e0.state === 'none')) { setTimeout(function () { fill(e0); }, 0); return card; }
+    if (typeof IntersectionObserver === 'undefined') { setTimeout(function () { pvRequest(url, fill); }, 0); return card; }
+    if (!PV.io) PV.io = new IntersectionObserver(function (ents) { ents.forEach(function (en) { if (en.isIntersecting) { PV.io.unobserve(en.target); en.target._go && en.target._go(); } }); }, { rootMargin: '200px' });
+    card._go = function () { pvRequest(url, fill); };
+    PV.io.observe(card);
+    return card;
+  }
+  function msgExtras(m) {
+    if (!previewsOn()) return null;
+    var g = gifOf(m);
+    if (g) return h('div', { class: 'gif-wrap' }, h('img', { class: 'gif-img', src: g, alt: 'GIF', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }), h('span', { class: 'gif-credit small muted', text: 'via GIPHY' }));
+    var first = splitLinks(String(m.body || '')).filter(function (p) { return p.u; })[0];
+    return first ? previewCard(first.u) : null;
+  }
   function replyPreview(c, cv, m) {
     var id = m.replyToId; if (!id) return null;
     var t = cv.msgs.filter(function (x) { return x.$id === id; })[0] || cv.replyCache[id];
@@ -622,12 +689,28 @@
     catch (e) { cv.replyCache[id] = e && e.code === 404 ? null : null; }
     if (C === c && c.cur === cv) paintMessages('keep');
   }
+  function convOpen(c, cv) { var ch = cv.kind === 'channel' ? channelById(c, cv.id) : null, dm = cv.kind === 'dm' ? dmById(c, cv.id) : null; return ch ? !ch.archived : (dm ? dm.status === 'open' : false); }
   function reactionRow(c, cv, m) {
     var by = cv.react.get(m.$id); if (!by || !by.size) return null;
     var row = h('div', { class: 'msg-reacts' });
-    c.reactions.forEach(function (e) { var set = by.get(e); if (!set || !set.size) return; var mine = set.has(c.uid);
+    by.forEach(function (set, e) { if (!set || !set.size) return; var mine = set.has(c.uid);
       row.appendChild(h('button', { class: 'react' + (mine ? ' mine' : ''), type: 'button', 'aria-pressed': mine ? 'true' : 'false', 'aria-label': e + ' ' + set.size + (set.size === 1 ? ' person' : ' people') + (mine ? ', including you' : ''), onclick: function () { react(c, cv, m, e); } }, e + ' ' + set.size)); });
+    if (!row.firstChild) return null;
+    if (convOpen(c, cv)) row.appendChild(h('button', { class: 'react add', type: 'button', 'aria-label': 'Add another reaction', text: '+', onclick: function () { emojiPicker(c, cv, m); } }));
     return row;
+  }
+  /** Press and hold (touch) or right-click (mouse) on a message runs fn, like Discord. Buttons, links and boxes keep working normally. */
+  function attachHold(node, fn) {
+    var t = null, sx = 0, sy = 0, fired = false;
+    function cancel() { clearTimeout(t); t = null; }
+    node.addEventListener('pointerdown', function (ev) {
+      if (ev.pointerType === 'mouse' || (ev.target.closest && ev.target.closest('a, button, input, textarea'))) return;
+      sx = ev.clientX; sy = ev.clientY; fired = false; cancel();
+      t = setTimeout(function () { t = null; fired = true; try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) { /* ok */ } fn(); }, 420);
+    });
+    node.addEventListener('pointermove', function (ev) { if (t && (Math.abs(ev.clientX - sx) > 10 || Math.abs(ev.clientY - sy) > 10)) cancel(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { node.addEventListener(n, cancel); });
+    node.addEventListener('contextmenu', function (ev) { if (ev.target.closest && ev.target.closest('a')) return; ev.preventDefault(); cancel(); if (!fired) fn(); fired = false; });
   }
   function messageNode(c, cv, m, grouped) {
     var mine = m.authorId === c.uid;
@@ -639,6 +722,7 @@
     var body = h('div', { class: 'msg-bubble', title: fullTime(m.$createdAt) }, msgText(m));
     if (m.editedAt) body.appendChild(h('span', { class: 'msg-edited small muted', title: 'Edited ' + fullTime(m.editedAt), text: ' (edited)' }));
     main.appendChild(body);
+    var ex = msgExtras(m); if (ex) main.appendChild(ex);
     var rr = reactionRow(c, cv, m); if (rr) main.appendChild(rr);
     if (m._local) {
       if (m._status === 'sending') main.appendChild(h('div', { class: 'msg-status small muted', role: 'status', text: 'Sending…' }));
@@ -646,6 +730,7 @@
         h('button', { class: 'link-btn', type: 'button', text: 'Retry', onclick: function () { doSend(c, cv, m); } }), ' · ', h('button', { class: 'link-btn', type: 'button', text: 'Remove', onclick: function () { cv.msgs = cv.msgs.filter(function (x) { return x !== m; }); paintMessages('keep'); } })));
     } else {
       if (grouped) body.setAttribute('title', fullTime(m.$createdAt));
+      attachHold(node, function () { messageMenu(c, cv, m); });
       node.appendChild(main);
       node.appendChild(h('button', { class: 'msg-more', type: 'button', 'aria-label': 'Message actions for ' + realName(m.authorId) + ' at ' + timeText(m.$createdAt), onclick: function () { messageMenu(c, cv, m); } }, icon('more')));
       return node;
@@ -700,6 +785,7 @@
     var ta = h('textarea', { rows: 1, maxlength: c.limits.body, 'aria-label': 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), placeholder: 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), enterkeyhint: 'send', autocomplete: 'off' });
     ta.value = c.drafts[cv.id] || '';
     var count = h('div', { class: 'small muted count', hidden: true, 'aria-live': 'off' });
+    var gifBtn = h('button', { class: 'btn ghost gif-btn', type: 'button', 'aria-label': 'Choose a GIF or sticker', text: 'GIF', onclick: function () { gifPicker(c, function (url) { sendText(c, cv, url, reply ? reply.$id : ''); setReply(null); }); } });
     var send = h('button', { class: 'btn ghost send-btn', type: 'submit', 'aria-label': 'Send message' }, icon('send'));
     function grow() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; var n = ta.value.length; count.hidden = n < c.limits.body - 150; count.textContent = n + ' / ' + c.limits.body; c.drafts[cv.id] = ta.value; send.disabled = !ta.value.trim(); }
     function setReply(m) { reply = m; replyBar.hidden = !m; clear(replyBar); if (m) { replyBar.appendChild(h('span', { class: 'clamp' }, 'Replying to ', h('strong', { text: realName(m.authorId) }), ': ' + m.body)); replyBar.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Cancel reply', text: '×', onclick: function () { setReply(null); ta.focus(); } })); ta.focus(); } }
@@ -710,9 +796,36 @@
       ev.preventDefault(); var t = ta.value.trim(); if (!t) return;
       if (t.length > c.limits.body) { toast('Messages can be up to ' + c.limits.body + ' characters.'); return; }
       sendText(c, cv, t, reply ? reply.$id : ''); ta.value = ''; c.drafts[cv.id] = ''; setReply(null); grow(); ta.focus();
-    } }, replyBar, h('div', { class: 'composer-row' }, ta, send), count);
+    } }, replyBar, h('div', { class: 'composer-row' }, gifBtn, ta, send), count);
     wrap.appendChild(form); grow();
     return wrap;
+  }
+
+  /* ----- GIF and sticker picker (GIPHY, searched through the family server) ----- */
+  function gifPicker(c, onPick) {
+    var body = h('div', { class: 'gp' }), kind = 'gifs', q = '', offset = 0, seq = 0, timer = 0, s;
+    var tabs = h('div', { class: 'gp-tabs', role: 'group', 'aria-label': 'Type' });
+    var search = h('input', { type: 'search', class: 'gp-search', placeholder: 'Search GIPHY', 'aria-label': 'Search GIFs', maxlength: 50, autocomplete: 'off' });
+    var grid = h('div', { class: 'gp-grid' }), note = h('p', { class: 'small muted gp-note', role: 'status' }), more = h('button', { class: 'btn secondary small', type: 'button', text: 'Load more', hidden: true });
+    ['gifs', 'stickers'].forEach(function (k) { tabs.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-pressed': k === kind ? 'true' : 'false', 'data-k': k, text: k === 'gifs' ? 'GIFs' : 'Stickers', onclick: function () { kind = k; Array.prototype.forEach.call(tabs.children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-k') === kind ? 'true' : 'false'); }); load(true); } })); });
+    function load(fresh) {
+      var my = ++seq; if (fresh) { offset = 0; clear(grid); } note.textContent = 'Loading…'; more.hidden = true;
+      api('chatGifs', { kind: kind, q: q, offset: offset }).then(function (r) {
+        if (my !== seq || !C) return;
+        if (!r.configured) { note.textContent = 'GIFs are not set up yet. The family owner can add a free GIPHY key; the steps are in CHAT-GUIDE.md.'; return; }
+        if (r.unavailable) { note.textContent = 'GIPHY could not be reached. Try again in a moment.'; return; }
+        r.results.forEach(function (g) {
+          grid.appendChild(h('button', { class: 'gp-item', type: 'button', 'aria-label': g.title || 'GIF', onclick: function () { s.close(); onPick(g.url); } }, h('img', { src: g.thumb, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' })));
+        });
+        note.textContent = grid.children.length ? '' : 'Nothing found. Try another word.';
+        offset = r.next; more.hidden = !r.next;
+      }, function (e) { if (my === seq) note.textContent = msgOf(e); });
+    }
+    search.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { q = search.value.replace(/\s+/g, ' ').trim(); load(true); }, 350); });
+    more.addEventListener('click', function () { load(false); });
+    [tabs, search, grid, note, more, h('p', { class: 'small muted gp-credit', text: 'Powered by GIPHY. Your search words go to GIPHY through the family server; the pictures load from giphy.com.' })].forEach(function (n) { body.appendChild(n); });
+    s = sheet('GIFs and stickers', body);
+    load(true);
   }
 
   /* ----- message menu: reactions, reply, edit, delete ----- */
@@ -725,14 +838,78 @@
     if (open) {
       var row = h('div', { class: 'emoji-row', role: 'group', 'aria-label': 'React' });
       c.reactions.forEach(function (e) { var on = cv.react.get(m.$id) && cv.react.get(m.$id).get(e) && cv.react.get(m.$id).get(e).has(c.uid); row.appendChild(h('button', { class: 'emoji' + (on ? ' on' : ''), type: 'button', 'aria-pressed': on ? 'true' : 'false', 'aria-label': 'React ' + e, text: e, onclick: function () { s.close(); react(c, cv, m, e); } })); });
+      row.appendChild(h('button', { class: 'emoji more', type: 'button', 'aria-label': 'More reactions: every emoji', text: '+', onclick: function () { s.close(); emojiPicker(c, cv, m); } }));
       body.appendChild(row);
       body.appendChild(h('button', { class: 'cs-row', type: 'button', onclick: function () { s.close(); if (cv.setReply) cv.setReply(m); } }, h('span', { class: 'grow', text: 'Reply' })));
     }
+    body.appendChild(h('button', { class: 'cs-row', type: 'button', onclick: function () { s.close(); copyText(m.body); } }, h('span', { class: 'grow', text: 'Copy text' })));
     if (mine && open) body.appendChild(h('button', { class: 'cs-row', type: 'button', onclick: function () { s.close(); editMessage(c, cv, m); } }, h('span', { class: 'grow', text: 'Edit' })));
     if (mine) body.appendChild(h('button', { class: 'cs-row danger-text', type: 'button', onclick: function () { s.close(); deleteMessage(c, cv, m, false); } }, h('span', { class: 'grow', text: 'Delete' })));
     else if (cv.kind === 'channel' && isManager(c)) body.appendChild(h('button', { class: 'cs-row danger-text', type: 'button', onclick: function () { s.close(); deleteMessage(c, cv, m, true); } }, h('span', { class: 'grow', text: 'Remove as ' + (c.role === 'owner' ? 'family owner' : 'chat admin') })));
     body.appendChild(h('p', { class: 'small muted', text: 'Sent ' + fullTime(m.$createdAt) + (m.editedAt ? ' · edited ' + fullTime(m.editedAt) : '') }));
     s = sheet('Message', body);
+  }
+  function copyText(t) {
+    function fallback() { var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Copied.'); } catch (e) { toast('Could not copy.'); } document.body.removeChild(ta); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { toast('Copied.'); }, fallback); else fallback();
+  }
+
+  /* ----- emoji picker: every emoji, with search, skin tones and recently used. The list (about 45 KB) loads the first time it is opened. ----- */
+  var EMOJI_P = null, TONES = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'], CAT_ICON = ['\u{1F600}', '\u{1F44B}', '\u{1F43B}', '\u{1F354}', '\u2708\uFE0F', '\u26BD', '\u{1F4A1}', '\u2764\uFE0F', '\u{1F3C1}'];
+  function loadEmoji() {
+    if (window.FC_EMOJI) return Promise.resolve(window.FC_EMOJI);
+    if (!EMOJI_P) EMOJI_P = new Promise(function (res, rej) {
+      var me = document.querySelector('script[src*="chat.js"]'), sc = document.createElement('script');
+      sc.src = me ? me.src.replace('chat.js', 'emoji-data.js') : 'emoji-data.js';
+      sc.onload = function () { window.FC_EMOJI ? res(window.FC_EMOJI) : rej(new Error('empty')); }; sc.onerror = function () { EMOJI_P = null; rej(new Error('load')); };
+      document.head.appendChild(sc);
+    });
+    return EMOJI_P;
+  }
+  function lsGet(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ok */ } }
+  /** Puts a skin tone after each person in an emoji. Anything that would be too long for a reaction keeps its default look. */
+  function withTone(e, tone) {
+    if (!tone) return e;
+    try {
+      var cps = Array.from(e), out = '';
+      for (var i = 0; i < cps.length; i++) { out += cps[i]; if (/\p{Emoji_Modifier_Base}/u.test(cps[i])) { out += tone; if (cps[i + 1] === '\uFE0F') i++; } }
+      return out.length <= 8 ? out : e;
+    } catch (err) { return e; }
+  }
+  function emojiPicker(c, cv, m) {
+    var body = h('div', { class: 'ep' }), grid = h('div', { class: 'ep-grid', role: 'group', 'aria-label': 'Emoji' });
+    var s = sheet('Add reaction', body), tone = lsGet('fc_chat_tone', 0), cat = 0, data = null;
+    var search = h('input', { type: 'search', 'aria-label': 'Search emoji', placeholder: 'Search emoji', autocomplete: 'off' });
+    var tabs = h('div', { class: 'ep-tabs', role: 'group', 'aria-label': 'Emoji groups' }), tonesEl = h('div', { class: 'ep-tones', role: 'group', 'aria-label': 'Skin tone' });
+    body.appendChild(h('div', { class: 'spin-line muted small', text: 'Loading emoji…' }));
+    function pick(e) { s.close(); var r = lsGet('fc_chat_recent', []).filter(function (x) { return x !== e; }); r.unshift(e); lsSet('fc_chat_recent', r.slice(0, 24)); react(c, cv, m, e); }
+    function parse(str) { var skin = str.charAt(0) === '~'; if (skin) str = str.slice(1); var i = str.indexOf(' '); return { e: str.slice(0, i), n: str.slice(i + 1), skin: skin }; }
+    function btn(it) { var e = it.skin ? withTone(it.e, TONES[tone]) : it.e; return h('button', { class: 'ep-e', type: 'button', title: it.n, 'aria-label': it.n, text: e, onclick: function () { pick(e); } }); }
+    function paint() {
+      clear(grid); var q = search.value.trim().toLowerCase();
+      tabs.hidden = !!q;
+      if (q) {
+        var n = 0; data.forEach(function (g) { g[1].forEach(function (str) { if (n >= 150) return; var it = parse(str); if (it.n.toLowerCase().indexOf(q) >= 0) { grid.appendChild(btn(it)); n++; } }); });
+        if (!n) grid.appendChild(h('p', { class: 'muted small', text: 'No emoji match "' + search.value.trim() + '".' }));
+      } else if (cat === 0) {
+        var rec = lsGet('fc_chat_recent', []);
+        if (!rec.length) grid.appendChild(h('p', { class: 'muted small', text: 'Emoji you use show up here.' }));
+        rec.forEach(function (e) { grid.appendChild(h('button', { class: 'ep-e', type: 'button', text: e, 'aria-label': e, onclick: function () { pick(e); } })); });
+      } else data[cat - 1][1].forEach(function (str) { grid.appendChild(btn(parse(str))); });
+      grid.scrollTop = 0;
+    }
+    function paintChrome() {
+      clear(tabs); clear(tonesEl);
+      ['\u{1F552}'].concat(CAT_ICON).forEach(function (ic, i) { tabs.appendChild(h('button', { class: 'ep-tab', type: 'button', 'aria-pressed': i === cat ? 'true' : 'false', 'aria-label': i === 0 ? 'Recently used' : data[i - 1][0], title: i === 0 ? 'Recently used' : data[i - 1][0], text: ic, onclick: function () { cat = i; paintChrome(); paint(); } })); });
+      TONES.forEach(function (t, i) { tonesEl.appendChild(h('button', { class: 'ep-tone', type: 'button', 'aria-pressed': i === tone ? 'true' : 'false', 'aria-label': i === 0 ? 'Default skin tone' : 'Skin tone ' + i, text: '\u{1F44B}' + t, onclick: function () { tone = i; lsSet('fc_chat_tone', i); paintChrome(); paint(); } })); });
+    }
+    loadEmoji().then(function (d) {
+      data = d; clear(body);
+      if (!lsGet('fc_chat_recent', []).length) cat = 1;
+      body.appendChild(search); body.appendChild(tonesEl); body.appendChild(tabs); body.appendChild(grid);
+      search.addEventListener('input', paint); paintChrome(); paint();
+    }).catch(function () { clear(body); body.appendChild(h('p', { class: 'muted', text: 'The emoji list could not load. Check your connection and try again.' })); });
   }
   async function react(c, cv, m, emoji) {
     // The change shows when the server confirms it (it arrives by realtime, or from this answer if realtime is off).
@@ -823,6 +1000,11 @@
     body.appendChild(h('h3', { text: 'Direct messages in ' + famLabel() }));
     body.appendChild(h('label', { class: 'check' }, allow, ' Let family members start and continue direct messages with me'));
     body.appendChild(h('p', { class: 'small muted', text: 'Turning this off stops new messages from everyone in this family. People are not told. Your existing history stays readable to you.' }));
+    var pv = h('input', { type: 'checkbox', id: 'cs-pv' }); pv.checked = previewsOn();
+    pv.addEventListener('change', function () { lsSet('fc_chat_previews', pv.checked); pvReset(); if (C) paintMessages('keep'); toast(pv.checked ? 'Link previews and GIFs are on.' : 'Link previews and GIFs are off.'); });
+    body.appendChild(h('h3', { text: 'Links and GIFs' }));
+    body.appendChild(h('label', { class: 'check' }, pv, ' Show link previews and GIFs on this device'));
+    body.appendChild(h('p', { class: 'small muted', text: 'A preview is made by the family server visiting the link, so your device never contacts that website. GIFs load straight from GIPHY, which can see your internet address. Turn this off to see plain links only.' }));
     body.appendChild(h('h3', { text: 'People you blocked' }));
     if (!c.blocked.length) body.appendChild(h('p', { class: 'small muted', text: 'No one.' }));
     c.blocked.forEach(function (uid) { body.appendChild(h('div', { class: 'cs-member' }, avatar(uid, 'sm'), h('span', { class: 'grow', text: realName(uid) }), h('button', { class: 'btn secondary small', type: 'button', text: 'Unblock', 'aria-label': 'Unblock ' + realName(uid), onclick: function () { s.close(); setBlock(c, uid, false); } }))); });

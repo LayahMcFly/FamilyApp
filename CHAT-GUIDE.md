@@ -13,12 +13,14 @@ Version 1.47.0. Channels and direct messages for each family, opened from the sm
 | Center handle with a quick-actions panel (Create post, Family chat, Direct messages) | Still five bottom items. Tap, swipe up, Enter, Space or Arrow Up opens it. Escape, outside tap, swipe down close it. |
 | Family chat for the active family | Starter channels `# general`, `# announcements` (read-only), `# plans-and-events`. |
 | Family switcher | Only your own confirmed families. Switching closes the old connection and drops the old messages first. |
-| Text messages with name, picture, time, date lines, grouping | Text only, shown as plain text (no HTML is ever interpreted). |
-| Replies, 6 emoji reactions, edit (with "edited"), delete (with confirmation) | Reply and react work only inside the same conversation. |
+| Text messages with name, picture, time, date lines, grouping | Shown as plain text (no HTML is ever interpreted). Links are the only clickable part. |
+| Replies, reactions with any emoji, edit (with "edited"), delete (with confirmation) | Tap and hold a message (or right-click) to open the menu. Six quick emoji sit on top, and the **+** opens every emoji with search and skin tones. Up to 20 different emoji per message. Reply and react work only inside the same conversation. |
+| Links with preview cards | A web address in a message becomes a tappable link. The first link also gets a card with the site name, title, description and picture. The family server fetches the page, so nobody's phone contacts that site. |
+| GIFs and stickers | The **GIF** button next to the message box searches GIPHY. It needs a free GIPHY key (step 5b). Until then the button says GIFs are not set up. |
 | Older messages (30 at a time), "New messages" line, "Jump to latest" | A new message never drags you away from older ones you are reading. |
 | Sending, failed and retry | Retry reuses the same message id, so a retry can never post twice. |
 | Unread dots and counts per person and per conversation | Counts come from the server. "Read" is defined in Part 2. |
-| Direct messages, per family, one thread per pair | Participants only. Block a person, or turn off DMs from everyone. |
+| Direct messages, per family, one thread per pair | Participants only. Start one by tapping a family member's picture in the left rail (below the **H**). The person who wrote last sits on top. The **H** (family chat) stays pinned at the very top. Block a person, or turn off DMs from everyone. |
 | Roles: family owner, chat admin, member | Chat admins are chosen by an owner. Tree admins and shop access mean nothing here. |
 | Channel tools for owners and chat admins | Create, rename, describe, reorder (up/down), archive and restore, read-only switch. |
 | Moderation record | Who removed a message or archived a channel, where and when. Never the message text. Never for DMs. |
@@ -27,12 +29,13 @@ Version 1.47.0. Channels and direct messages for each family, opened from the sm
 
 | Not in this version (no buttons exist for these) | Why |
 |---|---|
-| Typing indicators, attachments, pinned messages, push notifications | Each needs its own storage or permission design. |
+| Typing indicators, photo or file attachments, pinned messages, push notifications | Each needs its own storage or permission design. |
 | Private or restricted channels | Needs per-channel membership rules that are not built or tested. All channels are visible to all current members. |
 | Search inside messages | Appwrite search needs extra indexes. Later. |
 | Reopening a closed DM when someone rejoins | A closed DM stays closed. |
 | Voice, video, screen sharing, bots, public discovery | Out of scope by request. |
 | End-to-end encryption | Not built. Do not describe chat as end-to-end encrypted. |
+| 16 long emoji combinations as reactions (families, kisses, and the England, Scotland and Wales flags) | The reaction column is 8 characters wide. They can still be typed in a message. |
 
 ---
 
@@ -41,6 +44,7 @@ Version 1.47.0. Channels and direct messages for each family, opened from the sm
 ### Navigation
 - **Phone:** one screen at a time. The channel list (or DM inbox) is its own screen. Choosing a channel opens the conversation with a back arrow. The header always shows the channel name and the family name. The bottom bar is hidden inside chat so the message box sits right above the keyboard. The page height follows the visible area of the phone (the visual viewport), so the box rides above the keyboard.
 - **Desktop (900 px and wider):** the channel sidebar and the conversation are side by side. At 1100 px and wider a family switcher column appears at the left. Below that, switch families from the family name at the top of the sidebar.
+- **Left rail:** the **H** is pinned at the top, a thin line sits under it, and below that every other family member appears as a picture, most recent conversation first. Tap one to open or start a direct message. A red number shows unread messages. The rail has no separate "Direct messages" tab, because the people are the list.
 - **Routes** (hash routing, the `/FamilyCircle/` path is untouched): `#/chat`, `#/chat/<channelId>`, `#/dms`, `#/dms/<dmId>`.
 
 ### The model
@@ -63,6 +67,12 @@ Version 1.47.0. Channels and direct messages for each family, opened from the sm
 | Remove someone else's DM message | **no** | **no** | **no** |
 
 Being someone's parent in the family tree, a tree admin, or a store admin grants nothing here (there is a test for this).
+
+### Links, previews and GIFs
+- **Links:** only `http://` and `https://` addresses become links. They open in a new tab with `noopener noreferrer nofollow`. Example: `https://example.com/recipe, thanks!` links to the address without the comma.
+- **Previews:** when a card is about to scroll into view, the phone asks the family server for it. The server refuses addresses that point inside its own network (home-network and cloud-internal ranges, `localhost`, and web addresses that resolve to them), checks every redirect the same way, reads at most 512 KB of page, accepts only HTML, takes the picture only if it is a normal PNG, JPEG, GIF or WebP under 200 KB, and gives up after 5 seconds. Only members of the family can ask, 12 requests per minute per person. If a site refuses or has nothing to show, no card appears.
+- **GIFs:** choosing one sends its GIPHY address as an ordinary message. A message that is only a GIPHY address shows the picture with "via GIPHY".
+- **Switch:** Chat settings, **Links and GIFs**. Off means plain links, no cards, no GIFs, and no preview requests.
 
 ### Direct message policy
 - **Scope:** per family. The conversation is created inside one family and is only usable while both people are members of it.
@@ -96,8 +106,8 @@ No new service and no new package. Everything runs on your existing Appwrite pro
 ## Part 3. Files
 
 New:
-- `chat.js`, `chat.css` (front end)
-- `function/src/chat.js` (all trusted chat logic), `function/test/chat.test.js` (17 tests)
+- `chat.js`, `chat.css`, `emoji-data.js` (front end; the emoji list loads only when someone opens the emoji picker)
+- `function/src/chat.js` (all trusted chat logic), `function/src/preview.js` (safe link fetching), `function/test/chat.test.js` and `function/test/preview.test.js`
 - `setup/setup-chat.mjs` and `.github/workflows/setup-chat-tables.yml` (tables, indexes, self-check, optional starter channels)
 - `setup/verify-chat-access.mjs` and `.github/workflows/verify-chat-access.yml` (live privacy check)
 - `CHAT-GUIDE.md`
@@ -170,6 +180,15 @@ Do these in order. About 30 minutes, most of it waiting for Appwrite to build co
 **Check:** the Events section now lists `teams.*.memberships.*.delete`.
 **If you can't find Custom event:** pick **Teams**, then **Memberships**, then **Delete** from the lists instead. Appwrite builds the same text for you. Screens differ a little between Console versions, so if neither works, skip this step and tell me what you see.
 
+### Step 5b. Turn on GIFs (optional, 5 minutes)
+*Why:* the GIF button needs a search service. Google's Tenor shut its service down on June 30, 2026, so this uses GIPHY, which has a free tier. Without a key everything else in chat works and the GIF picker explains that GIFs are not set up.
+*Where and do:*
+1. Go to developers.giphy.com, create a free account, choose **Create an App**, pick **API**, and copy the key it shows.
+2. In the Appwrite Console open Functions, `family-api`, Settings, Variables, and add `GIPHY_API_KEY` with that key. Optionally add `GIPHY_RATING` with `g` (default, the safest), `pg` or `pg-13`.
+3. Open Deployments and redeploy (step 4 again, or the three-dot menu on the active deployment, Redeploy). Variables are read only when a deployment starts.
+*Check:* in chat tap **GIF**. Pictures appear. *If it says "not set up":* the variable name is misspelled or the redeploy did not finish. *If it says GIPHY could not be reached:* wait a minute. A new free key has a low hourly allowance, which is enough for a family and can be raised from the GIPHY dashboard.
+*Privacy:* the words you search go to GIPHY through the family server, without your name. A GIF in a message loads from giphy.com in each viewer's browser, so GIPHY can see that viewer's internet address. Each person can switch this off under Chat settings, Links and GIFs.
+
 ### Step 6. Confirm the web platform (for Realtime)
 *Where:* Console, your project, Overview, Platforms. *Check:* a Web platform with hostname `layahmcfly.github.io` exists (no path). Realtime uses the same list. You already have it, so nothing to change.
 
@@ -226,7 +245,11 @@ Use two accounts, A (owner) and B (member), plus C (member who is in a different
 16. B blocks A: A's send fails with "not taking direct messages right now" and is not told why.
 17. Owner removes B from the family (Settings, Family and members): B is signed out of that family's chat, B's open chat shows the access error, and A can read the old DM but cannot reply.
 18. Run the privacy check (step 11).
-19. Keyboard only: Tab to the handle, Enter, arrow keys inside the panel, Escape. Reduced motion (phone setting Reduce Motion) removes the panel animation. On a phone, tap the message box: the box stays above the keyboard.
+19. Tap and hold a message for about half a second: the menu opens. Tap **+** and react with an emoji that is not one of the six, such as a flag. It shows on the other phone. Add 21 different emoji to one message: the 21st is refused with a clear message.
+20. Send `https://example.com`: it is a link, and a card appears within a few seconds. Send `javascript:alert(1)`: it stays plain text. Send a link to a private address such as `http://192.168.0.1`: it is a link, with no card.
+21. Chat settings, Links and GIFs off: the card and any GIF turn into plain links.
+22. With a GIPHY key set (step 5b): tap **GIF**, search "cat", tap a result. It sends as a picture. Try the Stickers tab and **Load more**.
+23. Keyboard only: Tab to the handle, Enter, arrow keys inside the panel, Escape. Reduced motion (phone setting Reduce Motion) removes the panel animation. On a phone, tap the message box: the box stays above the keyboard.
 
 ---
 

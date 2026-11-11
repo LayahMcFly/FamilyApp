@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createApi, TABLES } from '../src/logic.js';
 import { CHAT_TABLES, CHAT_LIMITS, DEFAULT_CHANNELS } from '../src/chat.js';
+const EXTRA_CFG = {};   // tests put stand-ins for the outside world here (link preview fetcher, GIF service)
 
 /* ---------- in-memory fake of the server services (queries, unique keys, permissions) ---------- */
 function makeWorld() {
@@ -62,7 +63,7 @@ function makeWorld() {
     async listMemberships({ teamId }) { return { memberships: world.teams[teamId].members.map((m) => ({ ...m, teamId })) }; },
     async delete() { return {}; }
   };
-  const api = createApi({ users, teams, db, storage: {}, cfg: { databaseId: 'family', bucketId: 'b', maxOwnedFamilies: 3, maxVideoMB: 15, familyStorageMB: 500 }, now: () => world.clock + seq * 1000 + 500 });
+  const api = createApi({ users, teams, db, storage: {}, cfg: { databaseId: 'family', bucketId: 'b', maxOwnedFamilies: 3, maxVideoMB: 15, familyStorageMB: 500, ...EXTRA_CFG }, now: () => world.clock + seq * 1000 + 500 });
   const U = (id) => ({ $id: id, emailVerification: true, status: true, labels: [] });
   const call = async (uid, action, body = {}) => { const r = await api.handle({ user: U(uid), body: { action, ...body }, deadline: Number.MAX_SAFE_INTEGER }); return r; };
   const ok = async (uid, action, body) => { const r = await call(uid, action, body); assert.equal(r.status, 200, `${action}: ${JSON.stringify(r.json)}`); return r.json; };
@@ -172,10 +173,20 @@ test('edit and delete: own messages only; admins can remove shared-channel messa
   assert.equal((await w.ok('bob', 'chatDelete', { familyId: 'famA', messageId: own.id })).moderated, false);
 });
 
-test('reactions: small fixed set, toggle, access-checked', async () => {
+test('reactions: at most 20 different emoji on one message', async () => {
+  const { w, ch } = await setup();
+  const m = (await w.ok('ann', 'chatSend', { familyId: 'famA', kind: 'channel', convId: ch.general, body: 'hi', clientId: cid() })).message;
+  const set = ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋'];
+  for (const [i, e] of set.entries()) await w.ok(i % 2 ? 'ann' : 'bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: e });
+  await w.fail('bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: '😛' }, 400);
+  assert.equal((await w.ok('ann', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: '😀' })).on, true, 'an emoji already on the message can still be added by someone else');
+});
+test('reactions: any single emoji, toggle, caps, access-checked', async () => {
   const { w, ch } = await setup();
   const m = (await w.ok('ann', 'chatSend', { familyId: 'famA', kind: 'channel', convId: ch.general, body: 'x', clientId: cid() })).message;
-  await w.fail('bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: '💣' }, 400);
+  for (const bad of ['', 'hi', '👍👍', 'a👍', '👨‍👩‍👧‍👦', '<b>', '🏴󠁧󠁢󠁥󠁮󠁧󠁿']) await w.fail('bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: bad }, 400);
+  for (const good of ['🎉', '🇺🇸', '👍🏽', '1️⃣', '❤️‍🔥', '🧑‍🤝‍🧑']) assert.equal((await w.ok('bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: good })).on, true, good);
+  assert.equal((await w.ok('bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: '🎉' })).on, false, 'toggles off');
   assert.equal((await w.ok('bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: '❤️' })).on, true);
   assert.equal((await w.ok('bob', 'chatReact', { familyId: 'famA', messageId: m.id, emoji: '❤️' })).on, false);
   await w.fail('yan', 'chatReact', { familyId: 'famB', messageId: m.id, emoji: '👍' }, 404);
@@ -328,4 +339,49 @@ test('chat works for people in more than one family without mixing them', async 
   assert.equal(b.role, 'owner');
   assert.equal(new Set([...a.channels, ...b.channels].map((c) => c.id)).size, 6);
   await w.fail('ann', 'chatSend', { familyId: 'famB', kind: 'channel', convId: a.channels[0].id, body: 'x', clientId: cid() }, 404);
+});
+
+
+test('link previews: members only, safe addresses only, rate limited', async () => {
+  const calls = []; EXTRA_CFG.fetchPreview = async (u) => { calls.push(u); return { url: u, title: 'T', description: 'D', siteName: 's', image: '' }; };
+  try {
+    const { w } = await setup();
+    const r = await w.ok('ann', 'chatPreview', { familyId: 'famA', url: 'https://example.com/a' });
+    assert.equal(r.preview.title, 'T'); assert.deepEqual(calls, ['https://example.com/a']);
+    for (const u of ['http://127.0.0.1/', 'http://169.254.169.254/latest/meta-data', 'ftp://example.com/', 'https://user:pw@example.com/', 'http://localhost/', '', '   ', 'https://example.com/' + 'a'.repeat(600), 42, null])
+      await w.fail('ann', 'chatPreview', { familyId: 'famA', url: u }, 400);
+    assert.equal(calls.length, 1, 'refused links never reach the fetcher');
+    await w.fail('zed', 'chatPreview', { familyId: 'famA', url: 'https://example.com/' }, 403);
+    await w.fail('yan', 'chatPreview', { familyId: 'famA', url: 'https://example.com/' }, 403);
+    for (let i = 0; i < 12; i++) await w.ok('bob', 'chatPreview', { familyId: 'famA', url: 'https://example.com/' + i });
+    await w.fail('bob', 'chatPreview', { familyId: 'famA', url: 'https://example.com/y' }, 429);
+  } finally { delete EXTRA_CFG.fetchPreview; }
+});
+
+test('GIF search: off until a key is set, family-safe rating, only GIPHY addresses come back, key never returned', async () => {
+  let setupW = await setup();
+  const off = await setupW.w.ok('ann', 'chatGifs', { familyId: 'famA', q: 'cat' });
+  assert.deepEqual([off.configured, off.results, off.next], [false, [], 0]);
+  const urls = [];
+  EXTRA_CFG.giphyKey = 'SECRET_KEY';
+  let impl = async (u) => { urls.push(String(u));
+    return { ok: true, status: 200, json: async () => ({ pagination: { total_count: 100 }, data: [
+      { id: 'a1', title: 'Happy cat', images: { fixed_width: { url: 'https://media2.giphy.com/media/a1/200w.gif?cid=x', width: '200', height: '150' }, fixed_width_small: { url: 'https://media2.giphy.com/media/a1/100w.gif', width: '100', height: '75' } } },
+      { id: 'evil', title: 'x', images: { fixed_width: { url: 'https://evil.example/x.gif' }, fixed_width_small: { url: 'https://evil.example/y.gif' } } },
+      { id: 'http', title: 'x', images: { fixed_width: { url: 'http://media.giphy.com/x.gif' }, fixed_width_small: { url: 'http://media.giphy.com/y.gif' } } },
+      { id: 'noimg', title: 'x' }] }) }; };
+  EXTRA_CFG.httpFetch = (u, o) => impl(u, o);
+  try {
+    const { w } = await setup();
+    const r = await w.ok('ann', 'chatGifs', { familyId: 'famA', q: '  happy   cat ' + 'z'.repeat(80), offset: 9999 });
+    assert.equal(r.configured, true); assert.equal(r.results.length, 1); assert.equal(r.results[0].id, 'a1');
+    assert.equal(r.results[0].url, 'https://media2.giphy.com/media/a1/200w.gif?cid=x'); assert.equal(r.results[0].thumb, 'https://media2.giphy.com/media/a1/100w.gif');
+    assert.ok(!JSON.stringify(r).includes('SECRET_KEY'), 'the key stays on the server');
+    const u = new URL(urls[0]); assert.equal(u.hostname, 'api.giphy.com'); assert.equal(u.pathname, '/v1/gifs/search'); assert.equal(u.searchParams.get('rating'), 'g');
+    assert.ok(u.searchParams.get('q').length <= 50 && u.searchParams.get('q').startsWith('happy cat')); assert.equal(u.searchParams.get('offset'), '200');
+    await w.ok('ann', 'chatGifs', { familyId: 'famA', kind: 'stickers' }); assert.equal(new URL(urls[1]).pathname, '/v1/stickers/trending');
+    await w.fail('zed', 'chatGifs', { familyId: 'famA', q: 'cat' }, 403);
+    impl = async () => ({ ok: false, status: 429 }); await w.fail('ann', 'chatGifs', { familyId: 'famA', q: 'dog' }, 429);
+    impl = async () => { throw new Error('network'); }; assert.equal((await w.ok('ann', 'chatGifs', { familyId: 'famA', q: 'dog' })).unavailable, true);
+  } finally { delete EXTRA_CFG.giphyKey; delete EXTRA_CFG.httpFetch; }
 });

@@ -37,6 +37,14 @@ The three files in `vendor/transformers/` are unmodified copies from the npm pac
 
 The optional address dropdown calls the public Photon service (`photon.komoot.io`), which searches OpenStreetMap data. Address data is © OpenStreetMap contributors, licensed under the ODbL (https://www.openstreetmap.org/copyright). No code from Photon is included in this site.
 
+## Emoji list (`emoji-data.js`)
+
+The emoji names and groups in `emoji-data.js` are derived from the npm package `unicode-emoji-json` (MIT licence), which republishes data from the Unicode Consortium's emoji data files (Unicode License v3, https://www.unicode.org/license.txt). The picture of each emoji comes from the viewer's own device fonts.
+
+## GIFs (GIPHY)
+
+The optional GIF picker calls the GIPHY API through the family server. GIFs are © their respective owners and are shown with a "Powered by GIPHY" credit as GIPHY's terms ask. No GIPHY code is included in this site.
+
 ## What your own code adds
 
 `tree-chart.js` is your own code. It calls the library but does not change it. The files in `vendor/` are the unmodified files from the npm packages.
