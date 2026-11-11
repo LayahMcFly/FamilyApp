@@ -1390,3 +1390,11 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .reel-pop-btn .avatar { width: 24px; height: 24px; font-size: .65rem; box-shadow: none; flex: none; }
 .reel-pop-btn .pop-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .reel-pop, .reel-pop-btn { transition: none; } }
+
+/* v1.48.2 — tree screen: buttons share one size, one baseline and no stray margins or tilt */
+.row > .btn, .row > button, .row > a.btn, .tnode-actions > * { margin: 0 !important; transform: none !important; align-self: center; box-sizing: border-box; }
+.row > .btn.small, .row > button.small { min-height: 44px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; line-height: 1.2; }
+.tnode { align-items: center; }
+.tnode-actions { display: flex; flex: none; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.tnode-actions .link-btn.small { min-height: 40px; padding: 0 14px; line-height: 1.2; white-space: nowrap; justify-content: center; }
+@media (max-width: 480px) { .tnode { flex-wrap: wrap; } .tnode > .grow { flex: 1 1 140px; min-width: 0; } .tnode-actions { flex: 1 1 100%; justify-content: flex-start; } }
