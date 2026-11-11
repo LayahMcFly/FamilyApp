@@ -641,3 +641,50 @@ test('words products: typed words instead of a photo; kind is guessed from the n
   await w.ok(w.O, 'shopAdminToggle', { key: 'pf_WORDSBAR1234', enabled: true, kind: 'photo' });
   assert.equal((await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' })).products.find((p) => p.key === 'pf_WORDSBAR1234').kind, 'photo', 'owner choice wins');
 });
+
+/* ---------- Photo Gifts / Family Shop sections ---------- */
+test('catalog names two sections; Family Shop is not open and shows no products', async () => {
+  const w = world(); await seed(w);
+  const c = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' });
+  assert.deepEqual(c.sections.map((s) => [s.id, s.title, s.ready]), [['photo-gifts', 'Photo Gifts', true], ['family-shop', 'Family Shop', false]]);
+  assert.ok(c.products.length >= 1 && c.products.every((p) => p.shopSection === 'photo-gifts'));
+  assert.equal(JSON.stringify(c).includes('"supplier"'), false, 'supplier ids are never sent to the browser');
+});
+
+test('Family Shop cannot be quoted or checked out; no Square link is made', async () => {
+  const w = world(); await seed(w); const d = await design(w);
+  const b = { familyId: 'fam1', designIds: [d.design.id], address: ADDR, requestId: 'req-fshop-001', consentImage: true, consentDelivery: true, section: 'family-shop' };
+  assert.equal((await w.call(w.A, 'shopQuote', b)).status, 409);
+  const r = await w.call(w.A, 'shopCheckout', b); assert.equal(r.status, 409); assert.equal(r.json.error, 'coming_soon');
+  assert.equal(w.sq.created.length, 0);
+  const ok = await w.ok(w.A, 'shopCheckout', { ...b, section: 'photo-gifts' }); assert.ok(ok.orderId);
+});
+
+test('new order lines are tagged Printify; an old order without the tag is still fulfilled; a line it cannot identify is held, never sent', async () => {
+  const w = world(); await seed(w); const d = await design(w);
+  const { orderId } = await w.ok(w.A, 'shopCheckout', { familyId: 'fam1', designIds: [d.design.id], address: ADDR, requestId: 'req-tag-0001', consentImage: true, consentDelivery: true });
+  assert.equal(JSON.parse(w.db.tab(T.orders).get(orderId).items)[0].supplier, 'printify');
+  // an order saved before this feature: no tag on the line
+  const old = w.db.tab(T.orders).get(orderId); const lines = JSON.parse(old.items); delete lines[0].supplier; old.items = JSON.stringify(lines);
+  await hook(w, 'evt_old1', 'payment.updated', pay(w, orderId));
+  assert.equal(w.db.tab(T.orders).get(orderId).fulfillmentStatus, 'created');
+  assert.equal(w.pcalls.filter((c) => c[0] === 'create').length, 1);
+  // a paid order whose lines say nothing about a supplier: held, and Printify is not called
+  const w2 = world(); await seed(w2); const d2 = await design(w2);
+  const r2 = await w2.ok(w2.A, 'shopCheckout', { familyId: 'fam1', designIds: [d2.design.id], address: ADDR, requestId: 'req-tag-0002', consentImage: true, consentDelivery: true });
+  const row = w2.db.tab(T.orders).get(r2.orderId); row.items = JSON.stringify([{ title: 'Mystery', quantity: 1 }]);
+  await hook(w2, 'evt_unk1', 'payment.updated', pay(w2, r2.orderId));
+  assert.equal(w2.db.tab(T.orders).get(r2.orderId).fulfillmentStatus, 'needs_review');
+  assert.equal(w2.pcalls.filter((c) => c[0] === 'create').length, 0, 'nothing reached Printify');
+});
+
+test('a product tagged for another supplier never appears in Photo Gifts and cannot be put in its cart', async () => {
+  const w = world(); await seed(w);
+  const row = w.db.tab(T.catalog).get('framed-print'); const j = JSON.parse(row.variants);
+  row.variants = JSON.stringify({ v: Array.isArray(j) ? j : j.v, m: { ...(j.m || {}), supplier: 'cj' } });
+  const c = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' });
+  assert.equal(c.products.length, 0);
+  w.storage.add('fx', { owner: 'alice', buf: jpeg(1200, 1600) });
+  const r = await w.call(w.A, 'shopSaveDesign', { familyId: 'fam1', postId: 'post1', productKey: 'framed-print', variantId: 101, fileId: 'fx', quantity: 1, spec: { zoom: 1 } });
+  assert.notEqual(r.status, 200);
+});

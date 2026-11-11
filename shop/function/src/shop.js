@@ -17,6 +17,7 @@ import { verifySquareSignature, SquareError } from './square.js';
 import { PrintifyError, verifyPrintifySignature } from './printify.js';
 import { safeImage, planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure, SECTION_IDS, cleanSection, cleanKind, KIND_IDS } from './sync.js';
 import { imageSize } from './images.js';
+import { PUBLIC_SECTIONS, sectionIsOpen, supplierOfProduct, supplierOfLine, supplierOfOrder, sectionOfSupplier } from './suppliers.js';
 
 export const T = {
   families: 'families', posts: 'posts',
@@ -144,18 +145,19 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   }
   async function enabledProducts() {
     const rows = await allCatalogRows();
-    return rows.filter((r) => r.enabled === true && knownKey(r.$id) && r.blueprintId && r.providerId && sellable(r)).map((r) => ({ row: r, variants: parseVariants(r) }));
+    return rows.filter((r) => r.enabled === true && knownKey(r.$id) && r.blueprintId && r.providerId && sellable(r) && supplierOfProduct(r, metaOf(r)) === 'printify').map((r) => ({ row: r, variants: parseVariants(r) }));
   }
   async function productByKey(key) {
     if (!knownKey(key)) throw bad('Unknown product.');
     const row = await getRowOrNull(T.catalog, key);
     if (!row || row.enabled !== true || !sellable(row)) throw conflict('unavailable', 'That product is not available right now.');
+    if (supplierOfProduct(row, metaOf(row)) !== 'printify') throw conflict('unavailable', 'That product is not available right now.');      // this is the Photo Gifts (Printify) cart
     return { row, variants: parseVariants(row) };
   }
   const kindOf = (row) => cleanKind((metaOf(row) || {}).kind);
   const publicProduct = ({ row, variants }) => ({
     key: row.$id, title: titleOf(row, row.$id), blurb: row.blurb || '', frameNote: !!(SLOTS[row.$id] && SLOTS[row.$id].frameNote),
-    position: row.position, kind: kindOf(row),
+    position: row.position, kind: kindOf(row), shopSection: sectionOfSupplier(supplierOfProduct(row, metaOf(row))),
     images: (((metaOf(row) || {}).u) || []).filter((u) => typeof u === 'string' && u.startsWith('https://')).slice(0, 40),
     variants: variants.map((v) => ({ id: v.id, label: v.label, options: v.options || {}, priceCents: v.priceCents, width: v.width, height: v.height, ...(Number.isInteger(v.img) ? { img: v.img } : {}) }))
   });
@@ -198,6 +200,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     } catch (e) { /* pictures are optional */ }
     return {
       products,
+      sections: PUBLIC_SECTIONS,
       slots: [
         ...Object.entries(SLOTS).map(([key, s]) => ({ key, title: s.title, section: s.section || 'gifts', available: products.some((p) => p.key === key) })),
         ...enabled.filter(({ row }) => isImportedKey(row.$id)).map(({ row }) => ({ key: row.$id, title: titleOf(row, row.$id), section: cleanSection((metaOf(row) || {}).section), available: true }))
@@ -422,10 +425,12 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       if (!post || (post !== OWN_PHOTO && !(await giftAllowed(post, user.$id)))) throw conflict('photo_not_allowed', 'One of the photos can no longer be used for gifts. Remove that design from your cart.');
       lines.push({
         designId: d.$id, postId: d.postId, productKey: d.productKey, title: titleOf(prod.row, d.productKey), variantId: variant.id, variantLabel: variant.label,
-        blueprintId: prod.row.blueprintId, providerId: prod.row.providerId, position: prod.row.position, quantity: d.quantity,
+        supplier: 'printify', blueprintId: prod.row.blueprintId, providerId: prod.row.providerId, position: prod.row.position, quantity: d.quantity,
         unitCents: variant.priceCents, fileId: d.fileId, fileSha: d.fileSha, width: d.width, height: d.height
       });
     }
+    // One supplier per checkout. A mixed-supplier cart is refused until a multi-supplier checkout is built and approved.
+    if (new Set(lines.map(supplierOfLine)).size !== 1 || supplierOfLine(lines[0]) !== 'printify') throw conflict('mixed_supplier', 'Items from different shop sections need separate checkouts. Remove the other items and try again.');
     const subtotalCents = lines.reduce((n, l) => n + l.unitCents * l.quantity, 0);
     return { lines, subtotalCents };
   }
@@ -441,7 +446,13 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     if (!Number.isInteger(cents) || cents < 0) throw conflict('shipping_unavailable', 'Standard shipping is not available to that address.');
     return cents;
   }
+  /** The browser may say which section it is checking out. Only an open section can be, and today that is Photo Gifts. */
+  function requireOpenSection(body) {
+    const id = body.section === undefined ? 'photo-gifts' : String(body.section);
+    if (!sectionIsOpen(id)) throw conflict('coming_soon', 'That section is not open yet.');
+  }
   async function quote({ user, body }) {
+    requireOpenSection(body);
     const { familyId } = await requireMember(user, body.familyId);
     const address = cleanAddress(body.address, user);
     const { lines, subtotalCents } = await priceDesigns(user, familyId, body.designIds);
@@ -455,7 +466,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     let tracking = []; try { tracking = JSON.parse(o.tracking || '[]'); } catch { tracking = []; }
     let address = null; if (withAddress) { try { address = JSON.parse(o.address || 'null'); } catch { address = null; } }
     return {
-      id: o.$id, familyId: o.familyId, createdAt: o.$createdAt, currency: o.currency, subtotalCents: o.subtotalCents, shippingCents: o.shippingCents, taxCents: o.taxCents || 0, totalCents: o.totalCents,
+      id: o.$id, familyId: o.familyId, section: sectionOfSupplier(supplierOfOrder(o)), createdAt: o.$createdAt, currency: o.currency, subtotalCents: o.subtotalCents, shippingCents: o.shippingCents, taxCents: o.taxCents || 0, totalCents: o.totalCents,
       paymentStatus: o.paymentStatus, fulfillmentStatus: o.fulfillmentStatus, stage: stageOf(o),
       items: items.map((i) => ({ title: i.title, variantLabel: i.variantLabel, quantity: i.quantity, unitCents: i.unitCents, designId: i.designId })),
       tracking, address
@@ -489,6 +500,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     throw new ApiError(502, 'checkout_failed', 'Payment could not be started. You were not charged. Please try again.' + (user && isAdmin(user) ? ` (Owner only: ${detail})` : ''));
   }
   async function checkout({ user, body }) {
+    requireOpenSection(body);
     const { familyId } = await requireMember(user, body.familyId);
     if (body.consentImage !== true || body.consentDelivery !== true) throw bad('Please confirm both permission boxes before paying.');
     if (!squareReady()) throw new ApiError(503, 'payments_not_ready', 'Payments are not set up yet. Please try again later.');
@@ -683,6 +695,9 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     if (o.paymentStatus !== 'paid') return o;
     if (['creating', 'created', 'sending', 'in_production', 'shipped', 'delivered', 'canceled'].includes(o.fulfillmentStatus)) return o;
     if (orderIsHeld(o) && !force) return o;
+    if (supplierOfOrder(o) !== 'printify') {         // never send an order to Printify unless it is positively a Printify order
+      return updateRow(T.orders, o.$id, { fulfillmentStatus: 'needs_review', lastError: 'This order could not be matched to the Photo Gifts supplier, so nothing was sent to production. Check it in the admin screen.' });
+    }
     o = await updateRow(T.orders, o.$id, { fulfillmentStatus: 'creating', lastError: '' });
     let items = JSON.parse(o.items || '[]');
     const address = JSON.parse(o.address || '{}');

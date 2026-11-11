@@ -307,3 +307,20 @@ Everything here uses the Square sandbox and `PRINTIFY_AUTO_SUBMIT=false`. Printi
 | No tracking after shipping | Printify webhooks not registered | Step 30, then **Refresh from Printify** |
 
 Sources: [Printify developer documentation](https://developers.printify.com/) (token scopes, one-year token life) and [Printify help: orders submitted through the API](https://help.printify.com/hc/en-us/articles/4483629894289-How-do-orders-and-products-submitted-through-API-look-like-inside-my-account) (API orders arrive on hold, then follow your approval settings). Square payment link, webhook and signature behavior is from Square's documentation (see `SQUARE-GUIDE.md`), and the signature code was compared with Square's official Node library in a test.
+
+## Shop sections and suppliers (preparation for a second supplier)
+
+The Shop page has two sections. Customers see only these names, never a supplier:
+
+| Section | What it is | Status |
+|---|---|---|
+| **Photo Gifts** | Personalized products made with the buyer's photo or words. Powered by Printify. | Open. Works as before. |
+| **Family Shop** | Ready-made products (planned: CJdropshipping). | "Coming soon". Nothing can be bought. |
+
+How it is kept safe:
+- **No database change.** Nothing was added to any table. Product rows and order lines carry an internal supplier tag only when they are created after this update. Older records are not rewritten.
+- **Older records.** A product is treated as Printify only when it has Printify blueprint and provider ids. An order line is treated as Printify only when it has a design, blueprint, provider and variant. Anything that cannot be identified stays "unknown" and is never relabeled.
+- **Printify is fenced off.** The Photo Gifts catalog and cart only accept Printify products. Sending an order to Printify requires a positively identified Printify order. An order it cannot identify is held for review and nothing reaches Printify.
+- **Separate checkouts.** A cart with items from two suppliers is refused, and checking out the Family Shop section is refused with a "coming soon" answer, so no payment link is made.
+- **Where the code is.** `shop/function/src/suppliers.js` holds the supplier and section rules. The Printify code is unchanged and still lives in `printify.js` and `shop.js`.
+- **What the next step must add.** A CJ product source, its own cart and checkout, its own fulfillment and tracking, and a change of the Family Shop section's `ready` flag. See `suppliers.js`.

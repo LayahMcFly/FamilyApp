@@ -47,9 +47,10 @@
   function productByKey(cat, key) { return (cat.products || []).filter(function (p) { return p.key === key; })[0] || null; }
   function fromPrice(p) { return Math.min.apply(null, p.variants.map(function (v) { return v.priceCents; })); }
 
+  var DEFAULT_SECTIONS = [{ id: 'photo-gifts', title: 'Photo Gifts', blurb: 'Turn your memories into personalized gifts.', ready: true }, { id: 'family-shop', title: 'Family Shop', blurb: 'Shop useful finds for family life and gatherings.', ready: false }];
   function head(title, back, backText) {
     return h('div', { class: 'shop-head' },
-      back ? h('a', { class: 'link-btn back-btn', href: back, text: backText || 'Back' }) : null,
+      back ? h('a', { class: 'link-btn back-btn', href: back, text: backText || 'Back', onclick: back === '#/shop' ? function () { st().section = 'photo-gifts'; } : null }) : null,
       h('h1', { text: title }));
   }
   function shopLinks(extra) {
@@ -58,7 +59,7 @@
       h('a', { class: 'btn secondary small', href: '#/orders', text: 'My orders', onclick: function () { X.S.ordersFrom = ''; } }));
   }
   function setupNeeded(main, e) {
-    clear(main).appendChild(h('div', { class: 'empty' }, h('h1', { text: 'Photo Gifts' }), h('p', { text: msgOf(e) }),
+    clear(main).appendChild(h('div', { class: 'empty' }, h('h1', { text: 'Shop' }), h('p', { text: msgOf(e) }),
       h('p', { class: 'small muted', text: 'If you own this app: the shop is set up with SHOP-GUIDE.md.' })));
   }
 
@@ -69,10 +70,38 @@
     try { cat = await loadCatalog(true); } catch (e) { if (token === X.S.nav) setupNeeded(main, e); return; }
     if (token !== X.S.nav) return;
     clear(main);
-    main.appendChild(h('h1', { text: 'Photo Gifts' }));
-    main.appendChild(h('p', { class: 'muted', text: 'Turn a family photo into a gift. You choose the photo and the crop, and you see a layout preview before you pay. Shopping is optional and there are no ads or subscriptions.' }));
+    main.appendChild(h('h1', { text: 'Shop' }));
     main.appendChild(shopLinks());
     if (cat.config.testMode) main.appendChild(X.alertBox('warn', 'Test mode: payments here are practice payments and no real order is made.'));
+
+    /* Two sections. Customers pick a section, never a supplier. Family Shop is "Coming soon" and has nothing to buy. */
+    var secs = (cat.sections && cat.sections.length) ? cat.sections : DEFAULT_SECTIONS;
+    var photo = h('div', { role: 'tabpanel', id: 'shop-panel-photo-gifts', 'aria-labelledby': 'shop-tab-photo-gifts' });
+    var family = h('div', { role: 'tabpanel', id: 'shop-panel-family-shop', 'aria-labelledby': 'shop-tab-family-shop', hidden: true },
+      h('div', { class: 'card inner family-soon' },
+        h('span', { class: 'soon-badge', text: 'Coming soon' }),
+        h('h2', { text: 'Family Shop' }),
+        h('p', { text: 'Shop useful finds for family life and gatherings.' }),
+        h('p', { class: 'small muted', text: 'This section is not open yet. There is nothing to buy here for now. Photo Gifts works as usual.' })));
+    var panels = { 'photo-gifts': photo, 'family-shop': family }, tabBtns = [];
+    function pickSection(id, focus) {
+      if (!panels[id]) id = 'photo-gifts';
+      st().section = id;
+      tabBtns.forEach(function (b) { var on = b.getAttribute('data-section') === id; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; b.classList.toggle('on', on); if (on && focus) b.focus(); });
+      Object.keys(panels).forEach(function (k) { panels[k].hidden = k !== id; });
+    }
+    var tabbar = h('div', { class: 'shop-tabs', role: 'tablist', 'aria-label': 'Shop sections' }, secs.map(function (sec) {
+      var b = h('button', { class: 'shop-tab', type: 'button', role: 'tab', id: 'shop-tab-' + sec.id, 'data-section': sec.id, 'aria-controls': 'shop-panel-' + sec.id, onclick: function () { pickSection(sec.id); } },
+        h('strong', { text: sec.title }), sec.ready === false ? h('span', { class: 'soon-badge small', text: 'Coming soon' }) : null, h('span', { class: 'small muted', text: sec.blurb }));
+      b.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return;
+        ev.preventDefault(); var i = tabBtns.indexOf(b); pickSection(tabBtns[(i + (ev.key === 'ArrowRight' ? 1 : tabBtns.length - 1)) % tabBtns.length].getAttribute('data-section'), true);
+      });
+      tabBtns.push(b); return b;
+    }));
+    main.appendChild(tabbar); main.appendChild(photo); main.appendChild(family);
+    pickSection(st().section || 'photo-gifts');
+    photo.appendChild(h('p', { class: 'muted', text: 'You choose the photo and the crop, and you see a layout preview before you pay. Shopping is optional and there are no ads or subscriptions.' }));
     var finder = h('input', { type: 'search', class: 'shop-search', placeholder: 'Search the shop', 'aria-label': 'Search the shop' });
     var none = h('p', { class: 'hint', hidden: true, text: 'Nothing matches that. Try another word, like mug or necklace, or choose All above.' });
     var kindNow = 'all';
@@ -80,21 +109,21 @@
       [['all', 'All'], ['photo', 'Photo'], ['words', 'Words']].map(function (k) {
         return h('button', { class: 'chip', type: 'button', 'data-kind': k[0], 'aria-pressed': k[0] === 'all' ? 'true' : 'false', text: k[1], onclick: function () { kindNow = k[0]; Array.prototype.forEach.call(kindRow.children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-kind') === kindNow ? 'true' : 'false'); }); applyFilter(); } });
       }));
-    main.appendChild(h('div', { class: 'shop-search-row' }, finder));
-    main.appendChild(kindRow);
-    main.appendChild(none);
+    photo.appendChild(h('div', { class: 'shop-search-row' }, finder));
+    photo.appendChild(kindRow);
+    photo.appendChild(none);
     var blocks = [];
     SECTIONS.forEach(function (sec) {
     var slots = cat.slots.filter(function (x) { return x.available && (x.section || 'gifts') === sec.id; });
     if (!slots.length) return;
-    var head2 = h('h2', { class: 'shop-section', text: sec.title }); main.appendChild(head2);
+    var head2 = h('h2', { class: 'shop-section', text: sec.title }); photo.appendChild(head2);
     var grid = h('div', { class: 'shop-grid' }); blocks.push({ head: head2, grid: grid });
     slots.forEach(function (slot) {
       var p = productByKey(cat, slot.key);
       if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key, 'data-q': (p.title + ' ' + (p.blurb || '') + ' ' + sec.title + ' ' + (p.kind === 'words' ? 'words text engraved name' : 'photo picture')).toLowerCase(), 'data-kind': p.kind === 'words' ? 'words' : 'photo' }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
       else grid.appendChild(h('div', { class: 'shop-card off', 'aria-disabled': 'true' }, h('strong', { text: slot.title }), h('span', { class: 'small', text: 'Not available yet' })));
     });
-    main.appendChild(grid);
+    photo.appendChild(grid);
     });
     function applyFilter() {
       var words = finder.value.toLowerCase().split(/\s+/).filter(Boolean), shown = 0;
@@ -110,8 +139,8 @@
       none.hidden = (!words.length && kindNow === 'all') || shown > 0;
     }
     finder.addEventListener('input', applyFilter);
-    if (!cat.products.length) main.appendChild(h('p', { class: 'hint', text: 'No products are switched on yet.' }));
-    main.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'How it works' }),
+    if (!cat.products.length) photo.appendChild(h('p', { class: 'hint', text: 'No products are switched on yet.' }));
+    photo.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'How it works' }),
       h('ol', { class: 'steps' },
         h('li', { text: 'Pick a product and a photo. Only photos whose owner allowed gifts can be used.' }),
         h('li', { text: 'Crop and place the photo. You see what will be cut off.' }),
@@ -589,7 +618,7 @@
     holder.appendChild(h('p', { class: 'small muted', text: 'You pay on Square’s own page, so this app never sees your card number. Photos are printed and shipped by Printify and its partners. If something is wrong with an order, contact ' + (cat.config.supportEmail || 'the person who runs the shop') + '.' }));
 
     function readAddr() { var o = {}; Object.keys(F).forEach(function (k) { o[k] = F[k].inp.value; }); o.country = 'US'; return o; }
-    function body() { return { familyId: X.S.familyId, designIds: designs.map(function (d) { return d.id; }), address: readAddr() }; }
+    function body() { return { section: 'photo-gifts', familyId: X.S.familyId, designIds: designs.map(function (d) { return d.id; }), address: readAddr() }; }
     var quoted = null;
     form.addEventListener('input', function () { quoted = null; payBtn.hidden = true; clear(summary); });
     form.addEventListener('submit', function (ev) {
