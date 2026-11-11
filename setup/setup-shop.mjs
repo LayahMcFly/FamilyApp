@@ -10,7 +10,7 @@
  * Table permissions are empty on purpose: the browser can never read or write these tables directly.
  * Only the shop-api function (using its own key) writes them. Orders and designs are readable by their owner only.
  */
-import { Client, TablesDB } from 'node-appwrite';
+import { Client, TablesDB, Query } from 'node-appwrite';
 
 const endpoint = process.env.APPWRITE_ENDPOINT, projectId = process.env.APPWRITE_PROJECT, apiKey = process.env.APPWRITE_KEY;
 if (!endpoint || !projectId || !apiKey) { console.error('Missing APPWRITE_ENDPOINT, APPWRITE_PROJECT or APPWRITE_KEY. See SHOP-GUIDE.md step 21.'); process.exit(1); }
@@ -72,13 +72,13 @@ async function step(label, fn) {
 }
 async function waitForColumns(tableId, keys) {
   for (let i = 0; i < 90; i++) {
-    const res = await db.listColumns({ databaseId, tableId });
+    const res = await db.listColumns({ databaseId, tableId, queries: [Query.limit(100)] });      // the default page is 25, and shopOrders has more
     const by = Object.fromEntries(res.columns.map((c) => [c.key, c.status]));
     if (keys.some((k) => by[k] === 'failed' || by[k] === 'stuck')) throw new Error('A column failed to build in ' + tableId);
     if (keys.every((k) => by[k] === 'available')) return;
     await sleep(2000);
   }
-  throw new Error('Timed out waiting for columns in ' + tableId);
+  console.log('\n  Some columns are still building in ' + tableId + '. Run this workflow again in a few minutes.');
 }
 
 for (const [tableId, def] of Object.entries(schema)) {
