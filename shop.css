@@ -87,3 +87,6 @@
 .shop-links > a, .shop-links > button { box-sizing: border-box; height: 40px !important; min-height: 40px !important; margin: 0 !important; }
 .shop-links > .cart-icon-btn { width: 40px; min-width: 40px !important; padding: 0 !important; border-radius: 999px; }
 .shop-links > .link-btn { padding: 0 16px; }
+
+.shop-hero { transition: opacity .15s; }
+.shop-hero.swapping { opacity: .55; }

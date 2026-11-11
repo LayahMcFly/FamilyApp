@@ -190,6 +190,17 @@
     clear(holder);
     var hero = prod.image ? h('img', { class: 'shop-hero', src: prod.image, alt: prod.title + ' (sample product picture)' }) : null;
     if (hero) holder.appendChild(hero);
+    // Each size or style has its own Printify picture. Fetch them all quietly now, one after another, so a tap on a size swaps instantly instead of waiting for a download.
+    var warm = {};
+    function warmPic(u) {
+      if (!u || warm[u]) return warm[u];
+      warm[u] = new Promise(function (res) { var im = new Image(); im.decoding = 'async'; im.onload = function () { (im.decode ? im.decode().catch(function () {}) : Promise.resolve()).then(function () { res(true); }); }; im.onerror = function () { res(false); }; im.src = u; });
+      return warm[u];
+    }
+    (function () {
+      var list = [prod.image].concat(prod.images || []).filter(function (u, i, a) { return u && a.indexOf(u) === i; }).slice(0, 16), i = 0;
+      (function next() { if (i >= list.length || token !== X.S.nav) return; warmPic(list[i++]).then(next); })();
+    })();
 
     var groups = optionGroups(prod.variants), chosen = {}, variant = prod.variants[0];
     groups.forEach(function (g) { chosen[g] = (variant.options || {})[g]; });
@@ -230,7 +241,7 @@
     var PAD = 0.14;
     function size() { var box = Math.min(main.clientWidth || 340, 420); var W = variant.width, H = variant.height; var s = box / (W * (1 + 2 * PAD)); return { s: s, cw: Math.round(W * (1 + 2 * PAD) * s), ch: Math.round(H * (1 + 2 * PAD) * s), pad: PAD }; }
     function repaint() {
-      if (hero) { var pic = (prod.images && Number.isInteger(variant.img) && prod.images[variant.img]) || prod.image; if (hero.getAttribute('src') !== pic) hero.src = pic; }   // each size or style can have its own picture
+      if (hero) { var pic = (prod.images && Number.isInteger(variant.img) && prod.images[variant.img]) || prod.image; if (hero.getAttribute('src') !== pic) { var want = pic; hero.classList.add('swapping'); warmPic(pic).then(function () { if (want === ((prod.images && Number.isInteger(variant.img) && prod.images[variant.img]) || prod.image)) { hero.src = want; hero.classList.remove('swapping'); } }); } }   // each size or style can have its own picture
       priceEl.textContent = money(variant.priceCents) + ' each';
       if (!photo.bmp) { canvas.width = canvas.height = 1; return; }
       var W = variant.width, H = variant.height, z = size();
