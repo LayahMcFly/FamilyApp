@@ -2251,6 +2251,17 @@
       commentsEl.addEventListener('focusin', function () { focusAt = Date.now(); });
       card.appendChild(backEl); card.appendChild(commentsEl); paintCmt();
       sheetDrag(commentsEl, function () { if (commentsEl) toggleComments(); });
+      // Keep the whole sheet, including the comment box and the Post button, inside what the phone really shows (browser bars and the keyboard change that).
+      (function (sh) {
+        var vv = window.visualViewport; if (!vv) return;
+        function fit() {
+          if (!sh.parentNode) { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); return; }
+          var below = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          sh.style.bottom = below + 'px';
+          sh.style.height = Math.min(vv.height * 0.76, Math.max(240, vv.height - 80)) + 'px'; sh.style.maxHeight = 'none';
+        }
+        vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
+      })(commentsEl);
     }
 
     function startEdit() {
