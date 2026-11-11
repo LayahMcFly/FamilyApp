@@ -157,8 +157,18 @@ Do these in order. About 30 minutes, most of it waiting for Appwrite to build co
 ### Step 4. Upload the new `family-api` function
 *Where:* Appwrite Console, Functions, `family-api`, Deployments, Create deployment, Manual. *Do:* upload `family-api.tar.gz` (sent with this guide), entrypoint `src/main.js`, build command `npm install`, tick **Activate deployment after build**. *Check:* the deployment shows Ready and is marked Active. *If the build fails:* open its logs. A missing `node-appwrite` means the `npm install` command was left out.
 
-### Step 5. Add the event trigger (recommended)
-This closes someone's DMs the moment they leave or are removed, from any path. *Where:* Console, Functions, `family-api`, Settings, Events, add `teams.*.memberships.*.delete`. Save. *Check:* the event shows in the list. *If you skip it:* DMs still close when an owner removes someone in Settings and when the remaining person next opens chat, but not at the instant the person leaves on their own.
+### Step 5. Add one event to `family-api` (optional, 2 minutes)
+**What it does:** when someone leaves a family or is removed, Appwrite tells `family-api`, and the function locks that person out of their direct messages in that family right away. **You can skip this step.** Without it, the lockout still happens when an owner removes someone in Settings, and when the other person next opens chat. It only matters for the gap when a person leaves on their own.
+
+1. Open Appwrite Console and choose your project.
+2. In the left menu, tap **Functions**, then tap **family-api**.
+3. Tap the **Settings** tab.
+4. Scroll to the **Events** section and tap **Update** (or **Add event**).
+5. Choose **Custom event** (or type in the event box) and enter exactly: `teams.*.memberships.*.delete`
+6. Tap **Add**, then tap **Update** at the bottom of the section to save.
+
+**Check:** the Events section now lists `teams.*.memberships.*.delete`.
+**If you can't find Custom event:** pick **Teams**, then **Memberships**, then **Delete** from the lists instead. Appwrite builds the same text for you. Screens differ a little between Console versions, so if neither works, skip this step and tell me what you see.
 
 ### Step 6. Confirm the web platform (for Realtime)
 *Where:* Console, your project, Overview, Platforms. *Check:* a Web platform with hostname `layahmcfly.github.io` exists (no path). Realtime uses the same list. You already have it, so nothing to change.
