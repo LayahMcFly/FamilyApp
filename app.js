@@ -561,7 +561,7 @@
   }
 
   // ----- Shorts: videos start by themselves when they fill the screen, like a scrolling video feed -----
-  S.muted = false;                       // sound is tried first; if the browser refuses, we fall back to muted
+  S.muted = true;                        // every video starts silent after a page load; once someone turns sound on, it stays on until the tab is reloaded
   function syncSound() {
     Array.prototype.forEach.call(document.querySelectorAll('.reel-media'), function (b) {
       var v = b.querySelector('video'); if (v) v.muted = S.muted;
@@ -616,13 +616,14 @@
   function clock(t) { t = Math.max(0, Math.floor(t || 0)); var m = Math.floor(t / 60), s = t % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
   function customPlayer(v, box) {
     v.controls = false; v.removeAttribute('controls');
+    v.muted = S.muted;
     box.classList.add('player');
     var old = box.querySelector('.pl-ui'); if (old) box.removeChild(old);
     var big = h('button', { class: 'pl-big', type: 'button', 'aria-label': 'Play video', onclick: function (ev) { ev.stopPropagation(); toggle(); } }, icon('play'));
     var playBtn = h('button', { class: 'pl-btn', type: 'button', 'aria-label': 'Play', onclick: function (ev) { ev.stopPropagation(); toggle(); } });
     var seek = h('input', { class: 'pl-seek', type: 'range', min: 0, max: 1000, value: 0, step: 1, 'aria-label': 'Seek' });
     var time = h('span', { class: 'pl-time', text: '0:00 / 0:00' });
-    var muteBtn = h('button', { class: 'pl-btn', type: 'button', onclick: function (ev) { ev.stopPropagation(); v.muted = !v.muted; paintMute(); } });
+    var muteBtn = h('button', { class: 'pl-btn', type: 'button', onclick: function (ev) { ev.stopPropagation(); v.muted = !v.muted; S.muted = v.muted; paintMute(); } });
     var speed = h('button', { class: 'pl-btn pl-speed', type: 'button', 'aria-label': 'Playback speed 1x', text: '1x', onclick: function (ev) {
       ev.stopPropagation(); var list = [1, 1.5, 2, 0.5], i = (list.indexOf(v.playbackRate) + 1) % list.length; v.playbackRate = list[i];
       speed.textContent = list[i] + 'x'; speed.setAttribute('aria-label', 'Playback speed ' + list[i] + 'x');
