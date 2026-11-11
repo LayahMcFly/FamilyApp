@@ -2242,7 +2242,11 @@
       var panel = commentsPanel(post, st, paintCmt);
       commentsEl = h('div', { class: 'sheet', role: 'dialog', 'aria-label': 'Comments' },
         h('div', { class: 'sheet-head' }, h('strong', { text: 'Comments' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Close', onclick: toggleComments })), panel);
-      backEl = h('div', { class: 'sheet-backdrop', onclick: toggleComments });
+      // The backdrop closes the sheet only for a real tap that STARTED on it. When the phone keyboard opens the layout shifts and the browser can
+      // deliver the tap on the text box again at the old spot, which now lands on the backdrop; without a matching press there, that is ignored.
+      var pressedBack = 0, focusAt = 0;
+      backEl = h('div', { class: 'sheet-backdrop', onpointerdown: function () { pressedBack = Date.now(); }, onclick: function () { var ok = pressedBack && Date.now() - pressedBack < 1500 && Date.now() - focusAt > 800; pressedBack = 0; if (ok) toggleComments(); } });
+      commentsEl.addEventListener('focusin', function () { focusAt = Date.now(); });
       card.appendChild(backEl); card.appendChild(commentsEl); paintCmt();
       sheetDrag(commentsEl, function () { if (commentsEl) toggleComments(); });
     }
