@@ -33,6 +33,10 @@ The ISC terms for all the ISC parts are the text in `vendor/LICENSE-d3.txt`.
 
 The three files in `vendor/transformers/` are unmodified copies from the npm package `@huggingface/transformers`. The model is fetched from huggingface.co the first time someone makes captions and then kept in that browser's cache.
 
+## Address suggestions (Photon)
+
+The optional address dropdown calls the public Photon service (`photon.komoot.io`), which searches OpenStreetMap data. Address data is © OpenStreetMap contributors, licensed under the ODbL (https://www.openstreetmap.org/copyright). No code from Photon is included in this site.
+
 ## What your own code adds
 
 `tree-chart.js` is your own code. It calls the library but does not change it. The files in `vendor/` are the unmodified files from the npm packages.

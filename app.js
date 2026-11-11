@@ -3579,6 +3579,73 @@
   function addrBlock(a) { return h('address', { class: 'addr-lines' }, addrLines(a).map(function (l) { return h('div', { text: l }); })); }
 
   /* Settings > Privacy and personal information: my own address */
+  /* Optional address suggestions. Only while the person is typing in address line 1 on the address form, and only if the
+     "Suggest matches" box is ticked, the text typed is sent to Photon (photon.komoot.io, a free OpenStreetMap search service).
+     Nothing is sent when they stop typing, from other fields, or from any other screen. Our own server never sees it. */
+  var NUMBER_AFTER = ['DE', 'AT', 'CH', 'NL', 'BE', 'ES', 'IT', 'PT', 'SE', 'NO', 'DK', 'FI', 'PL', 'CZ', 'SK', 'HU', 'GR', 'TR', 'BR', 'AR', 'CL', 'CO', 'RO', 'BG', 'HR', 'SI', 'RS'];
+  function suggestLine1(p) {
+    var street = p.street || (p.osm_key === 'highway' ? p.name : '') || '';
+    if (!street) return p.name || '';
+    if (!p.housenumber) return street;
+    return NUMBER_AFTER.indexOf(String(p.countrycode || '').toUpperCase()) >= 0 ? street + ' ' + p.housenumber : p.housenumber + ' ' + street;
+  }
+  function attachAddressSuggest(ids, enabled) {
+    var input = ids.line1, list = h('ul', { class: 'addr-suggest', id: 'addr-suggest', role: 'listbox', 'aria-label': 'Address suggestions', hidden: true });
+    var timer = null, ctl = null, items = [], active = -1;
+    input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false'); input.setAttribute('aria-controls', 'addr-suggest');
+    input.parentNode.classList.add('addr-suggest-wrap'); input.parentNode.appendChild(list);
+    function close() { list.hidden = true; clear(list); items = []; active = -1; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); }
+    function mark(i) {
+      active = i;
+      Array.prototype.forEach.call(list.children, function (li, k) { li.setAttribute('aria-selected', k === i ? 'true' : 'false'); li.classList.toggle('on', k === i); });
+      if (i >= 0) input.setAttribute('aria-activedescendant', 'addr-sug-' + i); else input.removeAttribute('aria-activedescendant');
+    }
+    function pick(i) {
+      var p = items[i]; if (!p) return;
+      ids.line1.value = suggestLine1(p).slice(0, 200);
+      ids.city.value = (p.city || p.town || p.village || p.district || '').slice(0, 120);
+      ids.region.value = (p.state || '').slice(0, 120);
+      ids.postal.value = (p.postcode || '').slice(0, 40);
+      ids.country.value = (p.country || '').slice(0, 100);
+      close(); ids.line1.focus();
+    }
+    function show(features) {
+      clear(list); items = [];
+      features.forEach(function (f) { if (f && f.properties && f.properties.country) items.push(f.properties); });
+      items = items.slice(0, 5);
+      if (!items.length) { close(); return; }
+      items.forEach(function (p, i) {
+        var sub = [p.city || p.town || p.village || p.district, p.state, p.postcode, p.country].filter(Boolean).join(', ');
+        var li = h('li', { role: 'option', id: 'addr-sug-' + i, 'aria-selected': 'false' }, h('strong', { text: suggestLine1(p) || p.name || '' }), h('span', { class: 'small muted', text: ' ' + sub }));
+        li.addEventListener('mousedown', function (ev) { ev.preventDefault(); pick(i); });
+        list.appendChild(li);
+      });
+      list.hidden = false; input.setAttribute('aria-expanded', 'true'); mark(-1);
+    }
+    input.addEventListener('input', function () {
+      clearTimeout(timer); if (ctl) ctl.abort();
+      var q = input.value.trim();
+      if (!enabled() || q.length < 5) { close(); return; }
+      timer = setTimeout(async function () {
+        ctl = new AbortController();
+        try {
+          var res = await fetch('https://photon.komoot.io/api/?limit=5&lang=en&q=' + encodeURIComponent(q), { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+          if (!res.ok) { close(); return; }
+          var j = await res.json();
+          if (input.value.trim() === q && enabled()) show(j.features || []);
+        } catch (e) { close(); }
+      }, 450);
+    });
+    input.addEventListener('keydown', function (ev) {
+      if (list.hidden) return;
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); mark((active + 1) % items.length); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); mark((active - 1 + items.length) % items.length); }
+      else if (ev.key === 'Enter' && active >= 0) { ev.preventDefault(); pick(active); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); close(); }
+    });
+    input.addEventListener('blur', function () { setTimeout(close, 150); });
+  }
+
   async function addressCard(main, token) {
     var box = h('section', { class: 'card addr-card', 'aria-label': 'My address' }, h('h2', { text: 'My address' }), spinnerLine('Loading…', 'profile'));
     main.appendChild(box);
@@ -3636,7 +3703,11 @@
       form.appendChild(field('region', 'State, province or region', { ac: 'address-level1' }));
       form.appendChild(field('postal', 'ZIP or postal code', { max: 40, ac: 'postal-code' }));
       form.appendChild(field('country', 'Country', { req: true, max: 100, ac: 'country-name' }));
-      form.appendChild(h('p', { class: 'hint', text: 'Use the format of your own country. Only address line 1 and country are needed. Nothing is looked up or checked online while you type.' }));
+      var sugBox = h('input', { type: 'checkbox', id: 'addr-suggest-on' }); sugBox.checked = true;
+      form.appendChild(h('p', { class: 'hint', text: 'Use the format of your own country. Only address line 1 and country are needed. Start typing line 1 and pick a match to fill in the rest.' }));
+      form.appendChild(h('div', { class: 'field' }, h('label', { class: 'check', for: 'addr-suggest-on' }, sugBox, ' Suggest matches as I type'),
+        h('p', { class: 'small muted', text: 'When this is ticked, what you type in address line 1 is sent to Photon (photon.komoot.io), a free map search service based on OpenStreetMap, so it can suggest matches. It is not sent to Family Circle, and nothing is sent once you untick this or leave the form. Untick it to type your address without any lookup.' })));
+      attachAddressSuggest(ids, function () { return sugBox.checked; });
 
       var mode = (a.sharedWith && a.sharedWith.length) ? 'families' : 'private';
       var picks = {};

@@ -36,6 +36,16 @@ The buttons build ordinary Google Maps links at the moment of the tap. Nothing i
 
 Google's Maps URLs page (developers.google.com/maps/documentation/urls/guide) says no API key is needed, spaces may be `%20` or `+`, and a URL is limited to 2,048 characters. If an address would be longer, the app asks the person to use Copy address.
 
+## Address suggestions (the dropdown)
+
+On the address form, typing in address line 1 shows up to five matches. Picking one fills line 1, city, state or region, postal code and country. Line 2 is never touched.
+
+- **Who sees what you type:** while the "Suggest matches as I type" box is ticked, the text in line 1 goes straight from the browser to Photon (`photon.komoot.io`), a free OpenStreetMap search service with no key. It does not pass through Family Circle's server. It waits until 5 characters are typed and pauses 0.45 seconds between requests.
+- **Off switch:** unticking the box stops every lookup. Nothing is sent from the other fields, from viewing an address, or from any other screen.
+- **Not stored:** suggestions are never saved. Only what you finally save goes to Appwrite.
+- **Limits:** Photon's public server is shared and free, so it can be slow or briefly refuse requests. When it does, the dropdown stays empty and typing works as before. OpenStreetMap data is thinner in some countries, so a missing match does not mean the address is wrong.
+- **Security rule:** `index.html` allows `https://photon.komoot.io` in `connect-src`. Nothing else was opened up.
+
 ## The table
 
 **Table ID:** `addresses` (type it exactly) in the `family` database.
