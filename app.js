@@ -4203,7 +4203,10 @@
     }
     initAppwrite();
     if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
-      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query });
+      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
+      avatarUrl: avatarUrl,
+      uploadPicture: async function (file) { var f = await imageToJpegFile(file, L.avatarEdge || 256, 0.85, true, 'family.jpg'); var up = await uploadFile(f); return up.$id; },
+      deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });

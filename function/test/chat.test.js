@@ -8,6 +8,12 @@ const EXTRA_CFG = {};   // tests put stand-ins for the outside world here (link 
 function makeWorld() {
   let seq = 0;
   const world = { tables: {}, teams: {}, clock: 1_800_000_000_000 };
+  world.files = {};
+  world.storage = {
+    async getFile({ fileId }) { const f = world.files[fileId]; if (!f) { const e = new Error('nf'); e.code = 404; throw e; } return f; },
+    async updateFile({ fileId, permissions }) { world.files[fileId].$permissions = permissions; return world.files[fileId]; },
+    async deleteFile({ fileId }) { delete world.files[fileId]; },
+  };
   for (const t of [...Object.values(TABLES), ...Object.values(CHAT_TABLES)]) world.tables[t] = new Map();
   const err = (code, m) => Object.assign(new Error(m), { code });
   const UNIQUE = ['sendKey', 'channelKey', 'dmKey', 'reactionKey', 'blockKey', 'readKey', 'profileKey'];
@@ -60,10 +66,12 @@ function makeWorld() {
     async updateLabels() { return {}; }
   };
   const teams = {
+    async getPrefs({ teamId }) { return { ...(world.teams[teamId].prefs || {}) }; },
+    async updatePrefs({ teamId, prefs }) { world.teams[teamId].prefs = { ...prefs }; return prefs; },
     async listMemberships({ teamId }) { return { memberships: world.teams[teamId].members.map((m) => ({ ...m, teamId })) }; },
     async delete() { return {}; }
   };
-  const api = createApi({ users, teams, db, storage: {}, cfg: { databaseId: 'family', bucketId: 'b', maxOwnedFamilies: 3, maxVideoMB: 15, familyStorageMB: 500, ...EXTRA_CFG }, now: () => world.clock + seq * 1000 + 500 });
+  const api = createApi({ users, teams, db, storage: world.storage, cfg: { databaseId: 'family', bucketId: 'b', maxOwnedFamilies: 3, maxVideoMB: 15, familyStorageMB: 500, ...EXTRA_CFG }, now: () => world.clock + seq * 1000 + 500 });
   const U = (id) => ({ $id: id, emailVerification: true, status: true, labels: [] });
   const call = async (uid, action, body = {}) => { const r = await api.handle({ user: U(uid), body: { action, ...body }, deadline: Number.MAX_SAFE_INTEGER }); return r; };
   const ok = async (uid, action, body) => { const r = await call(uid, action, body); assert.equal(r.status, 200, `${action}: ${JSON.stringify(r.json)}`); return r.json; };
@@ -384,4 +392,21 @@ test('GIF search: off until a key is set, family-safe rating, only GIPHY address
     impl = async () => ({ ok: false, status: 429 }); await w.fail('ann', 'chatGifs', { familyId: 'famA', q: 'dog' }, 429);
     impl = async () => { throw new Error('network'); }; assert.equal((await w.ok('ann', 'chatGifs', { familyId: 'famA', q: 'dog' })).unavailable, true);
   } finally { delete EXTRA_CFG.giphyKey; delete EXTRA_CFG.httpFetch; }
+});
+
+
+test('family chat picture: owner and chat admins only, stored for the whole family, old file removed', async () => {
+  const { w } = await setup();
+  const mine = (id, user) => { world_files(w)[id] = { $id: id, mimeType: 'image/jpeg', sizeOriginal: 5000, $permissions: [`update("user:${user}")`, 'read("team:famA")'] }; };
+  const world_files = (x) => x.world.files;
+  mine('pic1', 'owner');
+  await w.fail('bob', 'chatPicture', { familyId: 'famA', fileId: 'pic1' }, 403);
+  assert.equal((await w.ok('ann', 'chatOpen', { familyId: 'famA' })).picture, '');
+  await w.ok('owner', 'chatPicture', { familyId: 'famA', fileId: 'pic1' });
+  assert.equal((await w.ok('bob', 'chatOpen', { familyId: 'famA' })).picture, 'pic1');
+  mine('pic2', 'owner');
+  await w.ok('owner', 'chatPicture', { familyId: 'famA', fileId: 'pic2' });
+  assert.equal(w.world.files.pic1, undefined, 'the replaced picture is deleted');
+  await w.ok('owner', 'chatPicture', { familyId: 'famA', fileId: '' });
+  assert.equal((await w.ok('bob', 'chatOpen', { familyId: 'famA' })).picture, '');
 });

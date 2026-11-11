@@ -89,6 +89,11 @@ export function createChat(c) {
     return mine.some((m) => m.teamId === familyId);
   }
 
+  /* ---------- family chat picture (kept in the family's team settings, so no new table is needed) ---------- */
+  async function familyPicture(familyId) {
+    try { const prefs = await teams.getPrefs({ teamId: familyId }); return typeof prefs.chatPic === 'string' ? prefs.chatPic : ''; } catch (e) { return ''; }
+  }
+
   /* ---------- channels ---------- */
   const pubChannel = (r) => ({ id: r.$id, name: r.name, description: r.description || '', position: Number(r.position || 0), readOnly: r.readOnly === true, archived: r.archived === true });
   async function listChannels(familyId) {
@@ -245,6 +250,7 @@ export function createChat(c) {
       const blocks = await listRows(T.blocks, [Query.equal('familyId', [ctx.familyId]), Query.equal('blockerId', [user.$id]), Query.limit(100)]);
       return {
         role,
+        picture: await familyPicture(ctx.familyId),
         channels: channels.map(pubChannel),
         dms: dms.map((d) => ({ id: d.$id, otherId: d.userA === user.$id ? d.userB : d.userA, status: d.status, lastAt: d.lastAt || d.$createdAt })).sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt))),
         unread,
@@ -411,6 +417,21 @@ export function createChat(c) {
       }).filter(Boolean);
       const total = Number((json.pagination || {}).total_count) || 0;
       return { configured: true, results, next: offset + 24 < total && offset + 24 <= 200 ? offset + 24 : 0 };
+    },
+
+    /** Sets or clears the picture shown for this family's chat. Owner or chat admin only. fileId '' clears it. */
+    async chatPicture({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      await requireManager(user, ctx);
+      const fileId = body.fileId ? idOf(body.fileId, 'file') : '';
+      const prefs = await teams.getPrefs({ teamId: ctx.familyId }).catch(() => ({}));
+      const old = typeof prefs.chatPic === 'string' ? prefs.chatPic : '';
+      if (fileId && fileId !== old) await c.claimFile(user, ctx.familyId, fileId, 'avatar');
+      const next = { ...prefs };
+      if (fileId) next.chatPic = fileId; else delete next.chatPic;
+      await teams.updatePrefs({ teamId: ctx.familyId, prefs: next });
+      if (old && old !== fileId && c.deleteFileQuiet) await c.deleteFileQuiet(old);
+      return { picture: fileId };
     },
 
     /* ----- channel management (family owner or chat admin) ----- */

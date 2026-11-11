@@ -197,7 +197,7 @@
   async function loadOverview(c) {
     var r = await api('chatOpen');
     if (C !== c) return false;
-    c.role = r.role; c.channels = r.channels; c.dms = r.dms; c.unread = r.unread; c.blocked = r.blocked; c.allowDms = r.allowDms; c.limits = r.limits || c.limits; c.reactions = r.reactions || c.reactions;
+    c.role = r.role; c.picture = r.picture || ''; c.channels = r.channels; c.dms = r.dms; c.unread = r.unread; c.blocked = r.blocked; c.allowDms = r.allowDms; c.limits = r.limits || c.limits; c.reactions = r.reactions || c.reactions;
     c.loaded = true; c.error = null; c.at = Date.now();
     sumTotals(c.unread, c);
     return true;
@@ -459,6 +459,15 @@
   async function retryOpen(c) { c.error = null; render(X.S.main); try { await loadOverview(c); } catch (e) { c.error = e; } if (C === c) { render(X.S.main); if (c.loaded) startConv(c); } }
 
   /* ----- family switcher ----- */
+  /** The letter for a family, or the uploaded picture when this is the current family and it has one. */
+  function famFace(f, mini) {
+    var span = h('span', { class: 'fam-face', text: famInitial(f) });
+    if (C && f.id === famId() && C.picture && X.avatarUrl) {
+      var fid = C.picture;
+      X.avatarUrl(fid).then(function (u) { if (C && C.picture === fid && span.parentNode !== undefined) { clear(span); span.classList.add('has-img'); span.appendChild(h('img', { src: u, alt: '' })); } }).catch(function () { /* the letter stays */ });
+    }
+    return span;
+  }
   function famInitial(f) { return (f.name || '?').trim().charAt(0).toUpperCase() || '?'; }
   function buildRail(c) {
     var rail = h('nav', { class: 'chat-rail', 'aria-label': 'Family chat and direct messages' });
@@ -468,7 +477,7 @@
       var on = f.id === famId(), n = on ? TOTALS.ch : 0;
       top.appendChild(h('button', { class: 'rail-btn' + (on ? ' on' : ''), type: 'button', title: f.name + (on ? ' (family chat)' : ''), 'aria-label': f.name + (on ? ', family chat' + (n ? ', ' + n + ' unread' : '') : ''), 'aria-current': on ? 'true' : null,
         onclick: function () { if (!on) switchFamilyTo(f.id); else if (c.route.mode !== 'channels' || c.route.id) location.hash = '#/chat'; } },
-        famInitial(f), n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
+        famFace(f), n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
     });
     rail.appendChild(top);
     rail.appendChild(h('div', { class: 'rail-sep', role: 'separator' }));
@@ -514,7 +523,7 @@
     X.S.families.forEach(function (f) {
       var on = f.id === famId();
       list.appendChild(h('button', { class: 'cs-row' + (on ? ' on' : ''), type: 'button', 'aria-current': on ? 'true' : null, onclick: function () { s.close(); if (!on) switchFamilyTo(f.id); } },
-        h('span', { class: 'rail-btn mini' + (on ? ' on' : ''), 'aria-hidden': 'true' }, famInitial(f)), h('span', { class: 'grow', text: f.name }), on ? h('span', { class: 'badge', text: 'Current' }) : null));
+        h('span', { class: 'rail-btn mini' + (on ? ' on' : ''), 'aria-hidden': 'true' }, famFace(f)), h('span', { class: 'grow', text: f.name }), on ? h('span', { class: 'badge', text: 'Current' }) : null));
     });
     var s = sheet('Your families', list);
   }
@@ -1002,6 +1011,27 @@
     body.appendChild(h('p', { class: 'small muted', text: 'Turning this off stops new messages from everyone in this family. People are not told. Your existing history stays readable to you.' }));
     var pv = h('input', { type: 'checkbox', id: 'cs-pv' }); pv.checked = previewsOn();
     pv.addEventListener('change', function () { lsSet('fc_chat_previews', pv.checked); pvReset(); if (C) paintMessages('keep'); toast(pv.checked ? 'Link previews and GIFs are on.' : 'Link previews and GIFs are off.'); });
+    if (isManager(c)) {
+      body.appendChild(h('h3', { text: 'Family chat picture' }));
+      body.appendChild(h('p', { class: 'small muted', text: 'Shown instead of the letter at the top of the left bar, for everyone in ' + famLabel() + '. Square pictures look best.' }));
+      var picMsg = h('p', { class: 'small', role: 'status' });
+      var file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', id: 'cs-pic', class: 'visually-hidden', 'aria-label': 'Choose a family chat picture' });
+      var pick = h('button', { class: 'btn secondary small', type: 'button', text: c.picture ? 'Change picture' : 'Upload picture', onclick: function () { file.click(); } });
+      var drop = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove picture', hidden: !c.picture, onclick: async function () {
+        drop.disabled = true;
+        try { await api('chatPicture', { fileId: '' }); c.picture = ''; paintList(); s.close(); toast('Family chat picture removed.'); } catch (e) { drop.disabled = false; picMsg.textContent = msgOf(e); }
+      } });
+      file.addEventListener('change', async function () {
+        var f = file.files && file.files[0]; if (!f) return;
+        pick.disabled = true; picMsg.textContent = 'Uploading…'; var up = '';
+        try {
+          up = await X.uploadPicture(f);
+          var r = await api('chatPicture', { fileId: up }); up = '';
+          c.picture = r.picture; paintList(); s.close(); toast('Family chat picture updated.');
+        } catch (e) { if (up) X.deletePicture(up); pick.disabled = false; picMsg.textContent = msgOf(e); }
+      });
+      body.appendChild(h('div', { class: 'row' }, pick, drop, file)); body.appendChild(picMsg);
+    }
     body.appendChild(h('h3', { text: 'Links and GIFs' }));
     body.appendChild(h('label', { class: 'check' }, pv, ' Show link previews and GIFs on this device'));
     body.appendChild(h('p', { class: 'small muted', text: 'A preview is made by the family server visiting the link, so your device never contacts that website. GIFs load straight from GIPHY, which can see your internet address. Turn this off to see plain links only.' }));

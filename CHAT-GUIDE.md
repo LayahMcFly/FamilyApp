@@ -15,6 +15,7 @@ Version 1.47.0. Channels and direct messages for each family, opened from the sm
 | Family switcher | Only your own confirmed families. Switching closes the old connection and drops the old messages first. |
 | Text messages with name, picture, time, date lines, grouping | Shown as plain text (no HTML is ever interpreted). Links are the only clickable part. |
 | Replies, reactions with any emoji, edit (with "edited"), delete (with confirmation) | Tap and hold a message (or right-click) to open the menu. Six quick emoji sit on top, and the **+** opens every emoji with search and skin tones. Up to 20 different emoji per message. Reply and react work only inside the same conversation. |
+| Family chat picture | Owner or chat admin: Chat settings, **Family chat picture**, Upload. It replaces the letter at the top of the left bar for everyone in that family. It is kept in the family's team settings, so no new table is needed. This needs the new `family-api` upload (step 4). |
 | Links with preview cards | A web address in a message becomes a tappable link. The first link also gets a card with the site name, title, description and picture. The family server fetches the page, so nobody's phone contacts that site. |
 | GIFs and stickers | The **GIF** button next to the message box searches GIPHY. It needs a free GIPHY key (step 5b). Until then the button says GIFs are not set up. |
 | Older messages (30 at a time), "New messages" line, "Jump to latest" | A new message never drags you away from older ones you are reading. |

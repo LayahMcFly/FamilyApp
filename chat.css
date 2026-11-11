@@ -322,3 +322,9 @@ dialog.cs textarea, dialog.cs input, dialog.cs button, dialog.cs .btn { margin: 
 .gp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .gp-item { padding: 0 !important; margin: 0 !important; border: 0; background: rgba(128,128,128,.15); border-radius: 6px; overflow: hidden; aspect-ratio: 1; box-shadow: none !important; }
 .gp-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* family chat picture */
+.fam-face { display: grid; place-items: center; width: 100%; height: 100%; border-radius: inherit; overflow: hidden; }
+.fam-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rail-btn:has(.fam-face.has-img) { padding: 0; overflow: hidden; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
