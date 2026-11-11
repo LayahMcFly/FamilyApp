@@ -617,3 +617,27 @@ test('cart preview: a Printify failure never blocks the cart', async () => {
   assert.equal((await w.ok(w.A, 'shopPreview', { familyId: 'fam1', designId: d.id })).status, 'unavailable');
   assert.equal((await w.ok(w.A, 'shopDesigns', { familyId: 'fam1' })).designs.length, 1);
 });
+
+test('words products: typed words instead of a photo; kind is guessed from the name and can be set by the owner', async () => {
+  const { guessKind } = await import('../src/sync.js');
+  assert.equal(guessKind('Bracelets', 'Personalized Engraved Name Bar Bracelet | Natural Stone Beads'), 'words');
+  assert.equal(guessKind('Canvas', 'Customizable Photo Framed Canvas'), 'photo');
+  assert.equal(guessKind('Necklace', 'Personalized Photo Oval Necklace, Custom Image Pendant'), 'photo');
+  const w = world(); await seed(w);
+  const meta = { kind: 'words', ok: true, reason: '', notes: [], section: 'jewelry' };
+  await w.db.createRow({ tableId: T.catalog, rowId: 'pf_WORDSBAR1234', data: { title: 'Engraved Name Bar', blurb: '', blueprintId: 7, providerId: 3, position: 'front', enabled: true,
+    variants: JSON.stringify({ v: [{ id: 101, label: 'One size', options: {}, priceCents: 2500, width: 1200, height: 1600 }], m: meta }) }, permissions: [] });
+  const cat = await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' });
+  assert.equal(cat.products.find((p) => p.key === 'pf_WORDSBAR1234').kind, 'words');
+  assert.equal(cat.products.find((p) => p.key === 'framed-print').kind, 'photo');
+  w.storage.add('wf1', { owner: 'alice', buf: jpeg(1200, 1600) });
+  const base = { familyId: 'fam1', productKey: 'pf_WORDSBAR1234', variantId: 101, fileId: 'wf1', quantity: 1 };
+  assert.equal((await w.call(w.A, 'shopSaveDesign', { ...base, postId: 'words-only', spec: { text: '   ' } })).status, 400, 'words required');
+  assert.equal((await w.call(w.A, 'shopSaveDesign', { ...base, postId: 'post1', spec: {} })).status, 400, 'a photo cannot go on a words product');
+  const d = await w.ok(w.A, 'shopSaveDesign', { ...base, postId: 'words-only', spec: { text: 'Layah  &  Mom', font: 'nope', extra: 'x' } });
+  assert.deepEqual(d.design.spec, { kind: 'words', text: 'Layah & Mom', font: 'script' });
+  w.storage.add('wf2', { owner: 'alice', buf: jpeg(1200, 1600) });
+  assert.equal((await w.call(w.A, 'shopSaveDesign', { familyId: 'fam1', postId: 'words-only', productKey: 'framed-print', variantId: 101, fileId: 'wf2', quantity: 1, spec: { text: 'Hi' } })).status, 400, 'words cannot go on a photo product');
+  await w.ok(w.O, 'shopAdminToggle', { key: 'pf_WORDSBAR1234', enabled: true, kind: 'photo' });
+  assert.equal((await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' })).products.find((p) => p.key === 'pf_WORDSBAR1234').kind, 'photo', 'owner choice wins');
+});

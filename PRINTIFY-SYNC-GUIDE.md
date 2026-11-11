@@ -97,3 +97,9 @@ The same result lists each permission with ✓ or ✗: shops.read, products.read
 When someone adds a design to the cart, the shop asks Printify for a real picture of the product with their photo on it. To do that it makes a temporary product in your Printify shop named **FC preview …**, copies Printify's picture into the buyer's private storage, then deletes the temporary product. It never touches your real products, and the product sync ignores these temporary ones.
 
 This needs the token permission **products.write**. If the cart shows a note starting "Owner:" under a design, make a new token with products.write ticked and update PRINTIFY_API_TOKEN. If you ever see a leftover **FC preview** product in Printify, it is safe to delete. Buying still works if the preview fails; the cart just keeps the flat design picture.
+
+## Photo products and words products
+
+Each product is either **Buyer adds a photo** or **Buyer types words** (an engraved name bar, for example). The sync guesses from the name: anything that mentions a photo is a photo product, and names like "Engraved Name Bar" become words products. If it guessed wrong, change it in the owner page next to the section menu; your choice is kept on every later sync. Shoppers can filter the shop by All, Photo or Words.
+
+For a words product the buyer types up to 40 letters, picks a letter style, and the shop sends Printify an image of those words in black on white, sized to the product's print area. **Not verified:** how Printify's engraving or print provider treats a black-on-white image. Add one to the cart and look at the cart preview picture Printify makes; if the engraving looks wrong, tell me before taking real orders.

@@ -45,6 +45,14 @@ export function guessSection(...texts) {
   for (const [id, re] of RULES) if (re.test(t)) return id;
   return 'gifts';
 }
+/** Does the buyer give a photo or words? Anything that mentions a photo is a photo product; engraved or name products take words. The owner can change it. */
+export const KIND_IDS = ['photo', 'words'];
+export function guessKind(...texts) {
+  const t = texts.join(' ');
+  if (/\bphotos?\b|\bpictures?\b|\bimages?\b/i.test(t)) return 'photo';
+  return /engrav|\bnames?\b|monogram|\binitials?\b|\bwords?\b|\btext\b|\bquote\b|\bletters?\b|\bbirthstone\b/i.test(t) ? 'words' : 'photo';
+}
+export const cleanKind = (x) => (x === 'words' ? 'words' : 'photo');
 export const cleanSection = (x) => (SECTION_IDS.includes(x) ? x : 'gifts');
 
 /** Printify gives each variant a list of option value ids. Turn them into { Size: "11oz", Color: "White" } for the shop chips. */
@@ -70,7 +78,7 @@ export function planImport(product, catalog, blueprintTitle = '') {
     key, printifyId: product && product.id, title: clean(product && product.title, 80) || 'Untitled product',
     blurb: clean(product && product.description, 300), blueprintId: Number(product && product.blueprint_id) || 0, providerId: Number(product && product.print_provider_id) || 0,
     position: '-', variants: [], image: pickImage(product || {}), visible: !!(product && product.visible),
-    section: guessSection(blueprintTitle, product && product.title), notes
+    section: guessSection(blueprintTitle, product && product.title), kind: guessKind(blueprintTitle, product && product.title), notes
   };
   const fail = (reason) => ({ ...base, support: { ok: false, reason } });
   if (!key) return fail('Printify gave this product an ID the shop cannot store.');
@@ -121,7 +129,7 @@ export function packVariants(plan, extra = {}) {
   const pack = (withImages) => JSON.stringify({
     v: withImages ? plan.variants : plan.variants.map(({ img, ...rest }) => rest),
     m: {
-      pid: plan.printifyId, image: plan.image, u: withImages ? (plan.imageUrls || []) : [], visible: plan.visible, section: plan.section, sectionLocal: !!extra.sectionLocal, shopId: extra.shopId || '',
+      pid: plan.printifyId, image: plan.image, u: withImages ? (plan.imageUrls || []) : [], visible: plan.visible, section: plan.section, sectionLocal: !!extra.sectionLocal, kind: plan.kind || 'photo', kindLocal: !!extra.kindLocal, shopId: extra.shopId || '',
       ok: plan.support.ok, reason: plan.support.reason, notes: plan.notes.slice(0, 6), syncedAt: extra.syncedAt || '', missing: false
     }
   });

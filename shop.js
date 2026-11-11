@@ -74,8 +74,14 @@
     main.appendChild(shopLinks());
     if (cat.config.testMode) main.appendChild(X.alertBox('warn', 'Test mode: payments here are practice payments and no real order is made.'));
     var finder = h('input', { type: 'search', class: 'shop-search', placeholder: 'Search the shop', 'aria-label': 'Search the shop' });
-    var none = h('p', { class: 'hint', hidden: true, text: 'Nothing matches that. Try another word, like mug or necklace.' });
+    var none = h('p', { class: 'hint', hidden: true, text: 'Nothing matches that. Try another word, like mug or necklace, or choose All above.' });
+    var kindNow = 'all';
+    var kindRow = h('div', { class: 'chips', role: 'group', 'aria-label': 'What you personalize with' },
+      [['all', 'All'], ['photo', 'Photo'], ['words', 'Words']].map(function (k) {
+        return h('button', { class: 'chip', type: 'button', 'data-kind': k[0], 'aria-pressed': k[0] === 'all' ? 'true' : 'false', text: k[1], onclick: function () { kindNow = k[0]; Array.prototype.forEach.call(kindRow.children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-kind') === kindNow ? 'true' : 'false'); }); applyFilter(); } });
+      }));
     main.appendChild(h('div', { class: 'shop-search-row' }, finder));
+    main.appendChild(kindRow);
     main.appendChild(none);
     var blocks = [];
     SECTIONS.forEach(function (sec) {
@@ -85,20 +91,25 @@
     var grid = h('div', { class: 'shop-grid' }); blocks.push({ head: head2, grid: grid });
     slots.forEach(function (slot) {
       var p = productByKey(cat, slot.key);
-      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key, 'data-q': (p.title + ' ' + (p.blurb || '') + ' ' + sec.title).toLowerCase() }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
+      if (p) grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key, 'data-q': (p.title + ' ' + (p.blurb || '') + ' ' + sec.title + ' ' + (p.kind === 'words' ? 'words text engraved name' : 'photo picture')).toLowerCase(), 'data-kind': p.kind === 'words' ? 'words' : 'photo' }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) })));
       else grid.appendChild(h('div', { class: 'shop-card off', 'aria-disabled': 'true' }, h('strong', { text: slot.title }), h('span', { class: 'small', text: 'Not available yet' })));
     });
     main.appendChild(grid);
     });
-    finder.addEventListener('input', function () {
+    function applyFilter() {
       var words = finder.value.toLowerCase().split(/\s+/).filter(Boolean), shown = 0;
       blocks.forEach(function (b) {
         var any = 0;
-        Array.prototype.forEach.call(b.grid.children, function (c) { var q = c.getAttribute('data-q'); var hit = q ? words.every(function (w) { return q.indexOf(w) !== -1; }) : !words.length; c.hidden = !hit; if (hit) any++; });
+        Array.prototype.forEach.call(b.grid.children, function (c) {
+          var q = c.getAttribute('data-q'), kd = c.getAttribute('data-kind');
+          var hit = q ? words.every(function (w) { return q.indexOf(w) !== -1; }) && (kindNow === 'all' || kd === kindNow) : (!words.length && kindNow === 'all');
+          c.hidden = !hit; if (hit) any++;
+        });
         b.head.hidden = b.grid.hidden = !any; shown += any;
       });
-      none.hidden = !words.length || shown > 0;
-    });
+      none.hidden = (!words.length && kindNow === 'all') || shown > 0;
+    }
+    finder.addEventListener('input', applyFilter);
     if (!cat.products.length) main.appendChild(h('p', { class: 'hint', text: 'No products are switched on yet.' }));
     main.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'How it works' }),
       h('ol', { class: 'steps' },
@@ -124,7 +135,7 @@
       if (!mine && !ok.allowed[postId]) { holder.appendChild(h('p', { text: 'The person who posted this photo has not allowed it to be used for gifts. You can ask them to turn it on from the ⋯ menu on the photo.' })); return; }
       holder.appendChild(h('p', { class: 'muted', text: 'Choose a product for this photo.' }));
       var grid = h('div', { class: 'shop-grid' });
-      cat.products.forEach(function (p) { grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key + '/' + postId }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) }))); });
+      cat.products.filter(function (p) { return p.kind !== 'words'; }).forEach(function (p) { grid.appendChild(h('a', { class: 'shop-card', href: '#/shop/product/' + p.key + '/' + postId }, cardImg(p), h('strong', { class: 'shop-title', text: p.title }), h('span', { class: 'shop-price', text: 'From ' + money(fromPrice(p)) }))); });
       holder.appendChild(cat.products.length ? grid : h('p', { class: 'hint', text: 'No products are switched on yet.' }));
     } catch (e) { if (token === X.S.nav) { clear(holder); holder.appendChild(X.alertBox('error', msgOf(e))); } }
   }
@@ -206,6 +217,8 @@
     groups.forEach(function (g) { chosen[g] = (variant.options || {})[g]; });
     var spec = { fit: 'cover', zoom: 1, ox: 0, oy: 0, caption: '' };
     var photo = { postId: postId || '', bmp: null, own: false };
+    var isWords = prod.kind === 'words';
+    var wspec = { text: '', font: 'script' };
     var quality = h('div', { class: 'shop-quality', role: 'status' });
     var priceEl = h('div', { class: 'shop-price big' });
     var optsEl = h('div', { class: 'shop-opts' });
@@ -243,6 +256,7 @@
     function repaint() {
       if (hero) { var pic = (prod.images && Number.isInteger(variant.img) && prod.images[variant.img]) || prod.image; if (hero.getAttribute('src') !== pic) { var want = pic; hero.classList.add('swapping'); warmPic(pic).then(function () { if (want === ((prod.images && Number.isInteger(variant.img) && prod.images[variant.img]) || prod.image)) { hero.src = want; hero.classList.remove('swapping'); } }); } }   // each size or style can have its own picture
       priceEl.textContent = money(variant.priceCents) + ' each';
+      if (isWords) { paintWordsPreview(); return; }
       if (!photo.bmp) { canvas.width = canvas.height = 1; return; }
       var W = variant.width, H = variant.height, z = size();
       canvas.width = z.cw; canvas.height = z.ch;
@@ -405,13 +419,89 @@
       } catch (e) { clear(pickEl); X.showAlert(pickEl, 'error', msgOf(e)); }
     }
 
+    /* ----- products made of words (an engraved name bar, for example): no photo, the buyer types the words ----- */
+    var WORD_FONT_CSS = { script: '700 {s}px "Dancing Script", "Snell Roundhand", cursive', serif: '700 {s}px Georgia, "Times New Roman", serif', sans: '700 {s}px system-ui, Arial, sans-serif', type: '700 {s}px "Courier New", monospace' };
+    function paintWordsOn(c, W, H, k) {
+      c.fillStyle = '#fff'; c.fillRect(0, 0, W * k, H * k);
+      var text = wspec.text; if (!text) return;
+      var s = H * 0.62 * k; c.font = WORD_FONT_CSS[wspec.font].replace('{s}', String(Math.max(8, s)));
+      var w = c.measureText(text).width, maxW = W * k * 0.9;
+      if (w > maxW) { s = s * maxW / w; c.font = WORD_FONT_CSS[wspec.font].replace('{s}', String(Math.max(8, s))); }
+      c.fillStyle = '#111'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, W * k / 2, H * k / 2 + s * 0.04);
+    }
+    function paintWordsPreview() {
+      var W = variant.width, H = variant.height, z = size();
+      canvas.width = z.cw; canvas.height = z.ch;
+      var c = canvas.getContext('2d'), k = z.s, ox = W * PAD * k, oy = H * PAD * k;
+      c.fillStyle = '#e9ecef'; c.fillRect(0, 0, z.cw, z.ch);
+      c.save(); c.translate(ox, oy); paintWordsOn(c, W, H, k); c.restore();
+      c.strokeStyle = '#111'; c.lineWidth = 2; c.strokeRect(ox, oy, W * k, H * k);
+      c.setLineDash([6, 5]); c.strokeStyle = '#0095f6'; c.strokeRect(ox + W * k * 0.05, oy + H * k * 0.05, W * k * 0.9, H * k * 0.9);
+    }
+    function showWords() {
+      clear(pickEl); clear(stage); stage.appendChild(canvas); canvas.setAttribute('aria-label', 'Layout preview of your words'); canvas.removeAttribute('tabindex');
+      var txt = h('input', { type: 'text', maxlength: 40, placeholder: 'Type the words to print', 'aria-label': 'Words to print', autocomplete: 'off', oninput: function () { wspec.text = txt.value.replace(/\s+/g, ' ').trim(); repaint(); } });
+      var fontBtns = [['script', 'Script'], ['serif', 'Classic'], ['sans', 'Clean'], ['type', 'Typewriter']].map(function (f) {
+        return h('button', { class: 'chip', type: 'button', 'aria-pressed': f[0] === wspec.font ? 'true' : 'false', text: f[1], onclick: function () { wspec.font = f[0]; fontBtns.forEach(function (b, i) { b.setAttribute('aria-pressed', ['script', 'serif', 'sans', 'type'][i] === wspec.font ? 'true' : 'false'); }); repaint(); } });
+      });
+      var wChecks = ['I checked the spelling of every word.', 'I understand this layout preview is not a picture of the finished product.'].map(function (t) { var cb = h('input', { type: 'checkbox' }); return { cb: cb, row: h('label', { class: 'check' }, cb, ' ', t) }; });
+      var wQty = h('select', { 'aria-label': 'Quantity' }, [1, 2, 3, 4, 5].map(function (n) { return h('option', { value: String(n), text: String(n) }); }));
+      var wMsg = h('div');
+      var wAdd = h('button', { class: 'btn block', type: 'button', text: 'Add to cart', onclick: function () { addWords(); } });
+      async function addWords() {
+        if (!wspec.text) return X.showAlert(wMsg, 'error', 'Type the words to print first.');
+        if (!wChecks.every(function (c) { return c.cb.checked; })) return X.showAlert(wMsg, 'error', 'Please tick every box after checking your words.');
+        X.showAlert(wMsg, 'error', '');
+        await X.busy(wAdd, async function () {
+          var fid = X.S.familyId, uploaded = null;
+          try {
+            if (!st().consentShown) {
+              var okc = await X.confirmDialog('Before we make your product', 'Your words will be shared with Printify and the fulfillment partners needed to make and deliver it. A copy of the finished design goes to Printify when you add it to the cart, so it can show you a picture of the product. Nothing is made until your payment is confirmed.', 'I understand');
+              if (!okc) return; st().consentShown = true;
+            }
+            try { await document.fonts.load(WORD_FONT_CSS[wspec.font].replace('{s}', '40') , wspec.text); } catch (e0) { /* the browser's fallback font is used */ }
+            var W = variant.width, H = variant.height, sc = Math.min(1, 4096 / Math.max(W, H)), blob = null;
+            for (var tries = 0; tries < 6; tries++) {
+              var oc = document.createElement('canvas'); oc.width = Math.round(W * sc); oc.height = Math.round(H * sc);
+              paintWordsOn(oc.getContext('2d'), W, H, oc.width / W);
+              blob = await new Promise(function (r) { oc.toBlob(r, 'image/jpeg', 0.92); });
+              if (blob && blob.size <= 4.8 * 1048576) break;
+              sc *= 0.82;
+            }
+            if (!blob || blob.size > 4.9 * 1048576) throw new Error('This design is too large to send.');
+            var uid = X.S.user.$id;
+            uploaded = await X.storage.createFile({ bucketId: X.CFG.shopBucketId || 'family-media', fileId: X.ID.unique(), file: new File([blob], 'design.jpg', { type: 'image/jpeg' }),
+              permissions: [X.Permission.read(X.Role.user(uid)), X.Permission.update(X.Role.user(uid)), X.Permission.delete(X.Role.user(uid))] });
+            if (fid !== X.S.familyId) throw new Error('You switched families. Nothing was added.');
+            var saved = await shopApi('shopSaveDesign', { familyId: fid, postId: 'words-only', productKey: prod.key, variantId: variant.id, fileId: uploaded.$id, quantity: Number(wQty.value), spec: { text: wspec.text, font: wspec.font } });
+            st().designs = null;
+            try { if (saved && saved.design) shopApi('shopPreview', { familyId: fid, designId: saved.design.id }).catch(function () {}); } catch (e1) { /* the cart will start it */ }
+            toast('Added to your cart.'); location.hash = '#/shop/cart';
+          } catch (e) {
+            if (uploaded) X.storage.deleteFile({ bucketId: X.CFG.shopBucketId || 'family-media', fileId: uploaded.$id }).catch(function () {});
+            X.showAlert(wMsg, 'error', msgOf(e));
+          }
+        }, 'Saving…');
+      }
+      pickEl.appendChild(h('h2', { text: 'Your words' }));
+      pickEl.appendChild(txt);
+      pickEl.appendChild(h('div', { class: 'chips', role: 'group', 'aria-label': 'Letter style' }, fontBtns));
+      pickEl.appendChild(h('p', { class: 'hint', text: 'Up to 40 letters. The words are sized to fit inside the dashed line.' }));
+      pickEl.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'Before you add it' }), wChecks.map(function (c) { return c.row; })));
+      pickEl.appendChild(h('div', { class: 'shop-ctl-row' }, h('label', { text: 'Quantity' }), wQty));
+      pickEl.appendChild(wAdd); pickEl.appendChild(wMsg);
+      document.fonts && document.fonts.load('700 40px "Dancing Script"').then(function () { repaint(); }).catch(function () {});
+      repaint();
+    }
+
     if (prod.blurb) holder.appendChild(h('details', { class: 'shop-about' }, h('summary', { text: 'About this product' }), h('p', { class: 'muted', text: prod.blurb })));
     holder.appendChild(optsEl); holder.appendChild(priceEl);
     drawOptions();
     holder.appendChild(pickEl); holder.appendChild(stage); holder.appendChild(controls);
     holder.appendChild(h('p', { class: 'small muted', text: 'Layout preview: made on your phone from the print area of the product, so it is not a picture of the finished item. After you add it to the cart, Printify makes a picture of the real product with your photo on it.' }));
     repaint();
-    if (postId) {
+    if (isWords) { showWords(); }
+    else if (postId) {
       var found = (await X.listRows('posts', [X.Query.equal('$id', [postId]), X.Query.limit(1)])).rows[0];
       if (found && found.familyId === X.S.familyId && found.kind === 'photo') await usePhoto(found); else showPicker();
     } else showPicker();
@@ -425,18 +515,18 @@
   async function runPreviews(items, token) {
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      it.note.hidden = false; it.note.textContent = 'Making your product preview… framed pieces can take a minute.';
+      it.note.hidden = false; it.note.textContent = 'Making your product preview… this picture is not the final look yet. It can take a minute.';
       var done = false;
       for (var n = 0; n < 50 && !done; n++) {
         if (token !== X.S.nav) return;
         try {
           var r = await shopApi('shopPreview', { familyId: X.S.familyId, designId: it.d.id });
-          if (r.status === 'ready') { await it.show(r.fileId); it.note.hidden = true; done = true; }
-          else if (r.status === 'unavailable') { if (r.hint) { it.note.hidden = false; it.note.textContent = r.hint; } else it.note.hidden = true; done = true; }
-        } catch (e) { it.note.hidden = true; done = true; }
+          if (r.status === 'ready') { await it.show(r.fileId); it.note.hidden = true; it.wrap.classList.remove('thumb-loading'); it.badge.textContent = ''; done = true; }
+          else if (r.status === 'unavailable') { it.wrap.classList.remove('thumb-loading'); it.badge.textContent = 'Layout only'; if (r.hint) { it.note.hidden = false; it.note.textContent = r.hint; } else it.note.hidden = true; done = true; }
+        } catch (e) { it.note.hidden = true; it.wrap.classList.remove('thumb-loading'); it.badge.textContent = 'Layout only'; done = true; }
         if (!done) await new Promise(function (res) { setTimeout(res, 2500); });
       }
-      if (!done) it.note.hidden = true;
+      if (!done) { it.note.hidden = true; it.wrap.classList.remove('thumb-loading'); it.badge.textContent = 'Layout only'; }
     }
   }
   async function viewCart(main, token) {
@@ -452,14 +542,15 @@
     designs.forEach(function (d) {
       var img = h('img', { class: 'cart-thumb', alt: 'Your design for ' + d.title });
       var pvNote = h('div', { class: 'small muted', hidden: true });
+      var badge = h('span', { class: 'thumb-badge' }), wrap = h('div', { class: 'cart-thumb-wrap' }, img, badge);
       function showFile(id, mime) { return X.fetchMedia(id, false, X.CFG.shopBucketId || 'family-media').then(function (b) { img.src = X.blobUrl(b, mime || 'image/jpeg'); }); }
       // The flat print image shows first. Printify's picture of the real product replaces it as soon as it is ready.
       showFile(d.preview || d.fileId, d.preview ? 'image/jpeg' : 'image/jpeg').catch(function () { if (d.preview) showFile(d.fileId).catch(function () {}); });
-      if (!d.preview && d.previewState === 'maybe' && d.available) previews.push({ d: d, note: pvNote, show: showFile });
+      if (!d.preview && d.previewState === 'maybe' && d.available) { wrap.classList.add('thumb-loading'); badge.textContent = 'Not the final look'; previews.push({ d: d, note: pvNote, show: showFile, wrap: wrap, badge: badge }); }
       var qty = h('select', { 'aria-label': 'Quantity for ' + d.title, onchange: async function () { try { await shopApi('shopUpdateDesign', { designId: d.id, quantity: Number(qty.value) }); st().requestId = null; X.route(false); } catch (e) { toast(msgOf(e)); } } },
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(function (n) { return h('option', { value: String(n), text: String(n) }); }));
       qty.value = String(d.quantity);
-      list.appendChild(h('div', { class: 'cart-row' }, img, h('div', { class: 'grow' }, h('strong', { text: d.title }), h('div', { class: 'small muted', text: d.variantLabel }), pvNote,
+      list.appendChild(h('div', { class: 'cart-row' }, wrap, h('div', { class: 'grow' }, h('strong', { text: d.title }), h('div', { class: 'small muted', text: d.variantLabel }), pvNote,
         d.available ? h('div', { text: money(d.unitCents) + ' each' }) : h('div', { class: 'small danger-text', text: 'No longer available. Please remove it.' }),
         h('div', { class: 'cart-actions' }, h('label', { class: 'small', text: 'Qty ' }, qty),
           h('button', { class: 'link-btn', type: 'button', text: 'Remove', onclick: async function () { try { await shopApi('shopUpdateDesign', { designId: d.id, remove: true }); st().requestId = null; X.route(false); } catch (e) { toast(msgOf(e)); } } })))));
@@ -671,6 +762,9 @@
         var btns2 = h('div', { class: 'row' });
         btns2.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: p.enabled ? 'Hide from customers' : 'Show to customers', disabled: !p.supported || p.missing, onclick: async function () { try { await shopApi('shopAdminToggle', { key: p.key, enabled: !p.enabled }); await reload(); } catch (e) { toast(msgOf(e)); } } }));
         btns2.appendChild(sel);
+        var ksel = h('select', { 'aria-label': 'What the buyer provides for ' + p.title, onchange: async function () { try { await shopApi('shopAdminToggle', { key: p.key, enabled: p.enabled, kind: ksel.value }); toast('Saved.'); await reload(); } catch (e) { toast(msgOf(e)); } } },
+          [['photo', 'Buyer adds a photo'], ['words', 'Buyer types words']].map(function (x) { return h('option', { value: x[0], text: x[1] }); }));
+        ksel.value = p.kind || 'photo'; btns2.appendChild(ksel);
         sc.appendChild(line); sc.appendChild(btns2);
       });
       holder.appendChild(sc);

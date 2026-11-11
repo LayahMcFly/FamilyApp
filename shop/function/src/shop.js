@@ -15,7 +15,7 @@ import { InputFile } from 'node-appwrite/file';
 import { ApiError, bad, forbidden, missing, conflict, idOf, intIn, rowId, sha256hex, money, publicError } from './util.js';
 import { verifySquareSignature, SquareError } from './square.js';
 import { PrintifyError, verifyPrintifySignature } from './printify.js';
-import { safeImage, planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure, SECTION_IDS, cleanSection } from './sync.js';
+import { safeImage, planImport, packVariants, unpack, importedKey, isImportedKey, explainPrintifyFailure, SECTION_IDS, cleanSection, cleanKind, KIND_IDS } from './sync.js';
 import { imageSize } from './images.js';
 
 export const T = {
@@ -37,6 +37,9 @@ export const SLOTS = {
 
 /** A design made from a photo the buyer picked or took on their own phone, not from a family post. */
 export const OWN_PHOTO = 'own-upload';
+export const WORDS = 'words-only';          // a design made of typed words, no photo involved
+const noPhoto = (id) => id === OWN_PHOTO || id === WORDS;
+const WORD_FONTS = ['script', 'serif', 'sans', 'type'];
 
 export const LIMITS = { maxDesignsOpen: 20, maxQty: 10, maxLines: 10, minPrint: 600, maxDesignBytes: 5 * 1024 * 1024, specMax: 3500 };
 
@@ -149,9 +152,10 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     if (!row || row.enabled !== true || !sellable(row)) throw conflict('unavailable', 'That product is not available right now.');
     return { row, variants: parseVariants(row) };
   }
+  const kindOf = (row) => cleanKind((metaOf(row) || {}).kind);
   const publicProduct = ({ row, variants }) => ({
     key: row.$id, title: titleOf(row, row.$id), blurb: row.blurb || '', frameNote: !!(SLOTS[row.$id] && SLOTS[row.$id].frameNote),
-    position: row.position,
+    position: row.position, kind: kindOf(row),
     images: (((metaOf(row) || {}).u) || []).filter((u) => typeof u === 'string' && u.startsWith('https://')).slice(0, 40),
     variants: variants.map((v) => ({ id: v.id, label: v.label, options: v.options || {}, priceCents: v.priceCents, width: v.width, height: v.height, ...(Number.isInteger(v.img) ? { img: v.img } : {}) }))
   });
@@ -223,9 +227,10 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
   }
   async function saveDesign({ user, body }) {
     const { familyId } = await requireMember(user, body.familyId);
-    const own = body.postId === OWN_PHOTO;
+    const own = body.postId === OWN_PHOTO, words = body.postId === WORDS;
     let post = null;
-    if (own) {
+    if (words) { /* no photo, so no photo permission to check */ }
+    else if (own) {
       if (body.ownPhoto !== true) throw bad('Please confirm the photo is yours to use.');
     } else {
       post = await loadPhoto(familyId, body.postId);
@@ -236,7 +241,14 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     if (!variant) throw conflict('unavailable', 'That size or style is not available.');
     const quantity = intIn(body.quantity ?? 1, 'Quantity', 1, LIMITS.maxQty);
     const fileId = idOf(body.fileId, 'fileId');
-    const spec = JSON.stringify(body.spec && typeof body.spec === 'object' ? body.spec : {});
+    if ((kindOf(row) === 'words') !== words) throw bad(words ? 'This product needs a photo, not words.' : 'This product is made from words you type, not a photo.');
+    let specObj = body.spec && typeof body.spec === 'object' ? body.spec : {};
+    if (words) {
+      const text = typeof specObj.text === 'string' ? specObj.text.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+      if (!text) throw bad('Type the words to print.');
+      specObj = { kind: 'words', text, font: WORD_FONTS.includes(specObj.font) ? specObj.font : 'script' };
+    }
+    const spec = JSON.stringify(specObj);
     if (spec.length > LIMITS.specMax) throw bad('The design details are too long.');
 
     const open = (await listRows(T.designs, [Query.equal('ownerId', [user.$id]), Query.equal('familyId', [familyId]), Query.equal('orderId', ['']), Query.limit(LIMITS.maxDesignsOpen + 1)])).rows;
@@ -258,7 +270,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     // Freeze the file: from now on the buyer can read it but can no longer replace or delete it, so what they approved is what is printed.
     await storage.updateFile({ bucketId: cfg.designBucketId, fileId, permissions: ownerRead(user.$id) });
     const id = rowId('design', user.$id, fileId);
-    const data = { ownerId: user.$id, familyId, postId: own ? OWN_PHOTO : post.$id, productKey: row.$id, variantId: variant.id, fileId, fileSha, width: size.width, height: size.height, spec, quantity, orderId: '' };
+    const data = { ownerId: user.$id, familyId, postId: words ? WORDS : (own ? OWN_PHOTO : post.$id), productKey: row.$id, variantId: variant.id, fileId, fileSha, width: size.width, height: size.height, spec, quantity, orderId: '' };
     const created = await createRow(T.designs, id, data, ownerRead(user.$id));
     return { design: publicDesign(created, { row, variants }) };
   }
@@ -406,7 +418,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       const prod = await productByKey(d.productKey);
       const variant = prod.variants.find((v) => v.id === d.variantId);
       if (!variant) throw conflict('unavailable', `${titleOf(prod.row, d.productKey)}: that size or style is no longer available.`);
-      const post = d.postId === OWN_PHOTO ? OWN_PHOTO : await loadPhoto(familyId, d.postId).catch(() => null);
+      const post = noPhoto(d.postId) ? OWN_PHOTO : await loadPhoto(familyId, d.postId).catch(() => null);
       if (!post || (post !== OWN_PHOTO && !(await giftAllowed(post, user.$id)))) throw conflict('photo_not_allowed', 'One of the photos can no longer be used for gifts. Remove that design from your cart.');
       lines.push({
         designId: d.$id, postId: d.postId, productKey: d.productKey, title: titleOf(prod.row, d.productKey), variantId: variant.id, variantLabel: variant.label,
@@ -677,7 +689,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     try {
       for (const it of items) {
         // Rechecked now, not just when the cart was built: the uploader may have turned gifts off, or deleted the photo.
-        const post = it.postId === OWN_PHOTO ? OWN_PHOTO : await loadPhoto(o.familyId, it.postId).catch(() => null);
+        const post = noPhoto(it.postId) ? OWN_PHOTO : await loadPhoto(o.familyId, it.postId).catch(() => null);
         if (!post || (post !== OWN_PHOTO && !(await giftAllowed(post, o.ownerId)))) {
           return await updateRow(T.orders, o.$id, { fulfillmentStatus: 'needs_review', lastError: 'A photo in this order is no longer allowed for gifts. Nothing was sent to production.' });
         }
@@ -849,7 +861,7 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     requireAdmin(user);
     const rows = (await listRows(T.orders, [Query.orderDesc('$createdAt'), Query.limit(50)])).rows;
     const catalog = await allCatalogRows();
-    const imported = catalog.filter((r) => isImportedKey(r.$id)).map((r) => { const m = metaOf(r) || {}; const vs = parseVariants(r); const prices = vs.map((v) => v.priceCents); return { key: r.$id, title: r.title, enabled: r.enabled === true, supported: m.ok !== false, reason: m.reason || '', notes: m.notes || [], image: m.image || '', section: cleanSection(m.section), visible: !!m.visible, missing: !!m.missing, variantCount: vs.length, minCents: prices.length ? Math.min(...prices) : 0, maxCents: prices.length ? Math.max(...prices) : 0, syncedAt: m.syncedAt || '', printifyId: m.pid || '', blueprintId: r.blueprintId, providerId: r.providerId, position: r.position }; });
+    const imported = catalog.filter((r) => isImportedKey(r.$id)).map((r) => { const m = metaOf(r) || {}; const vs = parseVariants(r); const prices = vs.map((v) => v.priceCents); return { key: r.$id, title: r.title, enabled: r.enabled === true, supported: m.ok !== false, reason: m.reason || '', notes: m.notes || [], image: m.image || '', section: cleanSection(m.section), kind: cleanKind(m.kind), visible: !!m.visible, missing: !!m.missing, variantCount: vs.length, minCents: prices.length ? Math.min(...prices) : 0, maxCents: prices.length ? Math.max(...prices) : 0, syncedAt: m.syncedAt || '', printifyId: m.pid || '', blueprintId: r.blueprintId, providerId: r.providerId, position: r.position }; });
     return { orders: rows.map(adminOrderRow), imported, products: Object.entries(SLOTS).map(([key, s]) => { const r = catalog.find((c) => c.$id === key); return { key, title: s.title, section: s.section || 'gifts', saved: !!r, enabled: !!(r && r.enabled), blueprintId: r ? r.blueprintId : null, providerId: r ? r.providerId : null, variantCount: r ? parseVariants(r).length : 0, verifiedAt: r ? r.verifiedAt : '' }; }) };
   }
   async function adminOrder({ user, body }) {
@@ -910,6 +922,10 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
     const data = { enabled: body.enabled === true };
     if (isImportedKey(key) && SECTION_IDS.includes(body.section)) {
       const u = unpack(row.variants); u.meta = { ...(u.meta || {}), section: body.section, sectionLocal: true };
+      data.variants = JSON.stringify({ v: u.variants, m: u.meta });
+    }
+    if (isImportedKey(key) && KIND_IDS.includes(body.kind)) {
+      const u = unpack(data.variants || row.variants); u.meta = { ...(u.meta || {}), kind: body.kind, kindLocal: true };
       data.variants = JSON.stringify({ v: u.variants, m: u.meta });
     }
     await updateRow(T.catalog, key, data);
@@ -974,9 +990,10 @@ export function createShop({ users, db, storage, square, printify, cfg, now = ()
       const existing = await getRowOrNull(T.catalog, plan.key);
       const prev = existing ? metaOf(existing) : null;
       if (prev && prev.sectionLocal) plan.section = prev.section;
+      if (prev && prev.kindLocal) plan.kind = cleanKind(prev.kind);
       const data = {
         title: plan.title, blurb: plan.blurb, blueprintId: plan.blueprintId, providerId: plan.providerId, position: plan.position,
-        variants: packVariants(plan, { shopId: String(cfg.printifyShopId), syncedAt, sectionLocal: !!(prev && prev.sectionLocal) }),
+        variants: packVariants(plan, { shopId: String(cfg.printifyShopId), syncedAt, sectionLocal: !!(prev && prev.sectionLocal), kindLocal: !!(prev && prev.kindLocal) }),
         enabled: existing ? (existing.enabled === true && plan.support.ok) : (body.enableNew === true && plan.support.ok), verifiedAt: syncedAt
       };
       if (existing) await updateRow(T.catalog, plan.key, data); else await createRow(T.catalog, plan.key, data, []);
