@@ -653,7 +653,8 @@
   function applyCaptions(v, box, post) {
     Array.prototype.forEach.call(v.querySelectorAll('track'), function (t) { if (t.__url) URL.revokeObjectURL(t.__url); v.removeChild(t); });
     var old = box.querySelector('.cc-btn'); if (old) box.removeChild(old);
-    var oldLine = box.querySelector('.cc-line'); if (oldLine) box.removeChild(oldLine);
+    var reelEl = box.closest ? box.closest('.reel') : null, holder0 = reelEl || box;
+    Array.prototype.forEach.call(holder0.querySelectorAll('.cc-line'), function (x) { x.parentNode.removeChild(x); });
     var cues = window.Captions ? window.Captions.parse(post.captions) : [];
     post.__cc = { v: v, box: box };
     if (!cues.length) return;
@@ -663,7 +664,9 @@
     tr.src = tr.__url; v.appendChild(tr);
     // The words are drawn by the page, not the browser, so they can wear the person's appearance style (colors, corners, font).
     var line = h('div', { class: 'cc-line', 'aria-hidden': 'true', hidden: true }, h('span', { class: 'cc-text' }));
-    box.appendChild(line);
+    // On a Short the words sit at the top of the info block, so they appear right above the poster's name and picture.
+    var info = reelEl && reelEl.querySelector('.reel-info');
+    if (info) { line.classList.add('in-info'); info.insertBefore(line, info.firstChild); } else box.appendChild(line);
     var shown = true;
     function showCue() {
       var a = tr.track.activeCues, t = '';
