@@ -776,7 +776,13 @@
         var v = h('video', { src: st.url, loop: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
         v.muted = S.muted;
         v.addEventListener('loadedmetadata', function () { box.classList.toggle('wide', v.videoWidth > v.videoHeight); });   // landscape videos are shown whole, not cropped
-        v.addEventListener('timeupdate', function () { if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%'; });
+        var lastT = 0;
+        v.addEventListener('timeupdate', function () {
+          if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%';
+          var t = v.currentTime, d = v.duration;
+          if (d > 1 && lastT > d - 0.7 && t < 0.7 && lastT > t) box.dispatchEvent(new CustomEvent('reelloop', { bubbles: true }));   // the Short just started over
+          lastT = t;
+        });
         // Wide videos: a blurred, zoomed copy of the picture fills the empty space above and below (drawn small, so it costs almost nothing).
         var bg = h('canvas', { class: 'reel-bg', width: 48, height: 86, 'aria-hidden': 'true' }), bgx = bg.getContext('2d'), bgRaf = 0;
         function paintBg() {
@@ -825,7 +831,7 @@
       if (m && m.__prefetch) m.__prefetch();          // get the next video ready so the swipe feels instant
     };
     // Scrolling away stops the video and rewinds it, so it starts from the beginning when you scroll back.
-    box.__deactivate = function () { st.active = false; if (st.v) { st.v.pause(); try { st.v.currentTime = 0; } catch (e) {} } };
+    box.__deactivate = function () { st.active = false; box.dispatchEvent(new CustomEvent('reelreset', { bubbles: true })); if (st.v) { st.v.pause(); try { st.v.currentTime = 0; } catch (e) {} } };
     box.__prefetch = function () { load(false); };
     box.__unload = function () {
       if (st.active) return false;
@@ -2149,6 +2155,37 @@
     card.appendChild(actions);
     if (isReel) {
       info.appendChild(h('button', { class: 'reel-comment', type: 'button', text: 'Add comment…', onclick: function () { toggleComments(); } }));
+      // When the Short starts over, a top comment slides up just above the poster's picture (only if there is one).
+      // It grows from zero height, so the captions above it are pushed up smoothly instead of jumping.
+      var popBtn = h('button', { class: 'reel-pop-btn', type: 'button', 'aria-label': 'Open comments', onclick: function () { toggleComments(); } });
+      var pop = h('div', { class: 'reel-pop', 'aria-hidden': 'true' }, h('div', null, popBtn));
+      pop.inert = true;
+      info.insertBefore(pop, headEl);
+      var popWant = false, popRow = null, popCount = -1, popBusy = false;
+      function hidePop() { popWant = false; pop.classList.remove('on'); pop.inert = true; pop.setAttribute('aria-hidden', 'true'); }
+      async function showPop() {
+        popWant = true;
+        if (pop.classList.contains('on') || popBusy || !st.comments) return;
+        if (popCount !== st.comments) {
+          popBusy = true;
+          try {
+            var r = await listRows('comments', [Query.equal('postId', [post.$id]), Query.orderDesc('$createdAt'), Query.limit(25)]);
+            var pins = String(post.pinnedCommentIds || '').split(',').filter(Boolean);
+            var rows = r.rows || [], isTop = function (x) { return !x.parentId && !/^@/.test(x.body || ''); };
+            popRow = rows.filter(function (x) { return pins.indexOf(x.$id) !== -1; })[0] || rows.filter(isTop)[0] || rows[0] || null;
+            popCount = st.comments;
+          } catch (e) { popRow = null; }
+          popBusy = false;
+        }
+        if (!popWant || !popRow) return;
+        var pr = S.profiles.get(popRow.authorId) || null;
+        clear(popBtn);
+        popBtn.appendChild(avatarEl(pr));
+        popBtn.appendChild(h('span', { class: 'pop-txt' }, h('strong', { text: (pr ? pr.displayName : 'Family member') + ' ' }), popRow.body));
+        pop.inert = false; pop.removeAttribute('aria-hidden'); pop.classList.add('on');
+      }
+      card.addEventListener('reelloop', showPop);
+      card.addEventListener('reelreset', hidePop);
       card.appendChild(info);
     } else if (post.mediaFileId) { card.appendChild(bodyHolder); card.appendChild(h('div', { class: 'post-date', text: new Date(post.$createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) })); }
     var commentsEl = null;

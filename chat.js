@@ -246,6 +246,7 @@
   function onMessageEvent(c, kind, row) {
     var cv = c.convs[row.convId];
     if (kind === 'create') {
+      if (row.kind === 'dm') { touchDm(c, row.convId, row.$createdAt); paintList(); }
       if (row.authorId !== c.uid && (!c.cur || c.cur.id !== row.convId || document.hidden)) {
         var u = c.unread[row.convId] || (c.unread[row.convId] = { n: 0, readAt: '', dm: row.kind === 'dm' }); u.n = Math.min(10, (u.n || 0) + 1);
         sumTotals(c.unread, c); paintList();
@@ -368,6 +369,7 @@
       var r = await api('chatSend', { kind: cv.kind, convId: cv.id, body: local.body, clientId: local.clientId, replyToId: local.replyToId || undefined });
       if (C !== c) return;
       var m = r.message, row = { $id: m.id, convId: m.convId, authorId: m.authorId, body: m.body, replyToId: m.replyToId, clientId: m.clientId, editedAt: m.editedAt, $createdAt: m.createdAt, familyId: c.famId, kind: m.kind };
+      if (cv.kind === 'dm') { touchDm(c, cv.id, row.$createdAt); paintList(); }
       var i = cv.msgs.indexOf(local);
       var already = cv.msgs.some(function (x) { return x.$id === row.$id; });   // realtime got there first
       if (i >= 0) { if (already) cv.msgs.splice(i, 1); else cv.msgs[i] = row; }
@@ -445,7 +447,7 @@
     var sig = convSig(C);
     if (host._sig !== sig) { host._sig = sig; paintConv(); }          // the conversation itself is only redrawn when its rules changed, so typing is never interrupted
   }
-  function paintList() { if (!C || !host || !host.isConnected) return; var sc = host.querySelector('.chat-side'); if (sc) { var top = sc.querySelector('.side-scroll'); var t = top ? top.scrollTop : 0; var ns = buildSide(C); sc.replaceWith(ns); var nt = ns.querySelector('.side-scroll'); if (nt) nt.scrollTop = t; } }
+  function paintList() { if (!C || !host || !host.isConnected) return; var rl = host.querySelector('.chat-rail'); if (rl) { var rd = rl.querySelector('.rail-dms'), rt = rd ? rd.scrollTop : 0, nr = buildRail(C); rl.replaceWith(nr); var nd = nr.querySelector('.rail-dms'); if (nd) nd.scrollTop = rt; } var sc = host.querySelector('.chat-side'); if (sc) { var top = sc.querySelector('.side-scroll'); var t = top ? top.scrollTop : 0; var ns = buildSide(C); sc.replaceWith(ns); var nt = ns.querySelector('.side-scroll'); if (nt) nt.scrollTop = t; } }
 
   function errorBox(c) {
     var e = c.error, denied = e && (e.apiCode === 'forbidden' || e.code === 403);
@@ -458,12 +460,46 @@
   /* ----- family switcher ----- */
   function famInitial(f) { return (f.name || '?').trim().charAt(0).toUpperCase() || '?'; }
   function buildRail(c) {
-    var rail = h('nav', { class: 'chat-rail', 'aria-label': 'Your families' });
+    var rail = h('nav', { class: 'chat-rail', 'aria-label': 'Family chat and direct messages' });
+    // Pinned at the top: the family button(s). The current family's button opens the family chat.
+    var top = h('div', { class: 'rail-top' });
     X.S.families.forEach(function (f) {
-      var on = f.id === famId();
-      rail.appendChild(h('button', { class: 'rail-btn' + (on ? ' on' : ''), type: 'button', title: f.name, 'aria-label': f.name + (on ? ' (current family)' : ''), 'aria-current': on ? 'true' : null, onclick: function () { if (!on) switchFamilyTo(f.id); } }, famInitial(f)));
+      var on = f.id === famId(), n = on ? TOTALS.ch : 0;
+      top.appendChild(h('button', { class: 'rail-btn' + (on ? ' on' : ''), type: 'button', title: f.name + (on ? ' (family chat)' : ''), 'aria-label': f.name + (on ? ', family chat' + (n ? ', ' + n + ' unread' : '') : ''), 'aria-current': on ? 'true' : null,
+        onclick: function () { if (!on) switchFamilyTo(f.id); else if (c.route.mode !== 'channels' || c.route.id) location.hash = '#/chat'; } },
+        famInitial(f), n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
     });
+    rail.appendChild(top);
+    rail.appendChild(h('div', { class: 'rail-sep', role: 'separator' }));
+    // Below it: the other family members, whoever you talked to last on top. People you have not messaged yet follow, A to Z.
+    var list = h('div', { class: 'rail-dms' });
+    railPeople(c).forEach(function (it) {
+      var n = it.dm ? ((c.unread[it.dm.id] || {}).n || 0) : 0, on = !!(it.dm && c.cur && c.cur.id === it.dm.id), nm = it.p.displayName || 'Family member';
+      list.appendChild(h('button', { class: 'rail-av' + (on ? ' on' : ''), type: 'button', title: nm, 'aria-label': 'Message ' + nm + (n ? ', ' + n + ' unread' : ''), 'aria-current': on ? 'true' : null,
+        onclick: function () { if (it.dm) location.hash = '#/dms/' + it.dm.id; else startDm(c, it.p.userId).catch(function (e) { toast(msgOf(e)); }); } },
+        avatar(it.p.userId, 'sm'), n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
+    });
+    rail.appendChild(list);
     return rail;
+  }
+  /** Other members for the rail: open conversations newest first, then everyone else alphabetically. Closed ones (the person left) are not shown. */
+  function railPeople(c) {
+    var byUser = {}; c.dms.forEach(function (d) { byUser[d.otherId] = d; });
+    var withDm = [], without = [];
+    memberList(c).forEach(function (p) {
+      if (p.userId === c.uid) return;
+      var d = byUser[p.userId];
+      if (d && d.status !== 'open') return;
+      (d ? withDm : without).push({ p: p, dm: d || null });
+    });
+    withDm.sort(function (a, b) { return String(b.dm.lastAt || '').localeCompare(String(a.dm.lastAt || '')); });
+    return withDm.concat(without);
+  }
+  /** A message was sent or arrived in a DM: that person moves to the top of the list. */
+  function touchDm(c, convId, at) {
+    var d = dmById(c, convId); if (!d) return;
+    if (!d.lastAt || String(at) > String(d.lastAt)) d.lastAt = at;
+    c.dms.sort(function (a, b) { return String(b.lastAt || '').localeCompare(String(a.lastAt || '')); });
   }
   async function switchFamilyTo(id) {
     var target = c0hash();

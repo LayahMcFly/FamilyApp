@@ -5,13 +5,13 @@
 .nav-handle .handle-pill { display: grid; place-items: center; width: 46px; height: 28px; border-radius: 999px; background: var(--grad, var(--accent)); color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 .nav-handle .handle-pill svg { width: 18px; height: 18px; stroke-width: 2.6; }
 .nav-handle .handle-dot { position: absolute; top: 6px; left: calc(50% + 14px); width: 11px; height: 11px; border-radius: 50%; background: var(--danger); border: 2px solid var(--bg); }
-.nav-handle span:not(.handle-pill):not(.handle-dot) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.nav-handle span:not(.handle-pill):not(.handle-dot):not(.hp-ic) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .nav-handle[aria-current="page"] .handle-pill { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
 .nav-handle[aria-expanded="true"] .handle-pill { transform: translateY(-2px); }
 @media (min-width: 900px) {
   .nav-handle { flex-direction: row; justify-content: flex-start; gap: 16px; min-height: 48px; padding: 8px 14px; border-radius: 10px; font-size: 1rem; touch-action: auto; }
   .nav-handle:hover { background: var(--surface-2); }
-  .nav-handle span:not(.handle-pill):not(.handle-dot) { position: static; width: auto; height: auto; clip: auto; }
+  .nav-handle span:not(.handle-pill):not(.handle-dot):not(.hp-ic) { position: static; width: auto; height: auto; clip: auto; }
   .nav-handle .handle-pill { width: 40px; height: 26px; }
   .nav-handle .handle-dot { left: 42px; top: 10px; }
 }
@@ -264,3 +264,16 @@ dialog.cs textarea, dialog.cs input, dialog.cs button, dialog.cs .btn { margin: 
   .nav-handle:not([aria-expanded="true"]) .hp-plus { animation: hp-plus 6s ease-in-out infinite; }
   .nav-handle:not([aria-expanded="true"]) .hp-chat { animation: hp-chat 6s ease-in-out infinite; }
 }
+
+/* family rail: the family button stays pinned at the top, the people below it scroll */
+.chat-rail { gap: 0; padding: 0; overflow: hidden; align-items: stretch; }
+.rail-top { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0 10px; }
+.rail-sep { flex: none; width: 32px; height: 2px; border-radius: 1px; background: var(--border); margin: 0 auto 10px; }
+.rail-dms { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 0 16px; scrollbar-width: none; overscroll-behavior: contain; }
+.rail-dms::-webkit-scrollbar { display: none; }
+.rail-btn, .rail-av { position: relative; flex: none; }
+.rail-av { width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.chat-app .chat-rail .avatar.sm { width: 48px; height: 48px; font-size: 1.1rem; box-shadow: none; transition: border-radius .12s; }
+.rail-av:hover .avatar, .rail-av.on .avatar { border-radius: 16px; }
+.rail-av:focus-visible, .rail-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.rail-badge { position: absolute; right: -3px; bottom: -3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: .65rem; font-weight: 700; line-height: 1; display: grid; place-items: center; border: 2px solid color-mix(in srgb, var(--surface-2) 60%, var(--border)); box-sizing: border-box; }

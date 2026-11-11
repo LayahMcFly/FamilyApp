@@ -1380,3 +1380,13 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .addr-suggest li { padding: 10px 12px; border-radius: 8px; cursor: pointer; line-height: 1.35; }
 .addr-suggest li strong { display: block; }
 .addr-suggest li.on, .addr-suggest li:hover { background: var(--surface-2); }
+
+/* A top comment slides up above the poster's picture when a Short starts over. It grows from zero height, so captions above it glide up. */
+.reel-pop { display: grid; grid-template-rows: 0fr; margin-top: -8px; opacity: 0; transition: grid-template-rows .45s cubic-bezier(.2, .8, .2, 1), margin-top .45s cubic-bezier(.2, .8, .2, 1), opacity .3s ease; }
+.reel-pop.on { grid-template-rows: 1fr; margin-top: 0; opacity: 1; }
+.reel-pop > div { min-height: 0; overflow: hidden; }
+.reel-pop-btn { display: flex; align-items: flex-start; gap: 8px; width: fit-content; max-width: calc(100% - 56px); margin: 2px 0 4px; padding: 8px 12px 8px 8px; border: 0; border-radius: 16px; background: #2a2a30d9; color: #fff; text-align: left; font: inherit; font-size: .88rem; line-height: 1.3; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); transform: translateY(14px) scale(.97); transition: transform .45s cubic-bezier(.2, .8, .2, 1); }
+.reel-pop.on .reel-pop-btn { transform: none; }
+.reel-pop-btn .avatar { width: 24px; height: 24px; font-size: .65rem; box-shadow: none; flex: none; }
+.reel-pop-btn .pop-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .reel-pop, .reel-pop-btn { transition: none; } }
