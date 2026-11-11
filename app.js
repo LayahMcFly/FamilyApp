@@ -1919,13 +1919,15 @@
   }
   // Swipe a bottom sheet down to close it (grab the top bar, or pull down while its list is scrolled to the top).
   function sheetDrag(sheet, close) {
-    var y0 = null, dy = 0, t0 = 0, mode = null;
+    var y0 = null, dy = 0, t0 = 0, mode = null, noDrag = false, moved = false;
     function setY(v) { sheet.style.transform = v ? 'translateY(' + v + 'px)' : ''; if (v && v < 400) fadeBack(Math.max(0.2, 1 - v / 400)); }
     function fadeBack(o) { var bk = sheet.previousElementSibling; if (bk && bk.classList.contains('sheet-backdrop')) { bk.style.transition = 'opacity .2s'; bk.style.opacity = String(o); } }
-    function start(y, fromHead) { y0 = y; dy = 0; t0 = Date.now(); mode = fromHead ? 'head' : 'body'; sheet.style.transition = 'none'; }
+    function start(y, fromHead, target) { y0 = y; dy = 0; moved = false; noDrag = !fromHead && !!(target && target.closest && target.closest('textarea, input, button, a, .comment-form, .emoji-strip')); t0 = Date.now(); mode = fromHead ? 'head' : 'body'; sheet.style.transition = 'none'; }
     function move(y, ev) {
       if (y0 === null) return;
       var d = y - y0;
+      if (noDrag) return;                       // pressed on the comment box, a button or an emoji: that is a tap, never a drag
+      if (!moved) { if (Math.abs(d) < 12) return; moved = true; }   // a finger always wobbles a little; only a real pull moves the sheet (and only then is the tap cancelled)
       var sc = sheet.querySelector('.c-scroll'), top = sc ? sc.scrollTop : sheet.scrollTop;
       if (mode === 'body' && (top > 0 || d <= 0)) { if (d <= 0) return; if (top > 0) { y0 = y; return; } }
       dy = Math.max(0, d); setY(dy); if (ev && ev.cancelable) ev.preventDefault();
@@ -1941,7 +1943,7 @@
     }
     var head = sheet.querySelector('.sheet-head');
     sheet.addEventListener('touchstart', function (ev) {
-      var t = ev.touches[0]; start(t.clientY, !!(head && head.contains(ev.target)));
+      var t = ev.touches[0]; start(t.clientY, !!(head && head.contains(ev.target)), ev.target);
     }, { passive: true });
     sheet.addEventListener('touchmove', function (ev) { move(ev.touches[0].clientY, ev); }, { passive: false });
     sheet.addEventListener('touchend', end); sheet.addEventListener('touchcancel', end);
