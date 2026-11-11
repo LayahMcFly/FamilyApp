@@ -683,7 +683,7 @@
     }
     var btn = h('button', { class: 'cc-btn', type: 'button', text: 'CC', onclick: function (ev) {
       ev.stopPropagation();
-      var on = tr.track.mode !== 'showing';
+      var on = !shown;
       try { localStorage.setItem('fc_cc', on ? 'on' : 'off'); } catch (e) {}
       paint(on);
     } });
