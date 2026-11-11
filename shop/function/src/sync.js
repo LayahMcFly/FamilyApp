@@ -47,10 +47,15 @@ export function guessSection(...texts) {
 }
 /** Does the buyer give a photo or words? Anything that mentions a photo is a photo product; engraved or name products take words. The owner can change it. */
 export const KIND_IDS = ['photo', 'words'];
-export function guessKind(...texts) {
-  const t = texts.join(' ');
-  if (/\bphotos?\b|\bpictures?\b|\bimages?\b/i.test(t)) return 'photo';
-  return /engrav|\bnames?\b|monogram|\binitials?\b|\bwords?\b|\btext\b|\bquote\b|\bletters?\b|\bbirthstone\b/i.test(t) ? 'words' : 'photo';
+export function guessKind(blueprintTitle, productTitle) {
+  const PHOTO = /\bphotos?\b|\bpictures?\b|\bimages?\b/i;
+  const WORDS = /engrav|\bnames?\b|monogram|\binitials?\b|\bwords?\b|\btext\b|\bquote\b|\bletters?\b|\bbirthstone\b/i;
+  // The product's own title is what the owner wrote, so it decides first. The generic blank-product name only breaks a tie.
+  const own = String(productTitle || ''), generic = String(blueprintTitle || '');
+  if (PHOTO.test(own)) return 'photo';
+  if (WORDS.test(own)) return 'words';
+  if (PHOTO.test(generic)) return 'photo';
+  return WORDS.test(generic) ? 'words' : 'photo';
 }
 export const cleanKind = (x) => (x === 'words' ? 'words' : 'photo');
 export const cleanSection = (x) => (SECTION_IDS.includes(x) ? x : 'gifts');

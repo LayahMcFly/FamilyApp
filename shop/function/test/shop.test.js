@@ -688,3 +688,12 @@ test('a product tagged for another supplier never appears in Photo Gifts and can
   const r = await w.call(w.A, 'shopSaveDesign', { familyId: 'fam1', postId: 'post1', productKey: 'framed-print', variantId: 101, fileId: 'fx', quantity: 1, spec: { zoom: 1 } });
   assert.notEqual(r.status, 200);
 });
+
+test('kind guess: the product title decides first, so a generic "photo" blank name cannot turn an engraved name product into a photo product', async () => {
+  const { guessKind } = await import('../src/sync.js');
+  assert.equal(guessKind('Photo Bracelet', 'Personalized Engraved Name Bar Bracelet | Natural Stone Beads'), 'words');
+  assert.equal(guessKind('Mug', 'Custom Photo Mug'), 'photo');
+  assert.equal(guessKind('Engraved Bar Bracelet', 'Family Bracelet'), 'words');
+  assert.equal(guessKind('Mug', 'Coffee Mug'), 'photo');
+  assert.equal(guessKind('Name Necklace', 'Necklace with your photo'), 'photo');
+});
