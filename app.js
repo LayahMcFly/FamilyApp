@@ -191,7 +191,9 @@
       var r = await fetch('maintenance.json?t=' + Date.now(), { cache: 'no-store' });
       if (!r.ok) return null;
       var j = await r.json();
-      return j && j.on === true ? { message: String(j.message || '').slice(0, 240) } : null;
+      if (!j || j.on !== true) return null;
+      if (j.until && Date.now() > Date.parse(j.until)) return null;   // switches itself off if it is ever left on
+      return { message: String(j.message || '').slice(0, 240) };
     } catch (e) { return null; }
   }
 
