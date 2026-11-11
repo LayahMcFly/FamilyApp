@@ -96,6 +96,12 @@
       var vbps = clamp(Math.round(ow * oh * 30 * 0.07), 250000, 8000000), abps = 96000;
       out.push({ id: key, label: t[1] + ' ' + ow + '×' + oh, w: ow, h: oh, vbps: vbps, abps: abps, bytes: Math.round((vbps + abps) * durationSec / 8 * 1.15) });
     });
+    // Last resort for long videos: even the smallest size is over the limit, so lower the quality on purpose until it fits.
+    if (limitBytes && out.length && out[0].bytes > limitBytes * 0.85) {
+      var b = out[0], abps2 = 64000, target = limitBytes * 0.8 * 8 / Math.max(1, durationSec) / 1.15;
+      var vb = Math.round(target - abps2);
+      if (vb >= 120000) out.unshift({ id: 'fit-' + b.w + 'x' + b.h, label: 'Smallest to fit (lower quality) ' + b.w + '×' + b.h, w: b.w, h: b.h, vbps: vb, abps: abps2, bytes: Math.round((vb + abps2) * durationSec / 8 * 1.15) });
+    }
     return out;
   }
   function pickQuality(options, limitBytes) {
@@ -547,10 +553,14 @@
       function setBusy(b) {
         busy = b; root.classList.toggle('busy', b);
         controls.forEach(function (c) { if (c !== cancelExportBtn) c.disabled = b; });
-        exportBtn.disabled = b; origBtn.disabled = b || !pristine() || file.size > opts.maxBytes; resetBtn.disabled = b; closeBtn.disabled = false;
+        exportBtn.disabled = b; shrinkBtn.disabled = b; origBtn.disabled = b || !pristine() || file.size > opts.maxBytes; resetBtn.disabled = b; closeBtn.disabled = false;
         if (!b) { paintAll(); }
         cancelExportBtn.hidden = !b;
       }
+      var shrinkBtn = h('button', { class: 'btn secondary block', type: 'button', text: 'Shrink to fit and post', onclick: function () {
+        if (busy) return;
+        quality = pickQuality(qOpts, opts.maxBytes); paintQuality(); doExport();
+      } });
       var cancelExportBtn = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel export', hidden: true, onclick: function () { cancelExport(); } });
       function cancelExport() { if (exporting) exporting.abort('cancel'); }
       function onVis() { if (document.hidden && exporting) exporting.abort('hidden'); }
@@ -645,6 +655,8 @@
           h('p', { class: 'hint', text: 'These apply to the whole remaining video.' })),
         h('section', { class: 've-sec', 'aria-label': 'Export' },
           h('h3', { text: 'Export' }),
+          h('p', { class: 'hint', text: 'Only want a smaller file? Skip the trimming and tap the button below. It keeps the whole video and shrinks it to fit the ' + mb(opts.maxBytes) + ' MB limit.' }),
+          shrinkBtn,
           h('label', { for: 've-q', text: 'Size and quality' }), qSel, estimate,
           h('label', { class: 'check', for: 've-mute' }, muteBox, ' Remove the sound from the exported video'),
           phase, prog, msg));
