@@ -153,5 +153,30 @@
     return fit(cues);
   }
 
-  return { parse: parse, toVtt: toVtt, shape: shape, fit: fit, transcribe: transcribe, decodeAudio: decodeAudio };
+  /** What the speech model has stored in this browser (it lives in the browser's cache, never in the family's cloud). */
+  async function modelInfo() {
+    var out = { files: 0, bytes: 0 };
+    if (!window.caches || !caches.keys) return out;
+    try {
+      var names = (await caches.keys()).filter(function (n) { return /transformers/i.test(n); });
+      for (var i = 0; i < names.length; i++) {
+        var c = await caches.open(names[i]), reqs = await c.keys();
+        for (var j = 0; j < reqs.length; j++) {
+          var r = await c.match(reqs[j]); if (!r) continue;
+          var n = Number(r.headers.get('content-length')); if (!n) { try { n = (await r.clone().blob()).size; } catch (e) { n = 0; } }
+          out.files++; out.bytes += n;
+        }
+      }
+    } catch (e) { /* unreadable: report nothing */ }
+    return out;
+  }
+  /** Deletes the downloaded speech model. The next time captions are made, it downloads again. */
+  async function removeModel() {
+    pipe = null;
+    if (!window.caches || !caches.keys) return;
+    var names = (await caches.keys()).filter(function (n) { return /transformers/i.test(n); });
+    for (var i = 0; i < names.length; i++) await caches.delete(names[i]);
+  }
+
+  return { modelInfo: modelInfo, removeModel: removeModel, parse: parse, toVtt: toVtt, shape: shape, fit: fit, transcribe: transcribe, decodeAudio: decodeAudio };
 });

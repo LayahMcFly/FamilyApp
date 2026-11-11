@@ -3556,6 +3556,31 @@
       keepInfo, clearKept,
       h('label', { class: 'switch-row', for: 'autoplay' }, autoBox, h('span', null, h('strong', { text: 'Autoplay Shorts' }), h('span', { class: 'small muted', text: ' Every Short you scroll to downloads in full. That uses mobile data and counts toward the site’s monthly download allowance, so turn this off when you are not on Wi-Fi. Saved on this device only.' })))));
 
+    // Captions: show or hide them everywhere, and remove the speech model that was downloaded to make them
+    var ccBox = h('input', { type: 'checkbox', id: 'cc-show' }); ccBox.checked = ccOn();
+    ccBox.addEventListener('change', function () {
+      try { localStorage.setItem('fc_cc', ccBox.checked ? 'on' : 'off'); } catch (e) {}
+      toast(ccBox.checked ? 'Captions are on.' : 'Captions are off. You can turn them back on here or with the CC button on a video.');
+    });
+    var modelInfoP = h('p', { class: 'small muted', text: 'Checking…' });
+    var modelBtn = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove the downloaded speech model', onclick: async function (ev) {
+      if (!window.confirm('Remove the speech model from this device? Captions already saved on posts keep working. Making new captions will download it again (about 80 MB).')) return;
+      ev.currentTarget.disabled = true;
+      try { await window.Captions.removeModel(); toast('Speech model removed from this device.'); } catch (e) { toast('Could not remove it. Try clearing this site’s data in your browser settings.'); }
+      paintModel();
+    } });
+    async function paintModel() {
+      var i = window.Captions && window.Captions.modelInfo ? await window.Captions.modelInfo() : { files: 0, bytes: 0 };
+      modelInfoP.textContent = i.files ? 'The speech model is on this device, using ' + fmtBytes(i.bytes) + '. It is only needed to make new captions.' : 'No speech model is stored on this device.';
+      modelBtn.disabled = !i.files;
+    }
+    paintModel();
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Captions' },
+      h('h2', { text: 'Captions' }),
+      h('label', { class: 'switch-row', for: 'cc-show' }, ccBox, h('span', null, h('strong', { text: 'Show captions on videos' }), h('span', { class: 'small muted', text: ' Turn off to hide captions everywhere. Each video also has a CC button.' }))),
+      h('p', { class: 'small muted', text: 'Captions are made on your phone with a speech model that downloads the first time. It is stored in this browser only, never in the family’s cloud.' }),
+      modelInfoP, modelBtn));
+
     // 2. My uploads in the cloud
     var upBox = h('section', { class: 'card', 'aria-label': 'My uploads' }, h('h2', { text: 'My photos and videos in the cloud' }), spinnerLine('Loading your uploads…'));
     var famBox = h('section', { class: 'card', 'aria-label': 'Family space' }, h('h2', { text: 'Shared family space' }));
