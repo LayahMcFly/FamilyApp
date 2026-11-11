@@ -100,7 +100,12 @@ async function waitForColumns(tableId, keys) {
 
 /* ---------- run ---------- */
 console.log('Database');
-await step('database "' + databaseId + '"', () => db.create({ databaseId, name: 'family' }));
+// Look first: on the free plan, creating a second database fails with a limit error
+// (403) even when this one already exists, so only create it when it is missing.
+let dbThere = false;
+try { await db.get({ databaseId }); dbThere = true; } catch (e) { dbThere = false; }
+if (dbThere) console.log('  exists   database "' + databaseId + '"');
+else await step('database "' + databaseId + '"', () => db.create({ databaseId, name: 'family' }));
 
 for (const [tableId, def] of Object.entries(schema)) {
   console.log('\nTable ' + tableId);
@@ -124,7 +129,10 @@ for (const [tableId, def] of Object.entries(schema)) {
 }
 
 console.log('\nStorage bucket');
-await step('bucket "family-media"', () =>
+let bucketThere = false;
+try { await storage.getBucket({ bucketId: 'family-media' }); bucketThere = true; } catch (e) { bucketThere = false; }
+if (bucketThere) console.log('  exists   bucket "family-media"');
+else await step('bucket "family-media"', () =>
   storage.createBucket({
     bucketId: 'family-media',
     name: 'family-media',
