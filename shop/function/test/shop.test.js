@@ -530,7 +530,7 @@ test('imported product: title, text, picture, enabled variants, prices and IDs a
   assert.equal(JSON.stringify(c).includes('cost'), false);
 });
 
-test('re-sync keeps the on/off choice, picks up price changes, and marks a product removed from Printify as missing and off', async () => {
+test('re-sync keeps the on/off choice, picks up price changes, and removes a product that is gone from Printify', async () => {
   const w = world(); await seed(w); fakeShop(w, [mkProduct(), mkProduct({ id: PID2, title: 'Second' })]);
   await syncAll(w); await w.ok(w.O, 'shopAdminToggle', { key: 'pf_' + PID, enabled: true, section: 'jewelry' });
   fakeShop(w, [mkProduct({ variants: [{ id: 501, title: '11oz', price: 2499, is_enabled: true, is_available: true, options: [1] }] })]);
@@ -538,8 +538,7 @@ test('re-sync keeps the on/off choice, picks up price changes, and marks a produ
   const ov = (await w.ok(w.O, 'shopAdminOverview')).imported;
   const a = ov.find((x) => x.key === 'pf_' + PID), b = ov.find((x) => x.key === 'pf_' + PID2);
   assert.equal(a.enabled, true); assert.equal(a.minCents, 2499); assert.equal(a.section, 'jewelry', 'the local section choice survives a sync');
-  assert.equal(b.missing, true); assert.equal(b.enabled, false);
-  assert.equal((await w.call(w.O, 'shopAdminToggle', { key: 'pf_' + PID2, enabled: true })).status, 409);
+  assert.equal(b, undefined, 'a product deleted in Printify is deleted here after a sync');
 });
 
 test('products the photo editor cannot fill are flagged with a reason and cannot be turned on', async () => {
@@ -899,4 +898,16 @@ test('featured Photo Gifts are the owner\'s choice, owner-only, and listed in th
   assert.deepEqual((await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' })).featuredKeys, ['framed-print']);
   await w.ok(w.O, 'shopAdminFeaturePhoto', { key: 'framed-print', featured: false });
   assert.deepEqual((await w.ok(w.A, 'shopCatalog', { familyId: 'fam1' })).featuredKeys, []);
+});
+test('sync removes a Printify product that is gone, but never deletes when Printify returned nothing; CJ sync removes a product CJ no longer has', async () => {
+  const w = world(); await seed(w);
+  const row = w.db.tab(T.catalog).get('framed-print');
+  w.db.tab(T.catalog).set('pf_aaaaaaaa', { ...row, $id: 'pf_aaaaaaaa' }); w.db.tab(T.catalog).set('pf_bbbbbbbb', { ...row, $id: 'pf_bbbbbbbb' });
+  await w.ok(w.O, 'shopAdminSyncFinish', { seen: [] });
+  assert.ok(w.db.tab(T.catalog).has('pf_aaaaaaaa'), 'an empty list is not trusted');
+  const r = await w.ok(w.O, 'shopAdminSyncFinish', { seen: ['pf_aaaaaaaa'] });
+  assert.equal(r.deleted, 1); assert.ok(!w.db.tab(T.catalog).has('pf_bbbbbbbb')); assert.ok(w.db.tab(T.catalog).has('pf_aaaaaaaa'));
+  const id = await cjSeed(w); w.cjs.calls.length = 0;
+  const orig = w.db.tab(T.cjProducts).get(id); orig.pid = 'GONE';
+  const s = await w.ok(w.O, 'shopAdminCjSync', { id }); assert.equal(s.deleted, true); assert.equal(w.db.tab(T.cjProducts).size, 0);
 });

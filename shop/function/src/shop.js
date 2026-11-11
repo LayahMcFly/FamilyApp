@@ -1035,15 +1035,16 @@ export function createShop({ users, db, storage, square, printify, cj = null, cf
   async function adminSyncFinish({ user, body }) {
     requireAdmin(user);
     const seen = new Set((Array.isArray(body.seen) ? body.seen : []).map(String).filter(isImportedKey).slice(0, 2000));
-    let missingNow = 0;
+    let missingNow = 0, deleted = 0;
     for (const r of await allCatalogRows()) {
       if (!isImportedKey(r.$id) || seen.has(r.$id)) continue;
+      if (seen.size > 0) { await deleteRow(T.catalog, r.$id); deleted++; continue; }      // gone from Printify: remove it. Old orders keep their own copy of what was bought
       const u = unpack(r.variants); if (u.meta && u.meta.missing && r.enabled !== true) continue;
-      u.meta = { ...(u.meta || {}), missing: true };
+      u.meta = { ...(u.meta || {}), missing: true };       // an empty list from Printify is not trusted for deleting: hide only
       await updateRow(T.catalog, r.$id, { enabled: false, variants: JSON.stringify({ v: u.variants, m: u.meta }) });
       missingNow++;
     }
-    return { missing: missingNow };
+    return { missing: missingNow, deleted };
   }
   async function adminPrintifyCheck({ user }) {
     requireAdmin(user);

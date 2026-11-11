@@ -220,6 +220,7 @@ export function createCjShop(ctx) {
     const row = await getRowOrNull(T.cjProducts, idOf(body.id, 'id'));
     if (!row) throw missing('Product not found.');
     let p; try { p = await cj.product(row.pid); } catch (e) {
+      if (e instanceof CjError && e.kind === 'not_found') { await deleteRow(T.cjProducts, row.$id); return { deleted: true, changes: [] }; }     // CJ no longer has it: remove it (old orders keep their own copy)
       const err = cjProblem(e); await updateRow(T.cjProducts, row.$id, { syncNote: `Last sync failed: ${err.message}`.slice(0, 200) }); throw err;
     }
     const old = supplierOf(row), rt = retailOf(row), notes = [];
