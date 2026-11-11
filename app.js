@@ -87,6 +87,7 @@
     eye: ['M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
     gear: ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'],
     back: ['M15 5l-7 7 7 7'],
+    lock: ['M6 11h12v9H6z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'],
     more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
     repost: ['M17 2l4 4-4 4', 'M3 11V9a3 3 0 0 1 3-3h15', 'M7 22l-4-4 4-4', 'M21 13v2a3 3 0 0 1-3 3H3'],
     send: ['M22 3 9.5 14.5', 'M22 3l-7 18-5.5-6.5L3 9z'],
@@ -362,6 +363,7 @@
     revokeBlobs();
     S.avatarUrls.forEach(function (p) { p.then(function (u) { URL.revokeObjectURL(u); }).catch(function () {}); });
     S.avatarUrls = new Map();
+    if (window.FCChat) window.FCChat.stop();   // closes the chat connection and drops its messages from memory
     S.shop = null;   // carts, designs, orders and the catalog belong to one person in one family
     S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.origs = new Map(); S.saved = new Map(); S.usage = null;
     S.familyId = null; S.role = null; S.isOwner = false; S.ringRole = new Map();
@@ -1390,9 +1392,12 @@
   function shopEnabled() { return !!(window.FCShop && CFG.shopFunctionId && CFG.shopEnabled !== false); }
   function renderShell() {
     S.main = h('main', { id: 'main', class: 'main', tabindex: '-1' });
+    var chatOn = !!(window.FCChat && CFG.chatEnabled !== false);
     var nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, h('ul', null, NAV.map(function (n) {
+      if (n.id === 'create' && chatOn) return h('li', { class: 'nav-create' }, window.FCChat.navItem());   // the center item of the same five: its small handle opens the quick-actions panel
       return h('li', null, h('a', { href: n.href || '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
     })));
+    if (chatOn) window.FCChat.mountPanel();
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
       h('a', { class: 'brand', href: '#/home', 'aria-label': (CFG.appName || 'Family Circle') + ', go to Home', onclick: function () { if (/^#\/home\/?$/.test(location.hash)) window.scrollTo({ top: 0, behavior: 'smooth' }); } }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
       shopEnabled() ? h('a', { class: 'bell shop-btn', id: 'shop-btn', href: '#/shop', 'aria-label': 'Shop for photo gifts', title: 'Shop' }, icon('bag'), h('span', { class: 'shop-btn-label', text: 'Shop' })) : null,
@@ -1430,15 +1435,16 @@
     clear(S.main);
     S.main.classList.toggle('reels-main', name === 'shorts');
     S.main.setAttribute('data-view', name || '');
-    document.body.classList.remove('sheet-open');
-    var navName = name === 'settings' ? 'profile' : name;
+    document.body.classList.remove('sheet-open', 'chat-mode');
+    if (window.FCChat && name !== 'chat' && name !== 'dms') window.FCChat.stop();   // leaving chat closes its realtime connection
+    var navName = name === 'settings' ? 'profile' : (name === 'chat' || name === 'dms') ? 'create' : name;
     var savedBtn = document.getElementById('saved-btn');
     if (savedBtn) { if (name === 'saved') savedBtn.setAttribute('aria-current', 'page'); else savedBtn.removeAttribute('aria-current'); }
-    Array.prototype.forEach.call(document.querySelectorAll('.nav a'), function (a) {
+    Array.prototype.forEach.call(document.querySelectorAll('.nav [data-route]'), function (a) {
       if (a.getAttribute('data-route') === navName) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
-    document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
+    document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
     Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2, param3); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });
@@ -2941,7 +2947,7 @@
             self ? null : h('button', { class: 'btn secondary small', type: 'button', text: m.confirm ? 'Remove' : 'Cancel invite', 'aria-label': (m.confirm ? 'Remove ' : 'Cancel the invitation for ') + label, onclick: async function () {
               var ok = await confirmDialog(m.confirm ? 'Remove this person?' : 'Cancel this invitation?', m.confirm ? 'They lose access to all of this family\'s posts and media right away. Their own posts stay unless deleted.' : 'The invitation link will stop working.', m.confirm ? 'Remove' : 'Cancel invite');
               if (!ok) return;
-              try { await teams.deleteMembership({ teamId: fid, membershipId: m.$id }); toast('Removed.'); loadMemberships(); }
+              try { await teams.deleteMembership({ teamId: fid, membershipId: m.$id }); if (m.confirm && window.FCChat) { try { await api('chatReconcile', { familyId: fid, userId: m.userId }); } catch (e2) { /* chat may not be set up; the removal itself worked */ } } toast('Removed.'); loadMemberships(); }
               catch (e) { toast(friendly(e)); }
             } })));
         });
@@ -4132,6 +4138,8 @@
       ], h('ul', { style: null }, problems.map(function (p) { return h('li', { text: p }); })));
     }
     initAppwrite();
+    if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
+      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });

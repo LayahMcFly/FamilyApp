@@ -1,0 +1,27 @@
+name: Check chat privacy (direct requests)
+
+# Tries to read, change and forge chat data the way an outsider with a normal account could. Every attempt must be refused.
+# Needs the repository secrets APPWRITE_KEY (a key that can read rows), OTHER_EMAIL and OTHER_PASSWORD (a family member who is NOT in the DM it picks).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Try to break in
+        working-directory: setup
+        env:
+          APPWRITE_ENDPOINT: https://nyc.cloud.appwrite.io/v1
+          APPWRITE_PROJECT: 6aef6a03002636be44c2
+          APPWRITE_KEY: ${{ secrets.APPWRITE_KEY }}
+          OTHER_EMAIL: ${{ secrets.OTHER_EMAIL }}
+          OTHER_PASSWORD: ${{ secrets.OTHER_PASSWORD }}
+        run: |
+          npm install
+          node verify-chat-access.mjs

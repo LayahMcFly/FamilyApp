@@ -1,0 +1,32 @@
+name: Add the Family Chat tables (one-time)
+
+# Creates the chat tables, the profiles.chatAdmin column and the indexes, then checks every query the chat uses.
+# Safe to run twice: anything that exists is skipped. Delete this file after it succeeds (CHAT-GUIDE.md, step 3).
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Also create the starter channels for existing families now? (optional; the app does it on first open anyway)
+        type: choice
+        default: "no"
+        options: ["no", "yes"]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Create the chat tables
+        working-directory: setup
+        env:
+          APPWRITE_ENDPOINT: https://nyc.cloud.appwrite.io/v1
+          APPWRITE_PROJECT: 6aef6a03002636be44c2
+          APPWRITE_KEY: ${{ secrets.APPWRITE_KEY }}
+          SEED: ${{ inputs.seed == 'yes' && '1' || '' }}
+        run: |
+          npm install
+          node setup-chat.mjs

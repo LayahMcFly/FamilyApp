@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Permission, Role } from 'node-appwrite';
 import { createApi, TABLES } from '../src/logic.js';
+import { CHAT_TABLES } from '../src/chat.js';
 
 /* ---------- in-memory fake of the server SDK services ---------- */
 function makeWorld() {
@@ -14,7 +15,7 @@ function makeWorld() {
     rejectColumns: [], // pretend these columns do not exist yet (Appwrite answers 400)
     clock: 1_800_000_000_000
   };
-  for (const t of Object.values(TABLES)) world.tables[t] = new Map();
+  for (const t of [...Object.values(TABLES), ...Object.values(CHAT_TABLES)]) world.tables[t] = new Map();
   const err = (code, m) => Object.assign(new Error(m), { code });
 
   const parseQ = (q) => JSON.parse(q);

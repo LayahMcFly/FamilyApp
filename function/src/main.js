@@ -56,6 +56,17 @@ export default async ({ req, res, log, error }) => {
     cfg
   });
 
+  // Optional Appwrite event trigger (teams.*.memberships.*.delete): closes direct messages of someone who left or was removed.
+  if (!user && req.headers['x-appwrite-trigger'] === 'event') {
+    try {
+      const ev = await api.handleEvent({ event: String(req.headers['x-appwrite-event'] || ''), payload: body, deadline: Date.now() + 9000 });
+      return res.json(ev.json, ev.status);
+    } catch (e) {
+      error(String(e && e.message ? e.message : e));
+      return res.json({ ok: false, error: 'server_error' }, 500);
+    }
+  }
+
   const out = await api.handle({ user, body, deadline: Date.now() + 9000 });
   if (out.cause) error(String(out.cause && out.cause.message ? out.cause.message : out.cause));
   return res.json(out.json, out.status);

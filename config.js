@@ -10,7 +10,7 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.46.6",
+  version: "1.47.0",
 
   // "Xenova/whisper-tiny.en" is about 40 MB, faster, but misses a lot. Base is the better balance.
   // "Xenova/whisper-base.en" is more accurate but about 3 times bigger and slower.
@@ -45,6 +45,8 @@ window.FAMILY_CONFIG = {
   // Set shopEnabled to false, or leave the function unset, to hide the shop completely.
   shopEnabled: true,
   shopFunctionId: "shop-api",
+  // Family chat (channels and direct messages). Set to false to hide it completely (the center button then goes straight to Create).
+  chatEnabled: true,
   shopBucketId: "family-media",
 
   // The IDs below match the Setup Guide. If you create your database, tables and

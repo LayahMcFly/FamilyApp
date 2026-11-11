@@ -12,6 +12,7 @@
  *    (or user:<id> for bookmarks). Clients get no table-level write permission at all.
  */
 import { Query, Permission, Role, ID } from 'node-appwrite';
+import { createChat } from './chat.js';
 
 export const TABLES = {
   families: 'families',
@@ -450,8 +451,12 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     return { address: addressFields(row) };
   }
 
+  // Family chat (channels, direct messages, roles). See chat.js and CHAT-GUIDE.md.
+  const chat = createChat({ listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf, bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable: TABLES.profiles });
+
   const actions = {
     addressGet, addressSave, addressDelete, addressView,
+    ...chat.actions,
     /** Lists the caller's confirmed, registered families. Also keeps the `family` label in sync. */
     async listFamilies({ user }) {
       const mine = await confirmedMemberships(user);
@@ -1062,6 +1067,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       if (!postDone) return { done: false };
       const profDone = await deleteWhere(TABLES.profiles, byFamily, deadline, (p) => deleteFileQuiet(p.avatarFileId));
       if (!profDone) return { done: false };
+      if (!(await chat.purgeFamily(familyId, deleteWhere, deadline))) return { done: false };
       await deleteRow(TABLES.families, familyId);
       try {
         await teams.delete({ teamId: familyId });
@@ -1127,5 +1133,5 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     }
   }
 
-  return { handle, actions };
+  return { handle, actions, handleEvent: chat.handleEvent };
 }
