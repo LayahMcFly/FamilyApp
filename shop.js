@@ -230,7 +230,7 @@
       if (cat.isAdmin) panelHost.appendChild(adminLink());
       void sec;
     }
-    function adminLink() { return h('p', null, h('a', { class: 'link-btn', href: '#/shop/admin', text: 'Manage Photo Gifts (owner only)' }), ' · ', h('a', { class: 'link-btn', href: '#/shop/admin/cj', text: 'Manage Family Shop (owner only)' })); }
+    function adminLink() { return h('p', null, h('a', { class: 'link-btn', href: '#/shop/admin', text: 'Manage Photo Gifts (owner only)' }), familyOpen ? ' · ' : null, familyOpen ? h('a', { class: 'link-btn', href: '#/shop/admin/cj', text: 'Manage Family Shop (owner only)' }) : null); }
     pickSection(st().section || 'photo-gifts');
     if (cat.isAdmin) autoSync(token, search);
   }
@@ -1173,7 +1173,7 @@
         chk.printifyShopsError ? h('p', { class: 'small danger-text', text: chk.printifyShopsError }) : null,
         chk.printifyShops ? h('p', { class: 'small', text: 'Printify stores this token can see: ' + (chk.printifyShops.length ? chk.printifyShops.map(function (x) { return x.title + ' (id ' + x.id + ', ' + (x.channel || 'store') + ')'; }).join('; ') : 'none') + '. PRINTIFY_SHOP_ID must be one of these ids.' }) : null,
         h('ul', { class: 'ticks' }, Object.keys(chk.configured).map(function (k) { return h('li', { text: (chk.configured[k] ? '✓ ' : '✗ missing: ') + k }); }))));
-      holder.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'Family Shop (CJdropshipping)' }), h('p', { class: 'small muted', text: 'Add and price CJ products, check connection, and publish.' }), h('a', { class: 'btn secondary', href: '#/shop/admin/cj', text: 'Manage Family Shop products' })));
+      if (((st().catalog && st().catalog.sections) || []).some(function (x) { return x.id === 'family-shop' && x.ready; })) holder.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'Family Shop (CJdropshipping)' }), h('p', { class: 'small muted', text: 'Add and price CJ products, check connection, and publish.' }), h('a', { class: 'btn secondary', href: '#/shop/admin/cj', text: 'Manage Family Shop products' })));
       var wh = h('button', { class: 'btn secondary small', type: 'button', text: 'Register Printify order webhooks', onclick: function () {
         X.busy(wh, async function () { try { var r = await shopApi('shopAdminRegisterWebhooks'); toast(r.added.length ? 'Registered ' + r.added.length + ' webhook(s).' : 'Already registered.'); } catch (e) { toast(msgOf(e)); } }, 'Registering…'); } });
       holder.appendChild(h('p', null, wh));

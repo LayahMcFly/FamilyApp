@@ -45,7 +45,7 @@ export default async ({ req, res, log, error }) => {
     printifyConfigured: !!env('PRINTIFY_API_TOKEN'),
     printifyShopId: env('PRINTIFY_SHOP_ID'),
     printifyWebhookSecret: env('PRINTIFY_WEBHOOK_SECRET'),
-    cjConfigured: !!env('CJ_API_KEY'),
+    cjConfigured: !!env('CJ_API_KEY') && env('FAMILY_SHOP_ENABLED', 'false') === 'true',   // the Family Shop stays hidden until this is 'true'
     cjSandbox: env('CJ_SANDBOX', 'true') !== 'false',           // default ON: CJ orders are sandbox orders until you set CJ_SANDBOX=false
     cjAutoPay: env('CJ_AUTO_PAY', 'false') === 'true',          // default OFF: you press "Pay supplier" yourself
     returnPolicy: env('SHOP_RETURN_POLICY').slice(0, 1500)

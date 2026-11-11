@@ -71,6 +71,7 @@ If it fails with a permission message, the key is missing a scope from topic 5. 
 | Name | Value to start with | Secret? |
 |---|---|---|
 | `CJ_API_KEY` | leave empty until topic 10 | Yes |
+| `FAMILY_SHOP_ENABLED` | `false` (the Family Shop stays hidden). Set `true` when you want it on | No |
 | `CJ_SANDBOX` | `true` | No |
 | `CJ_AUTO_PAY` | `false` | No |
 | `SHOP_RETURN_POLICY` | Your return and cancellation rules in plain words (see example below) | No |
@@ -79,7 +80,7 @@ Example return policy text: `Photo Gifts are made to order and cannot be returne
 
 3. Save, then redeploy so the settings apply (Deployments, the three dots, Redeploy).
 
-Check: open the Shop. The Family Shop tab still says "Coming soon" because `CJ_API_KEY` is empty. That is correct.
+Check: open the Shop. The Family Shop tab still says "Coming soon" because `FAMILY_SHOP_ENABLED` is `false`. That is correct.
 
 ---
 
@@ -103,7 +104,7 @@ Keep this tab open. You will paste the key into Appwrite in the next topic, not 
 ### 10. Put the key into the function settings
 
 1. Appwrite Console, Functions, `shop-api`, Settings, Environment variables.
-2. Edit `CJ_API_KEY`, paste the key, save, and redeploy.
+2. Edit `CJ_API_KEY`, paste the key. Also set `FAMILY_SHOP_ENABLED` to `true`. Save and redeploy.
 
 Check: open the Shop. The Family Shop tab no longer says "Coming soon". It says there are no products yet.
 

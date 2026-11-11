@@ -36,6 +36,7 @@ Why supplier facts and your edits are separate: `supplierData` is rewritten by a
 | Name | Needed | Secret | Default | Meaning |
 |---|---|---|---|---|
 | `CJ_API_KEY` | for the Family Shop | yes | none | CJ login key |
+| `FAMILY_SHOP_ENABLED` | to turn the section on | no | `false` | The Family Shop and its owner screen stay hidden unless this is `true` and `CJ_API_KEY` is set |
 | `CJ_SANDBOX` | no | no | `true` | Send CJ orders as sandbox orders |
 | `CJ_AUTO_PAY` | no | no | `false` | Pay CJ from the wallet right after a customer pays |
 | `SHOP_RETURN_POLICY` | recommended | no | empty | Shown on Family Shop product pages |
