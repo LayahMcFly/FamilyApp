@@ -1,6 +1,6 @@
 /* Family Circle: automatic captions, made on the phone itself.
  *
- * The video's sound never leaves the device. The speech model (Whisper tiny, English) is downloaded once
+ * The video's sound never leaves the device. The speech model (Whisper base, English) is downloaded once
  * from Hugging Face by the browser and kept in its cache; the drawing of the model runs from files that
  * live in this site's own vendor/transformers folder. The result is a short list of [start, end, text]
  * lines that the author saves with the post, so everyone else just reads it.
@@ -121,6 +121,10 @@
     say('Reading the sound…', null);
     var a = await decodeAudio(blob);
     if (a.seconds < 0.5) throw new Error('This video is too short to caption.');
+    // Quiet phone recordings are the main reason Whisper hears nothing: bring the loudest moment up to about 90% before listening.
+    var peak = 0; for (var i = 0; i < a.samples.length; i++) { var m = Math.abs(a.samples[i]); if (m > peak) peak = m; }
+    if (peak < 0.001) throw new Error('This video is silent, so there is nothing to caption.');
+    if (peak < 0.8) { var g = 0.9 / peak; for (var j = 0; j < a.samples.length; j++) a.samples[j] *= g; }
     var chunks;
     if (opts.engine) chunks = await opts.engine(a.samples, a.seconds);
     else {
@@ -133,7 +137,7 @@
         var wasm = lib.env.backends.onnx.wasm;
         wasm.wasmPaths = { mjs: base + 'ort-wasm-simd-threaded.jsep.mjs', wasm: base + 'ort-wasm-simd-threaded.jsep.wasm' };
         wasm.numThreads = 1; wasm.proxy = false;
-        var model = (window.FAMILY_CONFIG && window.FAMILY_CONFIG.captionModel) || 'Xenova/whisper-tiny.en';
+        var model = (window.FAMILY_CONFIG && window.FAMILY_CONFIG.captionModel) || 'Xenova/whisper-base.en';
         pipe = await lib.pipeline('automatic-speech-recognition', model, {
           progress_callback: function (p) {
             if (p && p.status === 'progress' && typeof p.progress === 'number') say('Downloading the speech model (first time only)…', Math.round(p.progress));

@@ -10,11 +10,11 @@ window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.39.2",
+  version: "1.39.3",
 
-  // Automatic captions are made on the phone with this speech model (English only). "Xenova/whisper-tiny.en" is about 40 MB;
+  // "Xenova/whisper-tiny.en" is about 40 MB, faster, but misses a lot. Base is the better balance.
   // "Xenova/whisper-base.en" is more accurate but about 3 times bigger and slower.
-  captionModel: "Xenova/whisper-tiny.en",
+  captionModel: "Xenova/whisper-base.en",
 
   // The video editor works on the device. It refuses files bigger or longer than this, because the sound is held in memory while editing.
   // How much photo and video this device may keep after viewing (the oldest copies go first). Nothing in the cloud is affected.

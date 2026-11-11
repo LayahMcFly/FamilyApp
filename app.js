@@ -2500,7 +2500,7 @@
       if (kind === 'video' || kind === 'short') {
         ccBox = h('input', { type: 'checkbox', id: 'cc-make' });
         ccRow = h('div', null, h('label', { class: 'check', for: 'cc-make' }, ccBox, ' Add automatic captions'),
-          h('p', { class: 'hint', text: 'English only. Made on your phone before posting, so it adds a minute or so. The first time, it downloads a small speech model (about 40 MB). Not perfect, so watch the captions once.' }));
+          h('p', { class: 'hint', text: 'English only. Made on your phone before posting, so it adds a minute or so. The first time, it downloads a speech model (about 80 MB, once). Not perfect, so watch the captions once.' }));
       }
 
       if (kind !== 'text') {
