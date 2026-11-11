@@ -54,7 +54,7 @@
     panelOpen = false;
     handle = h('button', { class: 'nav-handle', id: 'nav-handle', type: 'button', 'data-route': 'create', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', 'aria-controls': 'plus-panel',
       'aria-label': 'Quick actions: create a post, family chat, direct messages' },
-      h('span', { class: 'handle-pill', 'aria-hidden': 'true' }, icon('plus')), h('span', { class: 'handle-dot', hidden: true, 'aria-hidden': 'true' }), h('span', { text: 'Create' }));
+      h('span', { class: 'handle-pill', 'aria-hidden': 'true' }, h('span', { class: 'hp-ic hp-plus' }, icon('plus')), h('span', { class: 'hp-ic hp-chat' }, icon('comment'))), h('span', { class: 'handle-dot', hidden: true, 'aria-hidden': 'true' }), h('span', { text: 'Create' }));
     // Tap, keyboard (Enter / Space) and Arrow Up all open it; a short upward swipe on the handle opens it too. The swipe is only
     // listened for on the handle itself, so ordinary scrolling of the feed can never open the panel.
     var sy = 0, sx = 0, down = false, swiped = false;
