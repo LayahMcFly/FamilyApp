@@ -232,47 +232,59 @@
     }
     function adminLink() { return h('p', null, h('a', { class: 'link-btn', href: '#/shop/admin', text: 'Manage Photo Gifts (owner only)' }), familyOpen ? ' · ' : null, familyOpen ? h('a', { class: 'link-btn', href: '#/shop/admin/cj', text: 'Manage Family Shop (owner only)' }) : null); }
     pickSection(st().section || 'photo-gifts');
-    if (cat.isAdmin) autoSync(token, search);
+    if (cat.isAdmin) autoSync(token, false);
   }
 
-  /* Owner only: opening the shop refreshes it from Printify and CJ, at most once every 30 minutes on this device.
+  /* Owner only: opening the shop refreshes it from Printify and CJ (at most every 10 minutes on this device), and says what happened.
      It never turns anything on by itself. Products gone from Printify or CJ are removed, as with the manual buttons. */
-  var autoRunning = false, AUTO_KEY = 'fc_shop_autosync', AUTO_EVERY = 30 * 60 * 1000;
-  async function autoSync(token) {
+  var autoRunning = false, AUTO_KEY = 'fc_shop_autosync', AUTO_EVERY = 10 * 60 * 1000, lastAuto = '';
+  function autoStatus(token, text, withButton) {
+    var host = document.querySelector('.shop-search-row'); if (!host || !host.parentNode) return;
+    var old = document.getElementById('auto-sync-note'); if (old) old.parentNode.removeChild(old);
+    var note = h('p', { id: 'auto-sync-note', class: 'small muted', role: 'status' }, text + ' ');
+    if (withButton) note.appendChild(h('button', { class: 'link-btn', type: 'button', text: 'Update now', onclick: function () { autoSync(token, true); } }));
+    host.parentNode.insertBefore(note, host.nextSibling);
+  }
+  async function autoSync(token, force) {
     if (autoRunning) return;
-    try { if (Date.now() - Number(localStorage.getItem(AUTO_KEY) || 0) < AUTO_EVERY) return; } catch (e) { /* no storage: sync every time */ }
+    if (!force) {
+      try { if (Date.now() - Number(localStorage.getItem(AUTO_KEY) || 0) < AUTO_EVERY) { if (lastAuto) autoStatus(token, lastAuto, true); return; } } catch (e) { /* no storage: sync every time */ }
+    }
     autoRunning = true;
-    try { localStorage.setItem(AUTO_KEY, String(Date.now())); } catch (e) { /* ignore */ }
-    var note = h('p', { class: 'small muted', role: 'status', text: 'Updating the shop from Printify and CJ…' });
-    var host = document.querySelector('.shop-search-row'); if (host && host.parentNode) host.parentNode.insertBefore(note, host.nextSibling);
-    var changed = 0, problems = [];
+    autoStatus(token, 'Updating the shop from Printify and CJ…', false);
+    var changed = 0, parts = [], failed = false;
     try {
       try {
-        var seen = [], page = 1, last = 1, ok = true;
+        var seen = [], page = 1, last = 1, total = 0, bad = '';
         do {
           var r = await shopApi('shopAdminSync', { page: page, enableNew: false });
-          if (r.diagnosis) { ok = false; break; }
-          last = r.lastPage; r.results.forEach(function (x) { if (x.key) seen.push(x.key); if (x.action === 'new' || x.action === 'updated') changed++; });
+          if (r.diagnosis) { bad = r.diagnosis.message; break; }
+          last = r.lastPage; total = r.total; r.results.forEach(function (x) { if (x.key) seen.push(x.key); if (x.action === 'new' || x.action === 'updated') changed++; });
           page++;
         } while (page <= last);
-        if (ok) { var f = await shopApi('shopAdminSyncFinish', { seen: seen }); changed += (f.deleted || 0); }
-      } catch (e) { problems.push('Printify'); }
+        if (bad) { failed = true; parts.push('Printify: ' + bad); }
+        else { var f = await shopApi('shopAdminSyncFinish', { seen: seen }); changed += (f.deleted || 0); parts.push('Printify: ' + total + ' products read' + (f.deleted ? ', ' + f.deleted + ' removed' : '')); }
+      } catch (e) { failed = true; parts.push('Printify: ' + msgOf(e)); }
       try {
         var ov = await shopApi('shopAdminCjList');
         if (ov.configured) {
-          var list = ov.products.slice(0, 30);
+          var list = ov.products.slice(0, 30), done = 0;
           for (var i = 0; i < list.length; i++) {
-            try { var cr = await shopApi('shopAdminCjSync', { id: list[i].id }); if (cr.deleted || (cr.changes && cr.changes.length)) changed++; }
-            catch (e) { if (e.apiCode === 'cj_rate_limit' || e.apiCode === 'cj_auth') { problems.push('CJ'); break; } }
+            try { var cr = await shopApi('shopAdminCjSync', { id: list[i].id }); done++; if (cr.deleted || (cr.changes && cr.changes.length)) changed++; }
+            catch (e) { if (e.apiCode === 'cj_rate_limit' || e.apiCode === 'cj_auth') { failed = true; parts.push('CJ: ' + msgOf(e)); break; } }
           }
+          if (!failed || done) parts.push('CJ: ' + done + ' checked');
         }
-      } catch (e) { problems.push('CJ'); }
+      } catch (e) { /* CJ hidden or not set up: nothing to update */ }
     } finally { autoRunning = false; }
-    if (note.parentNode) note.parentNode.removeChild(note);
+    lastAuto = 'Last updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '. ' + parts.join('. ') + '.';
+    if (!failed) { try { localStorage.setItem(AUTO_KEY, String(Date.now())); } catch (e) { /* ignore */ } }
     if (token !== X.S.nav) return;
-    if (problems.length) toast('Could not update from ' + problems.join(' and ') + '. Open the owner screen to see why.');
-    if (changed) { toast('The shop was updated from Printify and CJ.'); X.route(false); }
+    autoStatus(token, lastAuto, true);
+    if (changed && !force) { toast('The shop was updated from Printify and CJ.'); X.route(false); }
+    else if (changed) { toast('Updated. Reopen the shop to see the changes.'); X.route(false); }
   }
+
 
   /* ================= "MAKE A GIFT" ENTRY ================= */
   async function viewGift(main, token, postId) {
