@@ -1074,7 +1074,7 @@
     var cols = profile ? favoriteColors(profile) : [];
     if (!cols.length) return;   // theme gradient from the stylesheet
     var a = cols[0], b = cols[1] || 'color-mix(in srgb, ' + a + ' 65%, #000)';
-    el.style.background = 'linear-gradient(135deg, ' + a + ', ' + b + ')';
+    el.style.setProperty('--av-fill', 'linear-gradient(135deg, ' + a + ', ' + b + ')');   // fills only the inner circle; the ring around it keeps its own colours
     var rgb = rgbOf(a), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0;
     el.style.color = lum > 170 ? '#2a1a3a' : '#fff';
   }

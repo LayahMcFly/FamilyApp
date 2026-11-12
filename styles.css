@@ -112,7 +112,7 @@ textarea { resize: vertical; min-height: 96px; }
 @keyframes pop { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* avatars */
-.avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-weight: 700; overflow: hidden; flex: none; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--av-fill, var(--accent)); color: var(--on-accent); display: grid; place-items: center; font-weight: 700; overflow: hidden; flex: none; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .avatar.lg { width: 84px; height: 84px; font-size: 2rem; }
 
@@ -281,7 +281,7 @@ progress::-webkit-progress-value { background: var(--grad); border-radius: 999px
 progress::-moz-progress-bar { background: var(--grad); border-radius: 999px; }
 
 /* people and posts */
-.avatar { background: var(--grad); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); }
+.avatar { background: var(--av-fill, var(--grad)); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); }
 .post-head .name { letter-spacing: -.005em; }
 .media { box-shadow: 0 8px 22px -14px rgba(0,0,0,.5); }
 .act { transition: background .15s, transform .12s, color .15s; }
@@ -355,7 +355,7 @@ h1 { font-weight: 700; letter-spacing: 0; }
 article.card { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; background: var(--bg); margin: 0; padding: 0 0 12px; }
 .post-head { margin: 0; padding: 10px 12px; gap: 10px; }
 .post-head .avatar { width: 34px; height: 34px; font-size: .8rem; border: 2px solid transparent; box-shadow: none;
-  background: linear-gradient(var(--accent), var(--accent)) padding-box, conic-gradient(from var(--ang), var(--rb)) border-box; }
+  background: var(--av-fill, linear-gradient(var(--accent), var(--accent))) padding-box, conic-gradient(from var(--ang), var(--rb)) border-box; }
 .post-head .avatar img { border-radius: 50%; }
 .post-head .name { font-size: .9rem; font-weight: 700; line-height: 1.2; }
 .post-head .small { font-size: .75rem; }
@@ -378,7 +378,7 @@ article.card > div > .post-body:first-child { margin-top: 0; }
 .actions .act[aria-label^="Edit"] svg, .actions .act[aria-label*="elete"] svg, .actions .act[aria-label^="Remove this"] svg { width: 22px; height: 22px; }
 .comments { margin: 4px 12px 0; border: 0; padding-top: 4px; }
 .comment .bubble { background: transparent; padding: 0; border-radius: 0; font-size: .9rem; }
-.comment .avatar { width: 28px; height: 28px; font-size: .7rem; box-shadow: none; background: var(--accent); }
+.comment .avatar { width: 28px; height: 28px; font-size: .7rem; box-shadow: none; background: var(--av-fill, var(--accent)); }
 .post-body + .comments, .actions + .post-body { margin-top: 2px; }
 .card.short { border-bottom: 0; }
 .short .media { border-radius: 8px; }
