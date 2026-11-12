@@ -879,7 +879,9 @@
   function pingTyping(c, cv, ta) {
     if (!typingOn() || !c.live || !ta.value.trim() || /^\s*\//.test(ta.value)) return;
     var now = Date.now(); if (now - (c.typingSentAt || 0) < 4000) return; c.typingSentAt = now;
-    api('chatTyping', { kind: cv.kind, convId: cv.id, text: typingWords() === TYPING_DEFAULT ? '' : typingWords() }).catch(function () { /* a typing hint never shows an error */ });
+    api('chatTyping', { kind: cv.kind, convId: cv.id, text: typingWords() === TYPING_DEFAULT ? '' : typingWords() })
+      .then(function (r) { c.typingErr = ''; c.typingOkAt = Date.now(); return r; },
+        function (e) { c.typingErr = (e && (e.apiCode || e.code)) ? String(e.apiCode || e.code) + ': ' + msgOf(e) : msgOf(e); });   // never an error pop-up while typing
   }
 
   /* ----- composer ----- */
@@ -1206,14 +1208,19 @@
     tTxt.value = typingWords() === TYPING_DEFAULT ? '' : typingWords();
     var tPrev = h('p', { class: 'small muted' });
     function showPrev() { tPrev.textContent = 'Others will see: ' + (profileOf(c.uid) ? profileOf(c.uid).displayName : 'You') + ' ' + (tTxt.value.replace(/[<>]/g, '').trim() || TYPING_DEFAULT) + '…'; }
-    tTxt.addEventListener('input', function () { lsSet('fc_chat_typing_text', tTxt.value.replace(/[<>]/g, '').slice(0, 40)); showPrev(); });
+    function saveTxt() { lsSet('fc_chat_typing_text', tTxt.value.replace(/[<>]/g, '').slice(0, 40)); showPrev(); }
+    tTxt.addEventListener('input', saveTxt); tTxt.addEventListener('change', saveTxt); tTxt.addEventListener('blur', saveTxt);
     showPrev();
     body.appendChild(h('label', { class: 'small', text: 'Your words (after your name)' })); body.appendChild(tTxt);
     var presets = h('div', { class: 'row typing-presets' });
     ['is typing', 'is cooking letters', 'is writing a novel', 'is plotting something', 'is summoning words'].forEach(function (w) {
-      presets.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: w, onclick: function () { tTxt.value = w; lsSet('fc_chat_typing_text', w); showPrev(); } }));
+      presets.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: w, onclick: function () { tTxt.value = w; lsSet('fc_chat_typing_text', w); showPrev(); toast('Saved: others will see “' + w + '”.'); } }));
     });
     body.appendChild(presets);
+    var tStat = !c.live ? 'Live updates are not connected right now, so typing hints cannot show until they reconnect.'
+      : c.typingErr ? 'Your last typing hint did not reach the server (' + c.typingErr + '). The family-api update and the "Add the Family Chat tables" step are needed, see CHAT-GUIDE.md.'
+      : c.typingOkAt ? 'Typing hints are working from your side.' : 'Start typing in a chat, then open this screen again to see whether typing hints reach the server.';
+    body.appendChild(h('p', { class: 'small', role: 'status', text: tStat }));
     body.appendChild(h('p', { class: 'small muted', text: 'This is the wording other family members see on their device while you type. It is saved on this device and sent with each typing hint. Nothing is stored after a few seconds.' }));
     body.appendChild(h('h3', { text: 'People you blocked' }));
     if (!c.blocked.length) body.appendChild(h('p', { class: 'small muted', text: 'No one.' }));
