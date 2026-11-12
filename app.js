@@ -2822,6 +2822,7 @@
         h('option', { value: 'birth', text: 'Draw birth parents' }), h('option', { value: 'raised', text: 'Draw the parents who raised them' }));
       bar.appendChild(h('div', { class: 'grow' }, h('label', { for: 'tree-lens', class: 'small muted', text: 'Parents shown' }), lensSel));
     }
+    if (canEditTree()) bar.appendChild(h('button', { class: 'btn small tree-add', type: 'button', text: '+ Add person', onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }); } }));
     holder.appendChild(bar);
 
     var chartEl = h('div', { class: 'tree-chart', role: 'group', 'aria-label': 'Family tree. Drag to move around. Use the plus and minus buttons to zoom. Press Tab to move through the people, then Enter to choose one.' });
@@ -2870,6 +2871,13 @@
       var pLink = p.userId ? '#/profile/' + p.userId : null, pAv = avatarEl(prof || { displayName: p.name });
       panel.appendChild(h('div', { class: 'tree-who' }, pLink ? h('a', { class: 'avatar-link', href: pLink, 'aria-label': 'Open ' + p.name + '’s profile' }, pAv) : pAv, h('div', { class: 'grow' }, h('h2', null, pLink ? h('a', { class: 'name-link', href: pLink, text: p.name }) : p.name), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null)));
       panel.appendChild(h('div', { class: 'row' }, actions));
+      if (canEditTree()) {
+        var addRow = h('div', { class: 'tree-addrel' }, h('strong', { class: 'small', text: 'Add a relative of ' + p.name + ':' }));
+        [['parent', 'Parent'], ['partner', 'Partner'], ['child', 'Child'], ['sibling', 'Sibling']].forEach(function (o) {
+          addRow.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: '+ ' + o[1], onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { relation: o[0], of: p }); } }));
+        });
+        panel.appendChild(addRow);
+      }
       function group(label, items) {
         if (!items.length) return;
         panel.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: label }), h('div', { class: 'rel-list' }, items.map(function (it) {
@@ -4122,7 +4130,7 @@
   }
 
   // Add or edit one person. Only owners and tree admins ever see this; the server checks again.
-  function personDialog(p, tree, done) {
+  function personDialog(p, tree, done, preset) {
     var dlg = h('dialog', { 'aria-labelledby': 'dlg-title' });
     function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
@@ -4176,6 +4184,12 @@
     addPartnerBtn = h('button', { class: 'btn secondary small', type: 'button', text: '+ Add a partner', onclick: function () { addPartnerRow(''); } });
     par.forEach(function (id) { addParentRow(id, curKinds[id] || 'birth'); });
     prt.forEach(function (id) { addPartnerRow(id); });
+    // "Add a relative of <person>": the new person starts already linked to them.
+    if (!p && preset && preset.of) {
+      if (preset.relation === 'child') addParentRow(preset.of.$id, 'birth');
+      else if (preset.relation === 'partner') addPartnerRow(preset.of.$id);
+      else if (preset.relation === 'sibling') (preset.of.parentIds || []).filter(function (x) { return known[x]; }).slice(0, 2).forEach(function (x) { addParentRow(x, 'birth'); });
+    }
     var msg = h('div'), save = h('button', { class: 'btn', type: 'submit', text: p ? 'Save' : 'Add person' });
     var cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: close });
     var remove = p ? h('button', { class: 'btn danger', type: 'button', text: 'Delete from tree', onclick: async function () {
@@ -4206,11 +4220,17 @@
           if (!p || partnerList.slice().sort().join(',') !== prt.slice().sort().join(',')) payload.partnerIds = partnerList;
           var id;
           if (p) { payload.personId = p.$id; await api('treeEditPerson', payload); id = p.$id; }
-          else id = (await api('treeAddPerson', payload)).personId;
+          else {
+            id = (await api('treeAddPerson', payload)).personId;
+            if (preset && preset.relation === 'parent' && preset.of) {   // the new person becomes a parent of the chosen one
+              var op = (preset.of.parentIds || []).filter(function (x) { return known[x]; });
+              await api('treeEditPerson', { familyId: S.familyId, personId: preset.of.$id, parentIds: op.concat([id]) });
+            }
+          }
           close(); toast('Saved.'); done(id);
         } catch (e) { showAlert(msg, 'error', errText(e)); }
       }, 'Saving…');
-    } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : 'Add a person' }),
+    } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : (preset && preset.of ? 'Add ' + ({ parent: 'a parent', child: 'a child', partner: 'a partner', sibling: 'a sibling' }[preset.relation] || 'a relative') + ' of ' + preset.of.name : 'Add a person') }),
       h('div', null, h('label', { for: 'pname', text: 'Name' }), name),
       h('div', null, h('label', { for: 'pgender', text: 'Gender' }), gd),
       h('div', null, h('label', { for: 'pbday', text: 'Birthday' }), bd),

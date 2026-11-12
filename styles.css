@@ -1425,3 +1425,6 @@ video::cue { opacity: 0 !important; background: transparent !important; color: t
 
 .tree-loose { margin: 10px 0; padding: 12px 14px; }
 .tree-loose .rel-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+
+.tree-addrel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 10px 0 4px; }
+.tree-bar .tree-add { align-self: flex-end; }
