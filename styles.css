@@ -1443,3 +1443,8 @@ video::cue { opacity: 0 !important; background: transparent !important; color: t
 .tree-bar select, .tree-bar .tree-add { height: 48px !important; min-height: 48px !important; margin: 0 !important; box-sizing: border-box; }
 .tree-bar .tree-add { flex: none; padding-top: 0 !important; padding-bottom: 0 !important; display: inline-flex; align-items: center; transform: none !important; }
 .tree-bar > .grow > * { margin-bottom: 0 !important; }
+
+/* Never show the browser's own video controls */
+video::-webkit-media-controls, video::-webkit-media-controls-enclosure, video::-webkit-media-controls-panel, video::-webkit-media-controls-overlay-play-button, video::-webkit-media-controls-start-playback-button, video::-webkit-media-controls-play-button, video::-webkit-media-controls-fullscreen-button, video::-webkit-media-controls-overflow-button { display: none !important; opacity: 0 !important; pointer-events: none !important; -webkit-appearance: none; }
+video { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+video::-webkit-media-text-track-container, video::cue { display: none !important; }

@@ -614,8 +614,20 @@
 
   /* ---------- OUR OWN VIDEO PLAYER (replaces the browser's plain controls) ---------- */
   function clock(t) { t = Math.max(0, Math.floor(t || 0)); var m = Math.floor(t / 60), s = t % 60; return m + ':' + (s < 10 ? '0' : '') + s; }
+  /** Stops the browser from adding its own controls bar, three-dot menu, full-screen, picture-in-picture or cast button. */
+  function noNativeUi(v) {
+    v.controls = false; v.removeAttribute('controls');
+    v.setAttribute('controlsList', 'nodownload nofullscreen noremoteplayback noplaybackrate');
+    v.setAttribute('disablePictureInPicture', ''); v.setAttribute('disableRemotePlayback', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+    v.setAttribute('x-webkit-airplay', 'deny');
+    try { v.disablePictureInPicture = true; v.disableRemotePlayback = true; } catch (e) { /* older browser */ }
+    v.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+    v.addEventListener('enterpictureinpicture', function () { try { document.exitPictureInPicture(); } catch (e) { /* ok */ } });
+    v.addEventListener('webkitbeginfullscreen', function () { try { v.webkitExitFullscreen(); } catch (e) { /* ok */ } });
+  }
   function customPlayer(v, box) {
     v.controls = false; v.removeAttribute('controls');
+    noNativeUi(v);
     v.muted = S.muted;
     box.classList.add('player');
     var old = box.querySelector('.pl-ui'); if (old) box.removeChild(old);
@@ -780,6 +792,7 @@
         st.url = URL.createObjectURL(new Blob([blob], { type: mime }));
         clear(box); box.className = 'media reel-media';
         var v = h('video', { src: st.url, loop: true, playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
+        noNativeUi(v);
         v.muted = S.muted;
         v.addEventListener('loadedmetadata', function () { box.classList.toggle('wide', v.videoWidth > v.videoHeight); });   // landscape videos are shown whole, not cropped
         var lastT = 0;
