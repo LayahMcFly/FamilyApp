@@ -216,3 +216,6 @@
 .skel-line { height: 18px; width: 45%; margin: 12px auto; border-radius: 9px; }
 .skel-line.wide { width: 70%; }
 @media (prefers-reduced-motion: reduce) { .img-wait { animation: none; } }
+
+/* On a computer the shop uses the width instead of staying phone-sized (the grid above grows to 5 columns). */
+@media (min-width: 700px) { .main[data-view="shop"] { max-width: 1240px; } }
