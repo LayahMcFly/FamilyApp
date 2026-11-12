@@ -1107,7 +1107,6 @@ article.card .reel-media .cc-btn { top: auto; bottom: 56px; right: 12px; }
 .cc-line[hidden] { display: none; }
 .cc-text { display: inline-block; max-width: 100%; padding: 6px 14px; border-radius: 14px; text-align: center; font: 700 clamp(15px, 4.2vw, 20px)/1.3 system-ui, sans-serif;
   background: color-mix(in srgb, var(--accent) 90%, #000); color: var(--on-accent); border: 2px solid rgba(255,255,255,.75); box-shadow: 0 3px 10px rgba(0,0,0,.35); overflow-wrap: anywhere; }
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 92%, #fff), color-mix(in srgb, var(--accent) 80%, #ff7fbf)); border-color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent), 0 4px 12px rgba(0,0,0,.3); }
 .cc-line.in-info { position: static; left: auto; right: auto; bottom: auto; margin: 0 56px 4px 0; justify-content: flex-start; }
 .card .media:not(.reel-media) .cc-line { left: 8%; right: 8%; bottom: 64px; }
 video::cue { background: rgba(0,0,0,.72); color: #fff; font: 600 1.05em system-ui, sans-serif; }

@@ -331,3 +331,8 @@
 .lp-icons { gap: 14px; } .lp-ico { display: inline-grid; place-items: center; width: 44px; height: 44px; color: var(--text); } .lp-ico svg { width: 26px; height: 26px; }
 .lp-ico[aria-pressed="true"] { color: var(--accent-text); }
 .mini-theme .m-icons { justify-content: space-between; color: var(--text); } .mini-theme .m-icons svg { width: 18px; height: 18px; } .mini-theme .m-ico { display: inline-grid; color: var(--accent-text); }
+
+/* Video captions in Bubbly: the lines were left loose in styles.css by the old preset system, and they broke the rule after them. */
+[data-style="bubbly"] .cc-text {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 92%, #fff), color-mix(in srgb, var(--accent) 80%, #ff7fbf)); border-color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent), 0 4px 12px rgba(0,0,0,.3); 
+}
