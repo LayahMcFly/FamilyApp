@@ -3566,6 +3566,8 @@
     var meP = myTree ? personFor(myTree, S.user.$id) : null, savedMe = (S.user.prefs && S.user.prefs.aboutMe) || {};
     var bd0 = (meP && meP.birthday) || savedMe.birthday || '';
     var bdIn = h('input', { type: 'date', id: 'pe-bday' }); bdIn.value = String(bd0).length === 10 ? bd0 : '';
+    var gen0 = (meP && meP.gender) || savedMe.gender || '';
+    var genIn = h('select', { id: 'pe-gender' }, [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']].map(function (o) { return h('option', { value: o[0], text: o[1] }); })); genIn.value = gen0;
     var ageIn = h('input', { type: 'number', id: 'pe-age', min: 0, max: 120, placeholder: 'For example 34' });
     if (String(bd0).length === 4) ageIn.value = new Date().getFullYear() - Number(bd0);
     var addrIn = h('input', { type: 'text', id: 'pe-addr', maxlength: 120, autocomplete: 'street-address', placeholder: 'For example 12 Oak St, Valdosta GA' }); addrIn.value = addressOf(S.profile);
@@ -3611,11 +3613,11 @@
           var bv = bdIn.value || '';
           if (!bv && ageIn.value) { var ag = Math.floor(Number(ageIn.value)); if (!(ag >= 0 && ag <= 120)) throw new Error('Please enter an age between 0 and 120.'); bv = String(new Date().getFullYear() - ag); }
           await saveProfile({ displayName: n, bio: bio.value.trim() });
-          if (bv !== String(bd0)) {
-            var gv = (meP && meP.gender) || savedMe.gender || '';
+          if (bv !== String(bd0) || genIn.value !== gen0) {
+            var gv = genIn.value;
             await api('saveMyPerson', { familyId: fid, name: (meP && meP.name) || savedMe.name || n, birthday: bv, gender: gv });
             S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { aboutMe: { name: (meP && meP.name) || savedMe.name || n, birthday: bv, gender: gv } }) });
-            bd0 = bv; S.tree = null; await loadTree(true);
+            bd0 = bv; gen0 = gv; S.tree = null; await loadTree(true);
           }
           var av = addrIn.value.trim();
           if (av !== addressOf(S.profile)) {
@@ -3627,6 +3629,7 @@
         catch (e) { showAlert(pmsg, 'error', errText(e)); }
       }, 'Saving…');
     } }, name.wrap, h('div', null, h('label', { for: 'bio', text: 'Bio' }), bio, h('div', { class: 'hint', text: 'Up to 200 characters. Optional.' })),
+      h('div', null, h('label', { for: 'pe-gender', text: 'Gender (optional)' }), genIn),
       h('div', null, h('label', { for: 'pe-bday', text: 'Birthday (optional)' }), bdIn, h('div', { class: 'hint', text: 'Shows in the family tree.' })),
       h('div', null, h('label', { for: 'pe-age', text: 'Or your age (if you would rather not share the birthday)' }), ageIn),
       h('div', null, h('label', { for: 'pe-addr', text: 'Address (optional)' }), addrIn, h('div', { class: 'hint', text: 'Family members can see this on the family tree. Leave it empty to keep it private.' })),
