@@ -3641,7 +3641,7 @@
       main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/profile', text: 'Profile' })));
       main.appendChild(h('h1', { text: 'Settings' }));
       main.appendChild(h('div', { class: 'set-list' }, SETTING_SECTIONS.map(function (s) {
-        return h('a', { class: 'set-row', href: '#/settings/' + s.id }, h('span', null, h('strong', { text: s.label }), h('span', { class: 'small muted', text: s.note })), h('span', { 'aria-hidden': 'true', text: '›' }));
+        return h('a', { class: 'set-row' + (s.id === 'appearance' ? ' set-glow' : ''), href: '#/settings/' + s.id }, h('span', null, h('strong', { text: s.label }), h('span', { class: 'small muted', text: s.note })), h('span', { 'aria-hidden': 'true', text: '›' }));
       })));
       main.appendChild(h('div', { class: 'stack' }, h('button', { class: 'btn danger block', type: 'button', text: 'Sign out', onclick: signOut })));
       return;

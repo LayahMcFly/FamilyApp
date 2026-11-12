@@ -1469,3 +1469,16 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
 .ring-color { display: grid; justify-items: center; gap: 4px; }
 .ring-color input[type="color"] { width: 56px; height: 56px; padding: 0; border: 2px solid var(--border); border-radius: 50%; background: none; cursor: pointer; }
 .ring-controls .row { justify-content: center; }
+
+/* Settings: the Appearance row glows so it is easy to find (same glow as the top-bar Theme button) */
+.set-row.set-glow { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 14px 2px color-mix(in srgb, var(--accent) 40%, transparent); animation: theme-glow 2.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .set-row.set-glow { animation: none; } }
+
+/* Circle color pickers: round, filled, and lined up */
+.ring-colors { align-items: flex-start; }
+.ring-color { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0; }
+.ring-color input[type="color"] { -webkit-appearance: none; appearance: none; display: block; box-sizing: border-box; width: 64px; height: 64px; min-width: 64px; min-height: 64px; margin: 0; padding: 0; border: 3px solid var(--border); border-radius: 50%; background: none; overflow: hidden; cursor: pointer; }
+.ring-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 50%; }
+.ring-color input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.ring-color input[type="color"]::-moz-color-swatch { border: 0; border-radius: 50%; }
+.ring-color .small { line-height: 1.2; }
