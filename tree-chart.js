@@ -194,7 +194,7 @@
       var extra = [];
       if (p.moreParents) extra.push('+' + p.moreParents + (p.moreParents === 1 ? ' parent' : ' parents') + ' not drawn');
       if (p.moreKids) extra.push('+' + p.moreKids + (p.moreKids === 1 ? ' child' : ' children') + ' not drawn');
-      return '<div class="card-inner f3-pcard" role="button" tabindex="0" data-person="' + esc(id) + '" aria-label="' + esc(p.name) + '. Show family.">' +
+      return '<div class="card-inner f3-pcard" role="button" tabindex="0" data-person="' + esc(id) + '" aria-label="' + esc(p.name) + '. Select.">' +
         '<span class="f3-av" data-av="' + esc(id) + '"></span>' +
         '<span class="f3-txt"><span class="f3-nm">' + esc(p.name) + '</span>' +
         (extra.length ? '<span class="f3-more">' + esc(extra.join(' · ')) + '</span>' : '') + '</span></div>';
@@ -218,7 +218,7 @@
         .setMiniTree(false)
         .setCardDim({ w: 170, h: 56, text_x: 0, text_y: 0, img_w: 0, img_h: 0, img_x: 0, img_y: 0 })
         .setCardInnerHtmlCreator(cardHtml)
-        .setOnCardClick(function (e, d) { go(d.data.id, true); })
+        .setOnCardClick(function (e, d) { pick(d.data.id); })
         .setOnCardUpdate(function () {
           var host = this;
           var slots = host.querySelectorAll('.f3-av');
@@ -229,7 +229,7 @@
             if (person && opts.avatar) s.appendChild(opts.avatar(person));
           }
         });
-      chart.setAfterUpdate(report);
+      chart.setAfterUpdate(function () { report(); mark(); });
       chart.updateMainId(main);
       chart.updateTree({ initial: true });
     }
@@ -244,11 +244,16 @@
       } catch (e) { /* the counter is a nicety */ }
     }
 
+    // Tapping a card only selects it (highlight + details). The tree does not move. Jump to / the relative chips / "Center tree here" re-center it.
+    var picked = '';
+    function mark() { var els = container.querySelectorAll('.card[data-id]'); for (var i = 0; i < els.length; i++) els[i].classList.toggle('f3-picked', els[i].getAttribute('data-id') === picked); }
+    function pick(id) { if (!built.byId[id]) return; picked = id; mark(); if (opts.onSelect) opts.onSelect(id, true); }
     function go(id, fromClick) {
       if (!built.byId[id]) return;
-      main = id;
+      main = id; picked = id;
       chart.updateMainId(id);
       chart.updateTree({});
+      setTimeout(mark, 0);
       if (opts.onSelect) opts.onSelect(id, !!fromClick);
     }
 
@@ -262,6 +267,7 @@
 
     return {
       focus: function (id) { go(id, false); },
+      mainId: function () { return main; },
       setLens: function (l) { setData(null, l, null); chart.updateData(built.data); chart.updateMainId(main); chart.updateTree({}); },
       zoom: function (amount) { f3.handlers.manualZoom({ amount: amount, svg: chart.svg, transition_time: reduce ? 0 : 250 }); },
       fit: function () { chart.updateTree({ tree_position: 'fit' }); },

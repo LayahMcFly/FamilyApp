@@ -2888,6 +2888,7 @@
       clear(panel);
       var prof = p.userId ? S.profiles.get(p.userId) : null;
       var actions = [];
+      if (ctl && ctl.mainId && ctl.mainId() !== p.$id) actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Center tree here', onclick: function () { ctl.focus(p.$id); select(p.$id); } }));
       actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Suggest a change', onclick: function () { sendSuggestion(p.$id); } }));
       if (canEditTree() || p.userId === S.user.$id) actions.push(h('button', { class: 'edit-pencil', type: 'button', 'aria-label': 'Edit ' + p.name, title: 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (nid) { S.tree = null; route(false); }); } }, icon('edit')));
       var pLink = p.userId ? '#/profile/' + p.userId : null, pAv = avatarEl(prof || { displayName: p.name });
