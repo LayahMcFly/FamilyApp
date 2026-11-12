@@ -221,8 +221,9 @@
       if (A && A.Realtime) { c.rt = new A.Realtime(X.client); var sub = await c.rt.subscribe(chans, function (ev) { if (C === c) onEvent(c, ev); }); if (C !== c) { try { sub.unsubscribe(); } catch (e) { /* ok */ } return; } c.sub = sub; }
       else if (X.client && X.client.subscribe) c.sub = X.client.subscribe(chans, function (ev) { if (C === c) onEvent(c, ev); });
       else throw new Error('no realtime');
-      c.live = true;
+      c.live = true; (c.dbg = c.dbg || { evs: [] }).rt = 'connected';
     } catch (e) {
+      (c.dbg = c.dbg || { evs: [] }).rt = 'FAILED: ' + ((e && e.message) || e);
       // Realtime is not available: fall back to checking for new messages every few seconds while a conversation is open.
       c.live = false; c.timers.poll = setInterval(function () { if (!document.hidden && C === c) catchUp(c); }, 8000);
     }
@@ -939,9 +940,24 @@
   async function loadCalls(c) {
     try {
       var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.startsWith('convId', 'call:'), X.Query.limit(100)] });
-      c.dbg = c.dbg || { evs: [] }; var all = (r.rows || r.documents || []); c.dbg.load = 'ok: ' + all.length + ' call row(s) on the server, ' + all.filter(function (x) { return x.familyId === c.famId; }).length + ' for this family' + (all.length ? ', newest until ' + new Date(Math.max.apply(null, all.map(function (x) { return Date.parse(x.until || '') || 0; }))).toLocaleTimeString() : '');
-      all.forEach(function (row) { if (row.familyId === c.famId) { var u = Date.parse(row.until || ''); if (u > Date.now()) (c.calls[String(row.convId).slice(5)] || (c.calls[String(row.convId).slice(5)] = {}))[row.userId] = u; } });
+      c.dbg = c.dbg || { evs: [] }; var all = (r.rows || r.documents || []);
+      c.dbg.load = 'ok ' + new Date().toLocaleTimeString() + ': ' + all.length + ' call row(s) on the server, ' + all.filter(function (x) { return x.familyId === c.famId; }).length + ' for this family' + (all.length ? ', newest until ' + new Date(Math.max.apply(null, all.map(function (x) { return Date.parse(x.until || '') || 0; }))).toLocaleTimeString() : '');
+      var before = {}; Object.keys(c.calls).forEach(function (k) { before[k] = callIds(c, k).filter(function (u) { return u !== c.uid; }).length; });
+      var sigBefore = JSON.stringify(Object.keys(c.calls).sort().map(function (k) { return k + ':' + callIds(c, k).sort().join(','); }));
+      var next = {};
+      all.forEach(function (row) { if (row.familyId === c.famId) { var u = Date.parse(row.until || ''); if (u > Date.now()) { var k = String(row.convId).slice(5); (next[k] || (next[k] = {}))[row.userId] = u; } } });
+      c.calls = next;
+      Object.keys(next).forEach(function (k) {   // a call from someone else that this device had not heard about (realtime missed it)
+        var others = callIds(c, k).filter(function (u) { return u !== c.uid; });
+        if (others.length && !before[k] && !(window.FCCalls && window.FCCalls.inCall(k))) {
+          var dm = dmById(c, k), chn = channelById(c, k);
+          toast(realName(others[0]) + (dm ? ' is calling you.' : ' started a call in ' + (chn && chn.name ? '#' + chn.name : 'chat') + '.'));
+          try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) { /* ok */ }
+        }
+      });
+      var sigAfter = JSON.stringify(Object.keys(c.calls).sort().map(function (k) { return k + ':' + callIds(c, k).sort().join(','); }));
       paintCallBanner(c); paintList();
+      if (sigAfter !== sigBefore && c.cur) paintMessages('keep');   // the call card's Join button follows the call
     } catch (e) { (c.dbg = c.dbg || { evs: [] }).load = 'ERROR: ' + ((e && (e.message || e.code)) || e); }
     paintDebug(c);
   }
@@ -956,6 +972,7 @@
     var line = function (t) { el.appendChild(h('div', { text: t })); };
     line('CALL DEBUG  v' + ((window.FAMILY_CONFIG && window.FAMILY_CONFIG.version) || '?') + '  ' + new Date().toLocaleTimeString());
     line('You: ' + c.uid.slice(0, 6) + '…   family: ' + String(c.famId).slice(0, 6) + '…   chat: ' + cv.kind + ' ' + String(cv.id).slice(0, 6) + '…');
+    line('Realtime: ' + (d.rt || 'not started') + '   polling calls every 5s: ' + (c.timers && c.timers.callPoll ? 'on' : 'off'));
     line('Online: ' + (c.online === false ? 'NO' : 'yes') + '   realtime events seen: ' + (d.anyCount || 0) + (d.lastAny ? ' (last ' + Math.round((now - d.lastAny) / 1000) + 's ago)' : ' (none yet)'));
     line('Calls library loaded: ' + (window.FCCalls ? 'yes' : 'NO') + '   I am in this call here: ' + (window.FCCalls && window.FCCalls.inCall(cv.id) ? 'yes' : 'no'));
     line('People in this call (as known): ' + (rows.length ? rows.join(', ') : 'nobody') + '   live count: ' + callIds(c, cv.id).length);
@@ -1014,6 +1031,8 @@
     loadPresence(c); loadCalls(c); loadDmLast(c); beat(c);
     c.timers.beat = setInterval(function () { beat(c); }, 45000);
     c.timers.expire = setInterval(function () { if (C === c && !document.hidden) { repaintHere(c); paintCallBanner(c); } }, 30000);
+    // Live updates for calls and call cards must not depend on realtime alone: ask every few seconds while the chat is open.
+    c.timers.callPoll = setInterval(function () { if (C === c && !document.hidden) { loadCalls(c); if (c.cur && (!c.dbg || !c.dbg.anyCount)) catchUp(c); } }, 5000);
     c.timers.dbg = setInterval(function () { if (C === c && !document.hidden && dbgOn()) paintDebug(c); }, 2000);
     listen(c, document, 'visibilitychange', function () { if (!document.hidden) { beat(c); loadPresence(c); } });
   }
