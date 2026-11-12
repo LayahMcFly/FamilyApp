@@ -4353,7 +4353,34 @@
         try { await saveRing(picks.slice()); saved = picks.slice(); showAlert(ringMsg, 'ok', 'Saved. Your family sees this circle around your picture.'); } catch (e) { showAlert(ringMsg, 'error', errText(e)); }
       }, 'Saving…'); });
       more.appendChild(saveB); controls.appendChild(more);
+      // ---- my library of saved circles (kept in the account, so it follows me to other devices) ----
+      var lib = libOf();
+      var libHead = h('div', { class: 'row lib-head' }, h('strong', { text: 'My saved circles' }),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Save these colors', onclick: function (ev) { busy(ev.currentTarget, async function () {
+          try {
+            var cur = picks.slice(), l = libOf(), key = cur.join(',');
+            if (l.some(function (x) { return x.join(',') === key; })) return toast('Those colors are already saved.');
+            if (l.length >= 12) return toast('You can keep up to 12. Remove one first.');
+            await saveLib(l.concat([cur])); toast('Saved to your library.'); paintControls();
+          } catch (e) { showAlert(ringMsg, 'error', errText(e)); }
+        }); } }));
+      var libGrid = h('div', { class: 'lib-grid', role: 'list' });
+      lib.forEach(function (cols, li) {
+        var ring = h('span', { class: 'lib-ring', 'aria-hidden': 'true' }, h('span', { class: 'lib-hole' }));
+        ring.style.setProperty('background', 'conic-gradient(from 0deg, ' + ringStops(cols) + ')');
+        var use = h('button', { class: 'lib-use', type: 'button', 'aria-label': 'Use saved circle ' + (li + 1) + ': ' + cols.join(', '), onclick: function () { picks = cols.slice(); recoSlot = 0; paintRing(); paintControls(); } }, ring);
+        var del = h('button', { class: 'lib-del', type: 'button', 'aria-label': 'Remove saved circle ' + (li + 1), text: '\u2715', onclick: function (ev) { busy(ev.currentTarget, async function () {
+          try { await saveLib(libOf().filter(function (x, k) { return k !== li; })); paintControls(); } catch (e) { showAlert(ringMsg, 'error', errText(e)); }
+        }); } });
+        libGrid.appendChild(h('div', { class: 'lib-item', role: 'listitem' }, use, del));
+      });
+      controls.appendChild(h('div', { class: 'lib-box' }, libHead, lib.length ? libGrid : h('p', { class: 'small muted', text: 'Nothing saved yet. Make a circle you like and press Save these colors. Tap a saved circle to use it.' })));
     }
+    function libOf() {
+      var l = S.user && S.user.prefs && S.user.prefs.ringLib; if (!Array.isArray(l)) return [];
+      return l.map(function (x) { return Array.isArray(x) ? x.filter(function (c) { return /^#[0-9a-f]{6}$/i.test(c); }).slice(0, 3).map(function (c) { return c.toLowerCase(); }) : []; }).filter(function (x) { return x.length >= 2; }).slice(0, 12);
+    }
+    async function saveLib(list) { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { ringLib: list }) }); }
     async function saveRing(cols) {
       var list = visibleAbout(S.profile).concat(addrCat(S.profile), bannerCat(S.profile)); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
