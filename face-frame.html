@@ -1,0 +1,6 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Face filters helper</title>
+<!-- Runs only the face-tracking model. The model needs eval, which the main app forbids, so it lives in this separate page:
+     no network access at all (connect-src 'self' only reaches its own files), no cookies or data of its own. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self'; img-src blob: data:; worker-src 'self' blob:">
+</head><body><script src="face-frame.js"></script></body></html>

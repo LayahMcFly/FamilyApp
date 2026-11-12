@@ -369,3 +369,48 @@ Open your GIPHY dashboard and look for usage or request counts for the key (the 
 ### What is finished and what is deferred
 - **Finished:** GIF and sticker picker, search with debounce and out-of-order protection, load more, loading, empty and error states with retry, preview before sending, optional caption, GIF and sticker message type with server checks, replies, duplicate-safe sending, inline rendering with correct proportions, transparent stickers, still images with play and pause, at most three moving pictures at once, "no longer available" handling, attribution, rating G.
 - **Deferred:** a built-in sticker pack, user-uploaded stickers (needs upload checks and moderation), GIPHY's optional usage notices, and the official GIPHY logo mark.
+
+
+## Part 11. Voice and video calls (with camera effects)
+
+**What you get.** A phone button and a camera button in the header of every channel and direct message. A call in a family channel is open to the whole family. A call in a direct message is only between those two people. While a call is running, the others see a green "is in a call" bar with Join buttons. You can minimize the call to a small bar and keep chatting. In a call you can mute, turn the camera on and off, switch cameras (phones), and open **Effects**: background blur, color backgrounds, your own background picture, and face filters (shades, crown, bunny ears, cat ears, heart eyes, clown nose).
+
+**How it works, in plain words.** The video and sound go through a service called LiveKit (open source, with a free cloud plan). Your family-api function gives a short pass (valid one hour) only to people who can open that conversation. The effects run on each person's own phone or computer before the video is sent. Nothing is recorded or saved. Nobody outside your family gets a pass.
+
+**Cost.** LiveKit's free plan ("Build") includes 5,000 call-minutes and 50 GB of data a month (checked on 11 November 2026 at livekit.com/pricing). One person in a call for one minute is one call-minute, so a 30 minute call with 3 people uses 90. Check their pricing page again before you rely on it.
+
+**What it cannot do.** It cannot ring a phone whose browser is closed (that needs push notifications, a separate project). The other person sees the call bar, a pop-up message and a shaking phone icon only while the app is open. Camera effects can make older phones warm; pick None to stop them.
+
+### Step 1. Make a free LiveKit project
+1. On a computer or phone, open **cloud.livekit.io** and sign up (email or Google or GitHub).
+2. Create a **project**. Name it Family Circle.
+3. In the project, open **Settings**, then **Keys**, then create a key. You get an **API key** and an **API secret**. The secret is shown once, so keep that tab open until Step 2 is done.
+4. Also copy the project **URL**. It looks like `wss://your-project.livekit.cloud`.
+(The menu names can differ a little. Look for Keys, API keys or Settings.)
+
+### Step 2. Give the three values to the family-api function
+1. Open **cloud.appwrite.io**, your project, **Functions**, **family-api**, **Settings**, **Environment variables**.
+2. Add three variables. Copy and paste, never type the secret into chat or into the website files:
+   - `LIVEKIT_URL` = the `wss://...livekit.cloud` address
+   - `LIVEKIT_API_KEY` = the API key
+   - `LIVEKIT_API_SECRET` = the API secret
+3. Upload the newest `family-api.tar.gz` (same steps as before) and wait for the deployment to say Ready.
+
+### Step 3. Test with two phones
+1. Update the website (it updates itself after the push). Open the app on both phones and go to the same channel.
+2. Phone A taps the camera button. Allow camera and microphone when the browser asks.
+3. Phone B sees a green bar that says A is in a call. Tap **Join**.
+4. Check: you hear each other, tiles show both faces, **Mute** and **Camera off** work, **Minimize** keeps the call going while you chat, **Leave** closes it and the green bar disappears within about two minutes (right away for the person who left).
+5. Open **Effects**. Pick **Blur**. The first time it downloads about 6 MB, so wait a few seconds. Then try a color background, **Your picture**, and a face filter. Face filters download about 10 MB the first time.
+
+### If something goes wrong
+| What you see | What it means |
+|---|---|
+| "Calls are not turned on yet" | The three variables in Step 2 are missing or the function was not redeployed. |
+| "Calls could not load" | Reload the page. Your phone may have an old copy of the site. |
+| You are in the call but nobody hears you | The browser blocked the microphone. Allow it in the browser's site settings for the website. |
+| Effects button does nothing or "Effects could not start" | The phone cannot run the effect. Choose None. Older phones and some iPhones cannot run face filters. |
+| Call connects on Wi-Fi but not mobile data | Some mobile networks block calls. Try Wi-Fi. A paid LiveKit plan has more relay options. |
+
+### What is checked and what is not
+Checked by automatic tests: the pass is signed correctly, is only given to people who can open the conversation, and the "in a call" bar row expires. Checked in a test browser: the call screen, buttons, banner, minimize and leave. **Not checked yet:** a real call between two real phones, camera effects on real faces, and effect speed on your phones. Test those with two phones before relying on them.

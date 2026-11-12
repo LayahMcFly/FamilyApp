@@ -382,3 +382,66 @@ dialog.cs textarea, dialog.cs input, dialog.cs button, dialog.cs .btn { margin: 
 .ep-h { margin: 6px 4px 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
 .ep-e { position: relative; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 .ep-e.fav::after { content: "\2605"; position: absolute; top: 1px; right: 3px; font-size: .62rem; color: #f5b301; font-family: system-ui, sans-serif; }
+
+/* ---------- calls ---------- */
+.call-start { flex: none; min-width: 40px; font-size: 1.05rem; }
+.in-call-mark { font-size: .85rem; animation: callring 1.4s ease-in-out infinite; }
+.rail-call { position: absolute; left: 0; top: 0; font-size: .8rem; background: var(--surface); border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; box-shadow: 0 0 0 2px #2e9e4f; animation: callring 1.4s ease-in-out infinite; }
+@keyframes callring { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
+@media (prefers-reduced-motion: reduce) { .in-call-mark, .rail-call { animation: none; } }
+.call-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: color-mix(in srgb, #2e9e4f 16%, var(--surface)); border-bottom: 1px solid #2e9e4f; padding: 8px 12px; }
+.call-banner[hidden] { display: none; }
+
+.call { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column; background: #101418; color: #f3f5f7; }
+.call[hidden] { display: none; }
+.call-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); }
+.call-head .ct { min-width: 0; }
+.call-head .btn { background: #2a3138; color: #f3f5f7; border: 0; }
+.call-grid { flex: 1; min-height: 0; display: grid; gap: 8px; padding: 8px; grid-template-columns: 1fr; grid-auto-rows: 1fr; }
+.call-grid[data-n="2"] { grid-template-columns: 1fr; }
+@media (min-width: 700px) { .call-grid[data-n="2"], .call-grid[data-n="3"], .call-grid[data-n="4"] { grid-template-columns: 1fr 1fr; } .call-grid[data-n="5"], .call-grid[data-n="6"], .call-grid[data-n="7"], .call-grid[data-n="8"], .call-grid[data-n="9"] { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 699px) { .call-grid[data-n="3"], .call-grid[data-n="4"] { grid-template-columns: 1fr 1fr; } .call-grid[data-n="5"], .call-grid[data-n="6"] { grid-template-columns: 1fr 1fr; } }
+.call-tile { position: relative; border-radius: 14px; overflow: hidden; background: #1c2227; min-height: 0; border: 3px solid transparent; }
+.call-tile.speaking { border-color: #2e9e4f; }
+.ct-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.ct-video.mine { transform: scaleX(-1); }
+.call-tile.has-video .ct-video { opacity: 1; }
+.ct-ph { position: absolute; inset: 0; display: grid; place-items: center; }
+.call-tile.has-video .ct-ph { display: none; }
+.ct-ph .avatar { width: 88px; height: 88px; font-size: 2.2rem; }
+.ct-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: linear-gradient(transparent, rgba(0,0,0,.65)); font-size: .9rem; }
+.ct-name { min-width: 0; }
+.call-bar { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.call-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 64px; padding: 8px 10px; border: 0; border-radius: 14px; background: #2a3138; color: #f3f5f7; font-size: 1.3rem; cursor: pointer; }
+.call-btn .cb-l { font-size: .72rem; }
+.call-btn.off { background: #5b2a2a; }
+.call-btn.end { background: #c62828; }
+.call-btn:disabled { opacity: .45; }
+.call-btn:focus-visible, .call-head .btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.call-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.call-pill { position: fixed; z-index: 80; left: 12px; right: 12px; bottom: calc(var(--nav-h, 64px) + env(safe-area-inset-bottom) + 10px); display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 14px; background: #1f7a3a; color: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.3); }
+.call-pill[hidden] { display: none; }
+@media (min-width: 900px) { .call-pill { left: auto; right: 16px; bottom: 16px; width: 380px; } }
+.call-fx { position: absolute; left: 8px; right: 8px; bottom: 96px; max-height: 60dvh; overflow: auto; background: #1c2227; border-radius: 16px; padding: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5); z-index: 2; }
+.call-fx[hidden] { display: none; }
+.call-fx .fx-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.call-fx .btn { background: #2a3138; color: #f3f5f7; border: 0; }
+.fx-h { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 6px; color: #9aa5ae; }
+.fx-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.fx-tile { flex: none; width: 74px; height: 74px; border-radius: 12px; border: 2px solid transparent; background: #2a3138; color: #f3f5f7; font-size: 1.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; }
+.fx-tile .fx-l { font-size: .68rem; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+.fx-tile.on { border-color: #7fd49a; }
+body.call-open { overflow: hidden; }
+.call .btn, .call-fx .btn { box-shadow: none; background-image: none; background-color: #2a3138; color: #f3f5f7; border: 0; }
+.call-pill .btn { box-shadow: none; background-image: none; background-color: rgba(255,255,255,.2); color: #fff; border: 0; }
+.call-pill .btn.danger { background-color: #c62828; }
+.call-start svg { width: 18px; height: 18px; }
+.in-call-mark svg { width: 14px; height: 14px; vertical-align: -2px; color: #2e9e4f; }
+.rail-call svg { width: 12px; height: 12px; color: #2e9e4f; }
+.call-btn .cb-i { display: grid; place-items: center; }
+.call-btn .cb-i svg { width: 24px; height: 24px; }
+.fx-tile svg { width: 26px; height: 26px; }
+.ct-mic { display: inline-grid; place-items: center; color: #ff8a80; }
+.call-head .btn svg { width: 16px; height: 16px; vertical-align: -3px; }
+.call .btn, .call-fx .btn { box-shadow: none !important; background-image: none !important; }
+.call-pill .btn { box-shadow: none !important; background-image: none !important; }

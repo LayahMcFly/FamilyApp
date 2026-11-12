@@ -70,6 +70,8 @@
     plus: ['M12 5v14', 'M5 12h14'],
     shorts: ['M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M10.5 9.5v5l4-2.5z'],
     bookmark: ['M6 4h12v17l-6-4-6 4z'],
+    phone: ['M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v3a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z'],
+    video: ['M3 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M15 10.5l6-3.5v10l-6-3.5'],
     palette: ['M12 3a9 9 0 1 0 0 18c1.3 0 1.9-.9 1.5-2-.4-1.1.3-2 1.4-2H17a4 4 0 0 0 4-4c0-5-4-10-9-10z', 'M7.8 12.2a.9.9 0 1 0 0-.01', 'M10 7.8a.9.9 0 1 0 0-.01', 'M14.4 7.8a.9.9 0 1 0 0-.01'],
     bag: ['M5 8h14l-1 12H6z', 'M9 8V6.5a3 3 0 0 1 6 0V8'],
     cart: ['M3 4h2.5l2.2 10.5h9.6L19.5 8H6.6', 'M9.5 19.2a.9.9 0 1 0 0-.01', 'M16.5 19.2a.9.9 0 1 0 0-.01'],
@@ -998,9 +1000,10 @@
   }
   function avatarEl(profile, extraClass) {
     var role = profile && S.ringRole ? S.ringRole.get(profile.userId) : '';   // 'grand' or 'married' (from the family tree); everyone else keeps the rainbow
+    var mine = profile ? ringColorsOf(profile) : [], custom = mine.length >= 2 ? ringClassFor(mine) : '';
     var noPic = !(profile && profile.avatarFileId);
     // Until a picture is showing (still loading, or it could not be loaded) the avatar always shows the first letter in the script font.
-    var el = h('div', { class: 'avatar ' + (extraClass || '') + (role ? ' ring-' + role : '') + ' initial', 'aria-hidden': 'true' }, firstLetter(profile ? profile.displayName : '?'));
+    var el = h('div', { class: 'avatar ' + (extraClass || '') + (custom ? ' ' + custom : (role ? ' ring-' + role : '')) + ' initial', 'aria-hidden': 'true' }, firstLetter(profile ? profile.displayName : '?'));
     paintInitialAvatar(el, profile);
     if (profile && profile.avatarFileId) {
       avatarUrl(profile.avatarFileId).then(function (u) { clear(el); el.classList.remove('initial'); el.appendChild(h('img', { src: u, alt: '' })); }).catch(function () { /* keep the letter */ });
@@ -3191,6 +3194,25 @@
   function aboutOf(profile) {
     try { var a = JSON.parse((profile && profile.about) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
   }
+  // Own circle colors are kept inside the About list as one hidden category (key "ringcolors"), so family can see them without a server change.
+  var RING_KEY = 'ringcolors';
+  function visibleAbout(profile) { return aboutOf(profile).filter(function (c) { return c && c.key !== RING_KEY; }); }
+  function ringCat(profile) { return aboutOf(profile).filter(function (c) { return c && c.key === RING_KEY; }); }
+  function ringColorsOf(profile) {
+    var c = ringCat(profile)[0]; if (!c || !Array.isArray(c.items)) return [];
+    return c.items.filter(function (x) { return /^#[0-9a-fA-F]{6}$/.test(x); }).slice(0, 3).map(function (x) { return x.toLowerCase(); });
+  }
+  // A gradient list for conic-gradient: the colors repeat so the ring loops smoothly and keeps the gradient look.
+  function ringStops(cols) { var o = []; for (var r = 0; r < 2; r++) cols.forEach(function (c) { o.push(c); }); o.push(cols[0]); return o.join(', '); }
+  var ringClassCache = {};
+  function ringClassFor(cols) {
+    var key = cols.join('').replace(/#/g, ''); if (ringClassCache[key]) return ringClassCache[key];
+    var name = 'ring-c' + key, sheet = null;
+    for (var i = 0; i < document.styleSheets.length; i++) { var ss = document.styleSheets[i]; if (ss.href && /styles\.css/.test(ss.href)) { sheet = ss; break; } }
+    if (!sheet) return '';
+    try { sheet.insertRule('.ring:has(.avatar.' + name + '), .post-head .avatar.' + name + ' { --rb: ' + ringStops(cols) + '; }', sheet.cssRules.length); } catch (e) { return ''; }
+    return (ringClassCache[key] = name);
+  }
   // Age from a stored birthday ("2015-06-30") or an approximate birth year ("2015").
   function ageOf(p) {
     var b = p && p.birthday ? String(p.birthday) : ''; if (!b) return null;
@@ -3324,9 +3346,9 @@
     saveBtn.addEventListener('click', function () {
       busy(saveBtn, async function () {
         try {
-          var r = await api('saveAbout', { familyId: S.familyId, about: draft });
+          var r = await api('saveAbout', { familyId: S.familyId, about: draft.concat(ringCat(S.profile)) });
           S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
-          draft = aboutOf(S.profile); base = JSON.stringify(draft);
+          draft = visibleAbout(S.profile); base = JSON.stringify(draft);
           showAlert(msg, 'ok', 'Saved. Your family can now see it.'); paint();
         } catch (e) { showAlert(msg, 'error', errText(e)); }
       }, 'Saving…');
@@ -3429,7 +3451,7 @@
     if (mine) main.appendChild(h('section', { class: 'card profile-fam', 'aria-label': 'Family' }, h('h2', { text: 'Family' }), h('p', { class: 'muted small', text: 'You are in ' + famName() + '.' + (S.families.length > 1 || S.canCreateFamily ? ' Switch to another family, or start a new one:' : '') }), familySwitcher()));
 
     // About me
-    var about = aboutOf(prof);
+    var about = visibleAbout(prof);
     var sec = h('section', { class: 'card about', 'aria-label': 'About me' }, h('h2', { text: 'About me' }));
     if (!about.length) sec.appendChild(h('p', { class: 'muted', text: mine ? 'Add your favorite movies, colors, foods and more.' : firstName(prof) + ' has not added anything yet.' }));
     about.forEach(function (c) {
@@ -3538,7 +3560,7 @@
         catch (e) { showAlert(pmsg, 'error', errText(e)); }
       }, 'Saving…');
     } }, name.wrap, h('div', null, h('label', { for: 'bio', text: 'Bio' }), bio, h('div', { class: 'hint', text: 'Up to 200 characters. Optional.' })), pmsg, h('div', { class: 'stack' }, saveBtn));
-    var ed = aboutEditor(aboutOf(S.profile));
+    var ed = aboutEditor(visibleAbout(S.profile));
     if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
       avatarBox,
@@ -3649,26 +3671,50 @@
   function settingsAppearance(main) {
     var look = h('section', { class: 'card', 'aria-label': 'Appearance' });
     main.appendChild(look);
-    // ---- circle colors: see every version, and try one on your own circle (only on this screen, nothing is saved) ----
-    var ringCard = h('section', { class: 'card', 'aria-label': 'Circle colors' }, h('h2', { text: 'Circle colors' }),
-      h('p', { class: 'muted small', text: 'The circle around a profile picture shows who is who in the family tree. This is just a preview: nothing is saved, and it goes away when you refresh.' }));
-    var samples = h('div', { class: 'ring-samples' });
-    [['', 'Rainbow', 'Everyone else'], ['married', 'Gold', 'Has a partner in the tree'], ['grand', 'Double ring', 'Grandparent']].forEach(function (r) {
-      var av = avatarEl(S.profile); av.classList.add('lg'); if (r[0]) av.classList.add('ring-' + r[0]);
-      samples.appendChild(h('div', { class: 'ring-sample' }, h('div', { class: 'ring' }, av), h('strong', { text: r[1] }), h('span', { class: 'small muted', text: r[2] })));
-    });
-    ringCard.appendChild(samples);
-    ringCard.appendChild(h('h3', { text: 'Try it on my circle' }));
-    var tryTabs = h('div', { class: 'tabs', role: 'group', 'aria-label': 'Try a circle color on my profile' });
-    [['', 'Rainbow'], ['married', 'Gold'], ['grand', 'Double ring']].forEach(function (r) {
-      tryTabs.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: r[1], onclick: function () {
-        if (!S.ringRole) S.ringRole = new Map();
-        if (r[0]) S.ringRole.set(S.user.$id, r[0]); else S.ringRole.delete(S.user.$id);
-        applyRingTheme();
-        toast(r[0] ? 'Showing ' + r[1] + ' on your circle. Open Home to see it.' : 'Back to Rainbow.');
-      } }));
-    });
-    ringCard.appendChild(tryTabs);
+    // ---- your circle: the example, then the buttons right under it. The tree sets gold (partner) and double ring (grandparent) by itself. ----
+    var ringCard = h('section', { class: 'card', 'aria-label': 'Your circle' }, h('h2', { text: 'Your circle' }),
+      h('p', { class: 'muted small', text: 'The circle around your profile picture is set by the family tree (gold when you have a partner, a double ring for a grandparent, rainbow for everyone else). Or choose your own two or three colors and the circle keeps the same flowing gradient look.' }));
+    var saved = ringColorsOf(S.profile), mode = saved.length >= 2 ? 'custom' : 'auto', picks = saved.length >= 2 ? saved.slice() : ['#ff5ea8', '#7c4dff'];
+    var stage = h('div', { class: 'ring-stage' }), ringMsg = h('div'), controls = h('div', { class: 'ring-controls' });
+    function paintRing() {
+      clear(stage);
+      var auto = S.ringRole && S.ringRole.get(S.user.$id), av = avatarEl(Object.assign({}, S.profile, { about: '[]' }), 'lg'), wrap = h('div', { class: 'ring ring-preview' }, av);
+      if (mode === 'custom') wrap.style.setProperty('--rb', ringStops(picks)); else if (auto) av.classList.add('ring-' + auto);
+      stage.appendChild(h('div', { class: 'ring-sample' }, wrap, h('strong', { text: mode === 'custom' ? 'Your colors' : (auto === 'married' ? 'Gold (from the tree)' : auto === 'grand' ? 'Double ring (from the tree)' : 'Rainbow') })));
+    }
+    function paintControls() {
+      clear(controls);
+      controls.appendChild(h('div', { class: 'tabs', role: 'group', 'aria-label': 'Circle colors' },
+        h('button', { class: 'tab', type: 'button', 'aria-pressed': mode === 'auto' ? 'true' : 'false', text: 'Automatic', onclick: async function (ev) {
+          if (mode === 'auto' && !saved.length) return;
+          mode = 'auto'; paintRing(); paintControls();
+          if (saved.length) { try { await saveRing(null); saved = []; showAlert(ringMsg, 'ok', 'Back to the automatic circle.'); } catch (e) { showAlert(ringMsg, 'error', errText(e)); } }
+        } }),
+        h('button', { class: 'tab', type: 'button', 'aria-pressed': mode === 'custom' ? 'true' : 'false', text: 'My colors', onclick: function () { mode = 'custom'; paintRing(); paintControls(); } })));
+      if (mode !== 'custom') return;
+      var row = h('div', { class: 'ring-colors' });
+      picks.forEach(function (c, i) {
+        var inp = h('input', { type: 'color', 'aria-label': 'Circle color ' + (i + 1), value: c });
+        inp.addEventListener('input', function () { picks[i] = inp.value.toLowerCase(); paintRing(); });
+        row.appendChild(h('label', { class: 'ring-color' }, inp, h('span', { class: 'small', text: 'Color ' + (i + 1) })));
+      });
+      controls.appendChild(row);
+      var more = h('div', { class: 'row' });
+      if (picks.length < 3) more.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Add a third color', onclick: function () { picks.push('#22b8ff'); paintRing(); paintControls(); } }));
+      if (picks.length > 2) more.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Remove third color', onclick: function () { picks.pop(); paintRing(); paintControls(); } }));
+      var saveB = h('button', { class: 'btn', type: 'button', text: 'Save my circle' });
+      saveB.addEventListener('click', function () { busy(saveB, async function () {
+        try { await saveRing(picks.slice()); saved = picks.slice(); showAlert(ringMsg, 'ok', 'Saved. Your family sees this circle around your picture.'); } catch (e) { showAlert(ringMsg, 'error', errText(e)); }
+      }, 'Saving…'); });
+      more.appendChild(saveB); controls.appendChild(more);
+    }
+    async function saveRing(cols) {
+      var list = visibleAbout(S.profile); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
+      var r = await api('saveAbout', { familyId: S.familyId, about: list });
+      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
+    }
+    paintRing(); paintControls();
+    ringCard.appendChild(stage); ringCard.appendChild(controls); ringCard.appendChild(ringMsg);
     main.appendChild(ringCard);
     function paintLook() {
       clear(look);

@@ -5,6 +5,9 @@ Family Circle includes the open-source code below. Keep this file and the `vendo
 | Component | Version | Files in this repo | License | Copyright |
 |---|---|---|---|---|
 | family-chart (draws the family tree) | 0.9.0 | `vendor/family-chart.min.js`, `vendor/family-chart.css` | MIT, see `vendor/LICENSE-family-chart.txt` | © 2021 Donat Soric |
+| LiveKit client (voice and video calls) | 2.23.0 | `vendor/livekit-client.umd.js` | Apache-2.0, see `vendor/LICENSE-livekit-client.txt` | © LiveKit, Inc. |
+| MediaPipe Selfie Segmentation (call backgrounds) | 0.1.1675465747 | `vendor/mediapipe/selfie_segmentation*` | Apache-2.0 | © Google LLC |
+| MediaPipe Face Mesh (call face filters) | 0.4.1633559619 | `vendor/mediapipe/face/*` | Apache-2.0 | © Google LLC |
 | d3 (family-chart needs it) | 7.9.0 | `vendor/d3.min.js` | ISC, see `vendor/LICENSE-d3.txt` | © 2010-2023 Mike Bostock |
 
 ## family-chart
@@ -48,3 +51,8 @@ The optional GIF picker calls the GIPHY API directly from each person's browser 
 ## What your own code adds
 
 `tree-chart.js` is your own code. It calls the library but does not change it. The files in `vendor/` are the unmodified files from the npm packages.
+
+
+## Calls (`vendor/livekit-client.umd.js`, `vendor/mediapipe/`)
+
+LiveKit client SDK 2.23.0 (npm `livekit-client`) and the two MediaPipe legacy solution packages (npm `@mediapipe/selfie_segmentation` and `@mediapipe/face_mesh`) are unmodified copies, Apache-2.0. The license text is in `vendor/LICENSE-livekit-client.txt`; the Apache-2.0 text is the same for the MediaPipe packages (https://www.apache.org/licenses/LICENSE-2.0). Only the SIMD WebAssembly builds are included, so phones too old for WebAssembly SIMD cannot use the effects. The face model needs `eval`, which the site's security rules forbid, so it runs in its own page `face-frame.html` (no network access, its own stricter-for-network policy). Video is relayed by LiveKit's servers when someone makes a call; the family-api function only issues passes.

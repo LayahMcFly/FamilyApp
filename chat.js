@@ -196,7 +196,7 @@
     if (C && C.famId === famId() && C.uid === me()) return C;
     stop();
     C = { gen: GEN, famId: famId(), uid: me(), loaded: false, error: null, role: 'member', channels: [], dms: [], unread: {}, blocked: [], allowDms: true, limits: { body: 1000 }, reactions: ['👍', '❤️', '😂', '😮', '😢', '🙏'],
-      convs: {}, typing: {}, here: {}, cur: null, route: { mode: 'channels', id: '' }, drafts: {}, listeners: [], timers: {}, sub: null, rt: null, loading: null, online: navigator.onLine !== false };
+      convs: {}, typing: {}, here: {}, calls: {}, cur: null, route: { mode: 'channels', id: '' }, drafts: {}, listeners: [], timers: {}, sub: null, rt: null, loading: null, online: navigator.onLine !== false };
     return C;
   }
 
@@ -502,7 +502,7 @@
       var n = it.dm ? ((c.unread[it.dm.id] || {}).n || 0) : 0, on = !!(it.dm && c.cur && c.cur.id === it.dm.id), nm = it.p.displayName || 'Family member';
       list.appendChild(h('button', { class: 'rail-av' + (on ? ' on' : ''), type: 'button', title: nm + (isHere(c, it.p.userId) ? ' (online)' : ''), 'aria-label': 'Message ' + nm + (isHere(c, it.p.userId) ? ', online' : '') + (n ? ', ' + n + ' unread' : ''), 'aria-current': on ? 'true' : null,
         onclick: function () { if (it.dm) location.hash = '#/dms/' + it.dm.id; else startDm(c, it.p.userId).catch(function (e) { toast(msgOf(e)); }); } },
-        avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId), n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
+        avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId), (it.dm && callIds(c, it.dm.id).length) ? h('span', { class: 'rail-call', 'aria-hidden': 'true' }, icon('phone')) : null, n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
     });
     rail.appendChild(list);
     return rail;
@@ -559,7 +559,7 @@
         var n = it.dm ? ((c.unread[it.dm.id] || {}).n || 0) : 0, on = !!(it.dm && c.cur && c.cur.id === it.dm.id);
         return h('a', { class: 'side-item' + (on ? ' on' : '') + (n ? ' has-unread' : ''), href: it.dm ? '#/dms/' + it.dm.id : '#/dms', 'aria-current': on ? 'page' : null,
           onclick: it.dm ? null : function (ev) { ev.preventDefault(); startDm(c, it.p.userId).catch(function (e) { toast(msgOf(e)); }); } },
-          h('span', { class: 'av-wrap' }, avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId)), h('span', { class: 'grow', text: it.p.displayName || 'Family member' }), unreadPill(n));
+          h('span', { class: 'av-wrap' }, avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId)), h('span', { class: 'grow', text: it.p.displayName || 'Family member' }), (it.dm && callIds(c, it.dm.id).length) ? h('span', { class: 'in-call-mark', title: 'Calling', 'aria-label': 'in a call' }, icon('phone')) : null, unreadPill(n));
       };
       sc.appendChild(h('h2', { class: 'side-h', text: 'Direct messages' }));
       if (!ppl.length) sc.appendChild(h('p', { class: 'muted small side-note', text: 'No one else is in this family yet. Invite people from Settings, then message them here.' }));
@@ -572,7 +572,7 @@
       active.forEach(function (ch) {
         var on = c.cur && c.cur.id === ch.id, n = (c.unread[ch.id] || {}).n || 0;
         sc.appendChild(h('a', { class: 'side-item' + (on ? ' on' : '') + (n ? ' has-unread' : ''), href: '#/chat/' + ch.id, 'aria-current': on ? 'page' : null, title: ch.description },
-          h('span', { class: 'hash', 'aria-hidden': 'true', text: '#' }), h('span', { class: 'grow', text: ch.name }), ch.readOnly ? h('span', { class: 'ro', title: 'Only owners and chat admins can post', 'aria-label': 'read-only' }, icon('lock')) : null, unreadPill(n)));
+          h('span', { class: 'hash', 'aria-hidden': 'true', text: '#' }), h('span', { class: 'grow', text: ch.name }), callIds(c, ch.id).length ? h('span', { class: 'in-call-mark', title: 'Call in progress', 'aria-label': 'call in progress' }, icon('phone')) : null, ch.readOnly ? h('span', { class: 'ro', title: 'Only owners and chat admins can post', 'aria-label': 'read-only' }, icon('lock')) : null, unreadPill(n)));
       });
       if (arch.length) {
         var det = h('details', { class: 'arch' }, h('summary', { text: 'Archived channels (' + arch.length + ')' }));
@@ -608,9 +608,12 @@
       h('a', { class: 'btn secondary small only-narrow', href: c.route.mode === 'dms' ? '#/dms' : '#/chat', 'aria-label': 'Back to ' + (c.route.mode === 'dms' ? 'direct messages' : 'channels') }, icon('back')),
       dm ? avWrap(c, dm.otherId, 'sm') : null,
       h('div', { class: 'grow ct' }, h('h1', { text: title }), h('div', { class: 'small muted clamp', text: (dm ? '' : famLabel() + ' · ') + sub })),
+      convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a voice call', title: 'Voice call', onclick: function () { startCall(c, cv, false); } }, icon('phone')) : null,
+      convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a video call', title: 'Video call', onclick: function () { startCall(c, cv, true); } }, icon('video')) : null,
       dm ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Conversation options', onclick: function () { dmOptions(c, dm); } }, icon('more')) : h('button', { class: 'btn secondary small', type: 'button', text: 'Members', onclick: function () { membersSheet(c); } }));
     pane.appendChild(head);
     pane.appendChild(h('div', { class: 'chat-banner', id: 'chat-banner', hidden: true, role: 'status' }));
+    pane.appendChild(h('div', { class: 'chat-banner call-banner', id: 'call-banner', hidden: true, role: 'status' }));
     var list = h('div', { class: 'chat-list', id: 'chat-list', role: 'log', 'aria-live': 'polite', 'aria-label': 'Messages in ' + title, tabindex: '0' });
     pane.appendChild(list);
     var jump = h('button', { class: 'btn small jump', id: 'chat-jump', type: 'button', hidden: true, onclick: function () { cv.newCount = 0; scrollBottom(); paintJump(); maybeMarkRead(c); } });
@@ -618,7 +621,7 @@
     pane.appendChild(buildComposer(c, cv, ch, dm));
     list.addEventListener('scroll', function () { c.stick = nearBottom(); }, { passive: true });
     var st = null; list.addEventListener('scroll', function () { if (st) return; st = setTimeout(function () { st = null; paintJump(); if (nearBottom()) { cv.newCount = 0; maybeMarkRead(c); } if (list.scrollTop < 60 && cv.hasMore && cv.ready) loadOlder(c, cv); }, 120); });
-    paintBanner();
+    paintBanner(); paintCallBanner(c);
     paintMessages(cv.ready ? (cv.stickToDivider ? 'divider' : 'bottom') : 'keep');
     cv.stickToDivider = false;
     if (cv.ready) maybeMarkRead(c);
@@ -864,6 +867,50 @@
   }
 
 
+  /* ---------- calls: the "call in progress" banner and the start buttons (the call screen itself is calls.js) ---------- */
+  function callIds(c, convId) {
+    var m = c.calls[convId] || {}, now = Date.now(), out = [];
+    Object.keys(m).forEach(function (uid) { if (m[uid] > now && uid !== c.uid) out.push(uid); });
+    return out;
+  }
+  function callsAvailable() { return !!window.FCCalls; }
+  function onCallEvent(c, kind, row) {
+    var convId = String(row.convId).slice(5), u = kind === 'delete' ? 0 : Date.parse(row.until || '');
+    var m = c.calls[convId] || (c.calls[convId] = {}), was = callIds(c, convId).length;
+    if (u > Date.now()) m[row.userId] = u; else delete m[row.userId];
+    if (row.userId !== c.uid && !was && callIds(c, convId).length && !(window.FCCalls && window.FCCalls.inCall(convId))) {
+      var dm = dmById(c, convId);
+      toast(realName(row.userId) + (dm ? ' is calling you.' : ' started a call in ' + ((channelById(c, convId) || {}).name ? '#' + channelById(c, convId).name : 'chat') + '.'));
+      try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) { /* ok */ }
+    }
+    paintCallBanner(c); paintList();
+  }
+  async function loadCalls(c) {
+    try {
+      var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.startsWith('convId', 'call:'), X.Query.limit(100)] });
+      (r.rows || r.documents || []).forEach(function (row) { if (row.familyId === c.famId) { var u = Date.parse(row.until || ''); if (u > Date.now()) (c.calls[String(row.convId).slice(5)] || (c.calls[String(row.convId).slice(5)] = {}))[row.userId] = u; } });
+      paintCallBanner(c); paintList();
+    } catch (e) { /* the banner appears with the next event */ }
+  }
+  function startCall(c, cv, video) {
+    if (!window.FCCalls) { toast('Calls could not load. Reload the page and try again.'); return; }
+    var dm = cv.kind === 'dm' ? dmById(c, cv.id) : null, ch = cv.kind === 'channel' ? channelById(c, cv.id) : null;
+    window.FCCalls.start({ h: h, toast: toast, familyId: c.famId, kind: cv.kind, convId: cv.id, video: !!video,
+      title: dm ? realName(dm.otherId) : (ch ? '#' + ch.name + ' · ' + famLabel() : 'Family call'),
+      api: function (a, p) { return X.api(a, Object.assign({ familyId: c.famId }, p || {})); },
+      nameOf: function (uid) { return realName(uid); }, avatarEl: function (uid, cls) { return avatar(uid, cls || 'lg'); },
+      onEnd: function () { if (C) paintCallBanner(C); } });
+  }
+  function paintCallBanner(c) {
+    var el = document.getElementById('call-banner'); if (!el || !c.cur) return;
+    var ids = callIds(c, c.cur.id), mine = window.FCCalls && window.FCCalls.inCall(c.cur.id);
+    el.hidden = !ids.length || !!mine; if (el.hidden) return;
+    clear(el);
+    el.appendChild(h('span', { class: 'grow', text: ids.map(function (u) { return realName(u); }).join(', ') + (ids.length > 1 ? ' are' : ' is') + ' in a call' }));
+    el.appendChild(h('button', { class: 'btn small', type: 'button', text: 'Join', onclick: function () { startCall(c, c.cur, false); } }));
+    el.appendChild(h('button', { class: 'btn small secondary', type: 'button', text: 'Join with video', onclick: function () { startCall(c, c.cur, true); } }));
+  }
+
   /* ---------- "online now" (a heartbeat while the chat is open and the page is visible; it expires by itself) ---------- */
   function presenceOn() { return lsGet('fc_chat_presence', true) !== false; }
   function isHere(c, uid) { if (uid === c.uid) return presenceOn(); var u = c.here[uid]; return !!u && u > Date.now(); }
@@ -889,9 +936,9 @@
   }
   function startPresence(c) {
     if (c.presenceOn) return; c.presenceOn = true;
-    loadPresence(c); beat(c);
+    loadPresence(c); loadCalls(c); beat(c);
     c.timers.beat = setInterval(function () { beat(c); }, 45000);
-    c.timers.expire = setInterval(function () { if (C === c && !document.hidden) repaintHere(c); }, 30000);
+    c.timers.expire = setInterval(function () { if (C === c && !document.hidden) { repaintHere(c); paintCallBanner(c); } }, 30000);
     listen(c, document, 'visibilitychange', function () { if (!document.hidden) { beat(c); loadPresence(c); } });
   }
   /** A picture with a live green dot. The dot is added or removed in place when someone comes or goes (no redraw of the messages). */
@@ -910,6 +957,7 @@
   function typingWords() { var v = lsGet('fc_chat_typing_text', ''); v = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 40) : ''; return v || TYPING_DEFAULT; }
   function onTypingEvent(c, kind, row) {
     if (row.convId === 'presence') return onPresenceEvent(c, kind, row);
+    if (String(row.convId).indexOf('call:') === 0) return onCallEvent(c, kind, row);
     if (kind === 'delete' || row.userId === c.uid) return;
     var until = Date.parse(row.until || ''); if (!(until > Date.now())) return;
     var byConv = c.typing[row.convId] || (c.typing[row.convId] = {});

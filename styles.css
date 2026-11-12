@@ -1458,3 +1458,14 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
 
 /* family tree: the tapped person stays where they are and is outlined */
 .f3 .card.f3-picked .f3-pcard, .f3 .card.f3-picked > div { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
+
+/* Settings > Appearance > Your circle */
+.ring-stage { display: grid; justify-items: center; margin: 12px 0 8px; }
+.ring-stage .ring-sample { max-width: none; }
+.ring-stage .ring-sample .ring { width: 104px; height: 104px; }
+.ring-controls { display: grid; gap: 12px; justify-items: center; }
+.ring-controls .tabs { justify-content: center; }
+.ring-colors { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+.ring-color { display: grid; justify-items: center; gap: 4px; }
+.ring-color input[type="color"] { width: 56px; height: 56px; padding: 0; border: 2px solid var(--border); border-radius: 50%; background: none; cursor: pointer; }
+.ring-controls .row { justify-content: center; }
