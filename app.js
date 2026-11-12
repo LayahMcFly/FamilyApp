@@ -3679,6 +3679,49 @@
     });
     return m;
   }
+  // How someone is related to ME, from the family tree: "older sister", "grandfather", "cousin"... Returns '' when the tree does not say.
+  function relationLabel(tree, uid) {
+    if (!tree || !uid || !S.user) return '';
+    var me = personFor(tree, S.user.$id), o = personFor(tree, uid);
+    if (!me || !o) return '';
+    if (me.$id === o.$id) return 'You';
+    var byId = {}; tree.people.forEach(function (p) { byId[p.$id] = p; });
+    function par(p) { return (p && p.parentIds || []).filter(function (id) { return byId[id]; }); }
+    function kids(p) { return tree.people.filter(function (x) { return par(x).indexOf(p.$id) >= 0; }); }
+    function sibs(p) { var ps = par(p); return tree.people.filter(function (x) { return x.$id !== p.$id && par(x).some(function (id) { return ps.indexOf(id) >= 0; }); }); }
+    function partners(p) { var out = (p.partnerIds || []).slice(); tree.people.forEach(function (x) { if ((x.partnerIds || []).indexOf(p.$id) >= 0 && out.indexOf(x.$id) < 0) out.push(x.$id); }); return out.filter(function (id) { return byId[id]; }); }
+    function g(p) { var s = String(p.gender || '').trim().toLowerCase(); return /^(f|w|girl|she)/.test(s) ? 'f' : /^(m|boy|he)/.test(s) ? 'm' : ''; }
+    function pick(p, f, m, n) { var x = g(p); return x === 'f' ? f : x === 'm' ? m : n; }
+    function has(list, p) { return list.some(function (x) { return x.$id === p.$id; }); }
+    function agePart(a, b) { var x = String(a.birthday || ''), y = String(b.birthday || ''); if (x.length < 4 || y.length < 4) return ''; var n = Math.min(x.length, y.length); x = x.slice(0, n); y = y.slice(0, n); return x < y ? 'older ' : x > y ? 'younger ' : ''; }
+    var myPar = par(me).map(function (id) { return byId[id]; }), mySibs = sibs(me), oPar = par(o).map(function (id) { return byId[id]; });
+    if (partners(me).indexOf(o.$id) >= 0) return pick(o, 'wife', 'husband', 'partner');
+    if (has(myPar, o)) return pick(o, 'mother', 'father', 'parent');
+    if (par(o).indexOf(me.$id) >= 0) return pick(o, 'daughter', 'son', 'child');
+    if (has(mySibs, o)) {
+      var shared = par(me).filter(function (id) { return par(o).indexOf(id) >= 0; }).length, half = par(me).length > 1 && par(o).length > 1 && shared === 1 ? 'half-' : '';
+      return agePart(o, me) + half + pick(o, 'sister', 'brother', 'sibling');
+    }
+    var gp = []; myPar.forEach(function (p) { gp = gp.concat(par(p).map(function (id) { return byId[id]; })); });
+    if (has(gp, o)) return pick(o, 'grandmother', 'grandfather', 'grandparent');
+    var gc = []; kids(me).forEach(function (k) { gc = gc.concat(kids(k)); });
+    if (has(gc, o)) return pick(o, 'granddaughter', 'grandson', 'grandchild');
+    var au = []; myPar.forEach(function (p) { au = au.concat(sibs(p)); });
+    if (has(au, o)) return pick(o, 'aunt', 'uncle', 'aunt or uncle');
+    var nn = []; mySibs.forEach(function (s) { nn = nn.concat(kids(s)); });
+    if (has(nn, o)) return pick(o, 'niece', 'nephew', 'niece or nephew');
+    if (oPar.some(function (p) { return has(au, p); })) return 'cousin';
+    var stepP = []; myPar.forEach(function (p) { partners(p).forEach(function (id) { if (!has(myPar, byId[id])) stepP.push(byId[id]); }); });
+    if (has(stepP, o)) return pick(o, 'stepmother', 'stepfather', 'step-parent');
+    var inl = []; mySibs.forEach(function (s) { partners(s).forEach(function (id) { inl.push(byId[id]); }); }); partners(me).forEach(function (id) { sibs(byId[id]).forEach(function (s) { inl.push(s); }); });
+    if (has(inl, o)) return pick(o, 'sister-in-law', 'brother-in-law', 'in-law');
+    var pp = []; partners(me).forEach(function (id) { pp = pp.concat(par(byId[id]).map(function (x) { return byId[x]; })); });
+    if (has(pp, o)) return pick(o, 'mother-in-law', 'father-in-law', 'parent-in-law');
+    return '';
+  }
+  function relationFor(uid) {
+    return loadTree(false).then(function (t) { var r = relationLabel(t, uid); return r === 'You' ? 'You' : r ? 'Your ' + r : ''; }).catch(function () { return ''; });
+  }
   // Family info for one person (used by the chat profile sheet): bio, age, gender, birthday, address and favorite things. Fills in after the tree loads.
   function profileFacts(uid) {
     var box = h('div', { class: 'tree-details pf-facts' });
@@ -4794,7 +4837,7 @@
     initAppwrite();
     if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
-      avatarUrl: avatarUrl, profileFacts: profileFacts,
+      avatarUrl: avatarUrl, profileFacts: profileFacts, relationFor: relationFor,
       uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,

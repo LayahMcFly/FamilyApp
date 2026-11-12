@@ -430,8 +430,9 @@
   /* ---------- profile sheet (tap a person's picture or name) ---------- */
   function profileSheet(c, uid) {
     var p = profileOf(uid), me = uid === X.S.user.$id, s = null;
-    var body = h('div', { class: 'pf-sheet' });
-    body.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), h('div', { class: 'small muted', text: isHere(c, uid) ? 'Online now' : 'Offline' }))));
+    var body = h('div', { class: 'pf-sheet' }), rel = h('div', { class: 'pf-rel' });
+    if (!me && X.relationFor) X.relationFor(uid).then(function (t) { if (t) rel.textContent = t; });   // for example: Your older sister
+    body.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, h('div', { class: 'small muted', text: isHere(c, uid) ? 'Online now' : 'Offline' }))));
     var acts = h('div', { class: 'pf-actions' });
     if (!me) {
       acts.appendChild(h('button', { class: 'btn', type: 'button', text: 'Message', onclick: function () { s.close(); startDm(c, uid); } }));

@@ -542,3 +542,5 @@ strong.pf-open:hover { text-decoration: underline; }
 .post-body .msg-link, .comment-body .msg-link { color: var(--accent-text); text-decoration: underline; overflow-wrap: anywhere; }
 article.card .link-card { margin: 8px 14px 0; max-width: calc(100% - 28px); background: var(--surface-2); color: var(--text); text-decoration: none; }
 .comment-body .link-card, .orig .link-card { max-width: 100%; }
+.pf-rel { font-weight: 700; color: var(--accent-text); margin: 2px 0; }
+.pf-rel:empty { display: none; }
