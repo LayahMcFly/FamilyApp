@@ -36,10 +36,10 @@
   // Page and card colours per theme (must match the tokens in themes.css / styles.css). Used to pick readable text colours.
   var SURF = {
     'default': { light: { bg: '#ffffff', surface: '#ffffff' }, dark: { bg: '#0c1014', surface: '#0c1014' } },
-    bubbly: { light: { bg: '#f7f2ff', surface: '#ffffff' }, dark: { bg: '#1b1530', surface: '#261e42' } },
-    cartoon: { light: { bg: '#fff4d6', surface: '#ffffff' }, dark: { bg: '#1a1633', surface: '#2a2550' } },
-    classic: { light: { bg: '#f0f2f5', surface: '#ffffff' }, dark: { bg: '#18191a', surface: '#242526' } },
-    cozy: { light: { bg: '#f6efe3', surface: '#fffaf0' }, dark: { bg: '#1f1a16', surface: '#2a2420' } }
+    bubbly: { light: { bg: '#f7f2ff', surface: '#ffffff', s2: '#efe6ff', bd: '#e0d2f7' }, dark: { bg: '#1b1530', surface: '#261e42', s2: '#31275a', bd: '#46397a' } },
+    cartoon: { light: { bg: '#fff4d6', surface: '#ffffff', s2: '#ffe08a' }, dark: { bg: '#1a1633', surface: '#2a2550', s2: '#3b3470' } },
+    classic: { light: { bg: '#f0f2f5', surface: '#ffffff', s2: '#e4e6eb', bd: '#ced0d4' }, dark: { bg: '#18191a', surface: '#242526', s2: '#3a3b3c', bd: '#3e4042' } },
+    cozy: { light: { bg: '#f6efe3', surface: '#fffaf0', s2: '#efe4d0', bd: '#dccdb2' }, dark: { bg: '#1f1a16', surface: '#2a2420', s2: '#352d27', bd: '#4a3f35' } }
   };
 
   function themeOf(id) { for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i]; return null; }
@@ -106,6 +106,13 @@
       el.style.setProperty('--bg', mix(eff.accent, '#ffffff', 0.86)); el.style.setProperty('--surface', mix(eff.accent, '#ffffff', 0.86));
       el.style.setProperty('--surface-2', mix(eff.accent, '#ffffff', 0.74)); el.style.setProperty('--border', mix(eff.accent, '#ffffff', 0.58));
       surf = { bg: mix(eff.accent, '#ffffff', 0.86), surface: mix(eff.accent, '#ffffff', 0.86) };
+    }
+    else if (eff.theme !== 'default' && surf.s2) {                // other themes: the chosen accent also tints the page, like Default does (outlines in Cartoon stay ink)
+      var tb = dark ? 0.14 : 0.14, ts = dark ? 0.10 : 0.05;
+      var nb = mix(surf.bg, eff.accent, tb), ns = mix(surf.surface, eff.accent, ts);
+      el.style.setProperty('--bg', nb); el.style.setProperty('--surface', ns); el.style.setProperty('--surface-2', mix(surf.s2, eff.accent, 0.08));
+      if (surf.bd) el.style.setProperty('--border', mix(surf.bd, eff.accent, 0.16));
+      surf = { bg: nb, surface: ns };
     }
     var c = accentColors(eff.accent, dark, surf);
     el.style.setProperty('--accent', c.fill); el.style.setProperty('--accent-text', c.text); el.style.setProperty('--on-accent', c.on);
