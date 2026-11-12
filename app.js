@@ -4012,6 +4012,7 @@
     go.href = 'https://www.pinterest.com/search/pins/?q=' + encodeURIComponent(words());
     var copy = h('button', { class: 'btn secondary block', type: 'button', text: 'Copy the search words', onclick: async function () { try { await navigator.clipboard.writeText(words()); toast('Copied.'); } catch (e) { toast('Could not copy. The words are shown above.'); } } });
     dlg.appendChild(h('h2', { id: 'bi-title', text: 'Browse ideas' }));
+    dlg.appendChild(h('p', { class: 'small bi-tip', text: 'Tip: pick only an aesthetic and what you are looking for (pfp and banner combo, pfp or banner). Two choices are enough. Adding a colour and a gender too can narrow Pinterest down to single profile pictures and hide the combos.' }));
     dlg.appendChild(h('p', { class: 'small muted', text: 'Choose what you like and the app builds a Pinterest search for you. Pinterest is a different website. Save a picture you like to your phone, then come back here and choose it as your profile picture or banner.' }));
     dlg.appendChild(body); dlg.appendChild(preview);
     dlg.appendChild(h('div', { class: 'stack' }, go, copy, h('button', { class: 'btn secondary', type: 'button', text: 'Close', onclick: close })));
