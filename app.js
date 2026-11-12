@@ -27,6 +27,11 @@
     line.appendChild(document.createTextNode((C.appName || 'Family Circle') + ' v' + (C.version || '1.0.0')));
     f.appendChild(line);
     if (C.tagline) { var tg = document.createElement('p'); tg.textContent = C.tagline; f.insertBefore(tg, line); tg.className = 'tagline'; }
+    var pp = document.createElement('p'); pp.className = 'foot-play';
+    pp.appendChild(document.createTextNode('I also made '));
+    pp.appendChild(link('https://layahmcfly.github.io/PlayPop/?v=2', 'PlayPop'));
+    pp.appendChild(document.createTextNode(', a site for kids who want phone games on a PC, with no ads inside the games.'));
+    f.appendChild(pp);
     if (C.feedbackUrl) {
       var l2 = document.createElement('p');
       l2.appendChild(document.createTextNode('Feedback, bug or problem? '));
