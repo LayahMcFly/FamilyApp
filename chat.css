@@ -576,3 +576,5 @@ img.zoomable { cursor: zoom-in; }
 .yt-wrap { margin: 8px 14px 0; max-width: calc(100% - 28px); }
 .yt-wrap .yt-card { margin: 0; }
 .yt-open { display: inline-block; margin-top: 4px; }
+
+.body-open .post-body { cursor: pointer; }

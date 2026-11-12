@@ -2332,6 +2332,15 @@
       }
       if (isTile && post.body && post.body.length > 200) bodyHolder.appendChild(h('a', { class: 'tile-more', href: '#/post/' + post.$id, text: 'more' })); }
     showBody();
+    if (!isReel) {   // pressing the words of a post opens its comments, like the Comments button (links, players and selected text keep working)
+      bodyHolder.classList.add('body-open');
+      bodyHolder.addEventListener('click', function (ev) {
+        if (ev.target.closest && ev.target.closest('a, button, iframe, input, textarea, .yt-card, .link-card')) return;
+        var sel = window.getSelection && window.getSelection(); if (sel && String(sel).length) return;
+        if (hooks.inlineComments) return;   // on the post's own page the comments are already open
+        toggleComments('body');
+      });
+    }
     if (isReel) info.appendChild(bodyHolder);
     else if (!post.mediaFileId) card.appendChild(bodyHolder);   // text-only posts: text first; media posts: caption goes under the buttons
     if (post.kind === 'repost') card.appendChild(originalBox(post));
