@@ -488,3 +488,12 @@ body.chat-mode .call-pill { bottom: calc(env(safe-area-inset-bottom) + 78px); }
 .call-card.live .cc-ic { background: #2e9e4f; color: #fff; }
 .call-card .cc-ic svg { width: 20px; height: 20px; }
 .call-card .call-join { background: #2e9e4f !important; color: #fff !important; min-height: 40px; flex: none; margin: 0; }
+
+/* v1.50.25: Direct messages list shows the last message and how long ago */
+.dm-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.dm-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dm-name { font-weight: 700; min-width: 0; }
+.dm-ago { flex: none; font-size: .75rem; color: var(--muted); font-weight: 500; }
+.dm-last { display: block; font-size: .85rem; color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-item.has-unread .dm-last { color: var(--text); font-weight: 600; }
+.side-item .dm-text { overflow: hidden; }

@@ -255,7 +255,7 @@
     var cv = c.convs[row.convId];
     if (kind === 'create') {
       if (c.typing && c.typing[row.convId]) { delete c.typing[row.convId][row.authorId]; paintTyping(c); }   // their message arrived, so they are no longer typing
-      if (row.kind === 'dm') { touchDm(c, row.convId, row.$createdAt); paintList(); }
+      if (row.kind === 'dm') { touchDm(c, row.convId, row.$createdAt); (c.dmLast = c.dmLast || {})[row.convId] = row; paintList(); }
       if (row.authorId !== c.uid && (!c.cur || c.cur.id !== row.convId || document.hidden)) {
         var u = c.unread[row.convId] || (c.unread[row.convId] = { n: 0, readAt: '', dm: row.kind === 'dm' }); u.n = Math.min(10, (u.n || 0) + 1);
         sumTotals(c.unread, c); paintList();
@@ -385,7 +385,7 @@
       var r = await api('chatSend', { kind: cv.kind, convId: cv.id, body: local._media && /^\[(GIF|Sticker)\]$/.test(local.body) ? '' : local.body, media: local._media || undefined, clientId: local.clientId, replyToId: local.replyToId || undefined });
       if (C !== c) return;
       var m = r.message, row = { $id: m.id, convId: m.convId, authorId: m.authorId, body: m.body, replyToId: m.replyToId, clientId: m.clientId, editedAt: m.editedAt, $createdAt: m.createdAt, familyId: c.famId, kind: m.kind, media: m.media || '' };
-      if (cv.kind === 'dm') { touchDm(c, cv.id, row.$createdAt); paintList(); }
+      if (cv.kind === 'dm') { touchDm(c, cv.id, row.$createdAt); (c.dmLast = c.dmLast || {})[cv.id] = row; paintList(); }
       var i = cv.msgs.indexOf(local);
       var already = cv.msgs.some(function (x) { return x.$id === row.$id; });   // realtime got there first
       if (i >= 0) { if (already) cv.msgs.splice(i, 1); else cv.msgs[i] = row; }
@@ -545,6 +545,35 @@
 
   /* ----- side panel: channels and direct messages ----- */
   function unreadPill(n) { return n > 0 ? h('span', { class: 'unread', 'aria-label': n + ' unread', text: n > 9 ? '9+' : String(n) }) : null; }
+  /* Direct messages list: last message and how long ago, like Discord. */
+  function agoText(iso) {
+    var t = Date.parse(iso); if (!t) return '';
+    var s = Math.max(0, Math.round((Date.now() - t) / 1000));
+    if (s < 60) return 'now'; var m = Math.floor(s / 60); if (m < 60) return m + 'm';
+    var hr = Math.floor(m / 60); if (hr < 24) return hr + 'h';
+    var d = Math.floor(hr / 24); if (d < 7) return d + 'd'; if (d < 365) return Math.floor(d / 7) + 'w';
+    return Math.floor(d / 365) + 'y';
+  }
+  function dmPreview(c, it) {
+    var last = it.dm && c.dmLast ? c.dmLast[it.dm.id] : null;
+    if (!it.dm) return 'Start a conversation';
+    if (!last) return c.dmLast && c.dmLast._done ? 'No messages yet' : '';
+    var body = String(last.body || '');
+    var txt = body === '[call]' ? 'Started a call' : body === '[GIF]' ? 'Sent a GIF' : body === '[Sticker]' ? 'Sent a sticker' : body.replace(/\s+/g, ' ');
+    return (last.authorId === c.uid ? 'You: ' : '') + txt;
+  }
+  async function loadDmLast(c) {
+    c.dmLast = c.dmLast || {};
+    var list = c.dms.filter(function (d) { return d.status === 'open'; });
+    await Promise.all(list.map(async function (d) {
+      try {
+        var r = await X.db.listRows({ databaseId: dbId(), tableId: T.msg, queries: [Q().equal('convId', [d.id]), Q().orderDesc('$createdAt'), Q().limit(1)] });
+        var row = (r.rows || [])[0]; if (row) c.dmLast[d.id] = row;
+      } catch (e) { /* the preview stays empty */ }
+    }));
+    c.dmLast._done = true;
+    if (C === c) paintList();
+  }
   function buildSide(c) {
     var side = h('aside', { class: 'chat-side', 'aria-label': 'Channels' });
     var multi = X.S.families.length > 1;
@@ -559,7 +588,11 @@
         var n = it.dm ? ((c.unread[it.dm.id] || {}).n || 0) : 0, on = !!(it.dm && c.cur && c.cur.id === it.dm.id);
         return h('a', { class: 'side-item' + (on ? ' on' : '') + (n ? ' has-unread' : ''), href: it.dm ? '#/dms/' + it.dm.id : '#/dms', 'aria-current': on ? 'page' : null,
           onclick: it.dm ? null : function (ev) { ev.preventDefault(); startDm(c, it.p.userId).catch(function (e) { toast(msgOf(e)); }); } },
-          h('span', { class: 'av-wrap' }, avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId)), h('span', { class: 'grow', text: it.p.displayName || 'Family member' }), (it.dm && callIds(c, it.dm.id).length) ? h('span', { class: 'in-call-mark', title: 'Calling', 'aria-label': 'in a call' }, icon('phone')) : null, unreadPill(n));
+          h('span', { class: 'av-wrap' }, avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId)),
+          h('span', { class: 'grow dm-text' },
+            h('span', { class: 'dm-top' }, h('span', { class: 'dm-name clamp', text: it.p.displayName || 'Family member' }), (it.dm && c.dmLast && c.dmLast[it.dm.id]) ? h('span', { class: 'dm-ago', text: agoText(c.dmLast[it.dm.id].$createdAt) }) : null),
+            h('span', { class: 'dm-last clamp', text: dmPreview(c, it) })),
+          (it.dm && callIds(c, it.dm.id).length) ? h('span', { class: 'in-call-mark', title: 'Calling', 'aria-label': 'in a call' }, icon('phone')) : null, unreadPill(n));
       };
       sc.appendChild(h('h2', { class: 'side-h', text: 'Direct messages' }));
       if (!ppl.length) sc.appendChild(h('p', { class: 'muted small side-note', text: 'No one else is in this family yet. Invite people from Settings, then message them here.' }));
@@ -951,7 +984,7 @@
   }
   function startPresence(c) {
     if (c.presenceOn) return; c.presenceOn = true;
-    loadPresence(c); loadCalls(c); beat(c);
+    loadPresence(c); loadCalls(c); loadDmLast(c); beat(c);
     c.timers.beat = setInterval(function () { beat(c); }, 45000);
     c.timers.expire = setInterval(function () { if (C === c && !document.hidden) { repaintHere(c); paintCallBanner(c); } }, 30000);
     listen(c, document, 'visibilitychange', function () { if (!document.hidden) { beat(c); loadPresence(c); } });
