@@ -1416,7 +1416,7 @@ video::-webkit-media-text-track-container, video::-webkit-media-text-track-displ
 video::cue { opacity: 0 !important; background: transparent !important; color: transparent !important; }
 
 /* v1.48.17 — the big play button is a turning ring in the poster's ring colors (rainbow, gold for married, blue-silver for grandparents) */
-.pl-big { background: conic-gradient(from var(--ang), var(--rb)); animation: ring-turn 6s linear infinite; box-shadow: 0 4px 18px #0006; }
+.pl-big { background: conic-gradient(from var(--ang), var(--rb-me, var(--rb))); animation: ring-turn 6s linear infinite; box-shadow: 0 4px 18px #0006; }
 .pl-big::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: rgba(12, 12, 16, .72); }
 .pl-big svg { position: relative; filter: drop-shadow(0 1px 2px #0008); }
 .media[data-ring="married"] .pl-big { --rb: #f7d774, #c98a14, #fff0b0, #b87a10, #f7d774, #ffe9a0, #c98a14, #f7d774; }
@@ -1482,3 +1482,9 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
 .ring-color input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
 .ring-color input[type="color"]::-moz-color-swatch { border: 0; border-radius: 50%; }
 .ring-color .small { line-height: 1.2; }
+
+/* v1.50.4: my own circle colors (when I picked them) drive the Create button, the play button and the tab icon */
+@media (max-width: 899px) {
+  :root[data-ring="custom"] .nav a[data-route="create"], :root[data-ring="custom"] .nav a[data-route="create"][aria-current="page"] { --plus-grad: var(--plus-me); }
+  :root[data-ring="custom"] .nav a[data-route="create"] svg { filter: drop-shadow(0 1px 2px #0006); }
+}

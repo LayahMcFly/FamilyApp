@@ -889,7 +889,7 @@
       var link = null, a = 0, timer = null;
       function frame() {
         cx.clearRect(0, 0, 64, 64);
-        var COLORS = PAL[document.documentElement.getAttribute('data-ring') || ''] || PAL[''];
+        var COLORS = window.FC_RING_COLORS || PAL[document.documentElement.getAttribute('data-ring') || ''] || PAL[''];
         var g = cx.createConicGradient ? cx.createConicGradient(a, 32, 32) : cx.createLinearGradient(0, 0, 64, 64);
         COLORS.forEach(function (c, i) { g.addColorStop(i / (COLORS.length - 1), c); });
         cx.fillStyle = g;
@@ -1031,7 +1031,7 @@
     var m = new Map();
     rows.forEach(function (r) { m.set(r.userId, r); });
     S.profiles = m; S.profilesAt = Date.now();
-    S.profile = m.get(S.user.$id) || null;
+    S.profile = m.get(S.user.$id) || null; applyRingTheme();
   }
 
   // Asks the server which families I truly belong to (confirmed members of registered Teams).
@@ -3388,7 +3388,14 @@
   // My own circle color also tints the Create button and the tab icon.
   function applyRingTheme() {
     var role = (S.user && S.ringRole && S.ringRole.get(S.user.$id)) || '';
-    if (role) document.documentElement.setAttribute('data-ring', role); else document.documentElement.removeAttribute('data-ring');
+    var root = document.documentElement, mine = ringColorsOf(S.profile);
+    if (mine.length >= 2) {   // my own colors win over the tree role: play button, Create button, other rainbow accents and the tab icon
+      root.setAttribute('data-ring', 'custom'); root.style.setProperty('--rb-me', ringStops(mine)); window.FC_RING_COLORS = ringStops(mine).split(', ');
+      root.style.setProperty('--plus-me', 'linear-gradient(90deg, ' + mine.concat(mine[0]).join(', ') + ')');
+    } else {
+      root.style.removeProperty('--rb-me'); root.style.removeProperty('--plus-me'); window.FC_RING_COLORS = null;
+      if (role) root.setAttribute('data-ring', role); else root.removeAttribute('data-ring');
+    }
   }
   // Ring colors come from the family tree: a grandparent has a child who has a child; married means a partner is linked in the tree.
   function ringRoles(people) {
@@ -3522,6 +3529,13 @@
     var name = field('displayName', 'Display name', 'text', { required: true, maxlength: 60, value: S.profile.displayName });
     var bio = h('textarea', { id: 'bio', rows: 3, maxlength: 200, 'aria-label': 'Bio', placeholder: 'A short line about you' });
     bio.value = S.profile.bio || '';
+    var myTree = null; try { myTree = await loadTree(true); } catch (e) { myTree = null; }
+    if (token !== S.nav) return;
+    var meP = myTree ? personFor(myTree, S.user.$id) : null, savedMe = (S.user.prefs && S.user.prefs.aboutMe) || {};
+    var bd0 = (meP && meP.birthday) || savedMe.birthday || '';
+    var bdIn = h('input', { type: 'date', id: 'pe-bday' }); bdIn.value = String(bd0).length === 10 ? bd0 : '';
+    var ageIn = h('input', { type: 'number', id: 'pe-age', min: 0, max: 120, placeholder: 'For example 34' });
+    if (String(bd0).length === 4) ageIn.value = new Date().getFullYear() - Number(bd0);
     var pmsg = h('div'), avatarBox = h('div', { class: 'row' });
     function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); }
     paintAvatar();
@@ -3560,10 +3574,24 @@
       var n = name.input.value.trim();
       if (!n) return showAlert(pmsg, 'error', 'Your display name cannot be empty.');
       busy(saveBtn, async function () {
-        try { await saveProfile({ displayName: n, bio: bio.value.trim() }); showAlert(pmsg, 'ok', 'Saved.'); }
+        try {
+          var bv = bdIn.value || '';
+          if (!bv && ageIn.value) { var ag = Math.floor(Number(ageIn.value)); if (!(ag >= 0 && ag <= 120)) throw new Error('Please enter an age between 0 and 120.'); bv = String(new Date().getFullYear() - ag); }
+          await saveProfile({ displayName: n, bio: bio.value.trim() });
+          if (bv !== String(bd0)) {
+            var gv = (meP && meP.gender) || savedMe.gender || '';
+            await api('saveMyPerson', { familyId: fid, name: (meP && meP.name) || savedMe.name || n, birthday: bv, gender: gv });
+            S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { aboutMe: { name: (meP && meP.name) || savedMe.name || n, birthday: bv, gender: gv } }) });
+            bd0 = bv; S.tree = null; await loadTree(true);
+          }
+          showAlert(pmsg, 'ok', 'Saved.');
+        }
         catch (e) { showAlert(pmsg, 'error', errText(e)); }
       }, 'Saving…');
-    } }, name.wrap, h('div', null, h('label', { for: 'bio', text: 'Bio' }), bio, h('div', { class: 'hint', text: 'Up to 200 characters. Optional.' })), pmsg, h('div', { class: 'stack' }, saveBtn));
+    } }, name.wrap, h('div', null, h('label', { for: 'bio', text: 'Bio' }), bio, h('div', { class: 'hint', text: 'Up to 200 characters. Optional.' })),
+      h('div', null, h('label', { for: 'pe-bday', text: 'Birthday (optional)' }), bdIn, h('div', { class: 'hint', text: 'Shows in the family tree.' })),
+      h('div', null, h('label', { for: 'pe-age', text: 'Or your age (if you would rather not share the birthday)' }), ageIn),
+      pmsg, h('div', { class: 'stack' }, saveBtn));
     var ed = aboutEditor(visibleAbout(S.profile));
     if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
@@ -3715,7 +3743,7 @@
     async function saveRing(cols) {
       var list = visibleAbout(S.profile); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
-      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
+      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); applyRingTheme();
     }
     paintRing(); paintControls();
     ringCard.appendChild(stage); ringCard.appendChild(controls); ringCard.appendChild(ringMsg);
