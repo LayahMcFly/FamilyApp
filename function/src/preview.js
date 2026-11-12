@@ -182,3 +182,38 @@ export async function fetchPreview(rawUrl, opts = {}) {
   return value;
 }
 export function clearPreviewCache() { cache.clear(); }
+
+
+/* ---------- site info for saved links: the page title and a small icon (png, ico, gif, jpeg or webp; never SVG) ---------- */
+function sniffIcon(buf) {
+  const t = sniff(buf); if (t) return t;
+  if (buf.length > 6 && buf[0] === 0 && buf[1] === 0 && buf[2] === 1 && buf[3] === 0) return 'image/x-icon';
+  return '';
+}
+const ICON_MAX = 100 * 1024;
+export async function fetchSiteInfo(rawUrl, opts = {}) {
+  let title = '', icon = '', pageUrl = rawUrl, candidates = [];
+  try {
+    const page = await guardedGet(rawUrl, { ...opts, accept: 'text/html,application/xhtml+xml', maxBytes: PREVIEW_LIMITS.htmlBytes, stopAt: '</head>' });
+    pageUrl = page.url || rawUrl;
+    if (page.status >= 200 && page.status < 300 && (page.type === 'text/html' || page.type === 'application/xhtml+xml')) {
+      const html = page.body.toString('utf8');
+      const meta = parseMeta(html, pageUrl);
+      title = meta.title || meta.siteName || '';
+      for (const tag of html.slice(0, PREVIEW_LIMITS.htmlBytes).match(/<link\b[^>]*>/gi) || []) {
+        const a = {};
+        for (const m of tag.matchAll(/([a-zA-Z:_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) a[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? '';
+        if (/\bicon\b/i.test(a.rel || '') && a.href && !/\.svg(\?|$)/i.test(a.href)) { try { candidates.push(new URL(decode(a.href), pageUrl).toString()); } catch (e) { /* skip */ } }
+      }
+    }
+  } catch (e) { /* no title; the address still works */ }
+  try { candidates.push(new URL('/favicon.ico', pageUrl).toString()); } catch (e) { /* skip */ }
+  for (const u of [...new Set(candidates)].slice(0, 3)) {
+    try {
+      const img = await guardedGet(u, { ...opts, accept: 'image/png,image/x-icon,image/vnd.microsoft.icon,image/gif,image/jpeg,image/webp', maxBytes: ICON_MAX });
+      const type = sniffIcon(img.body);
+      if (img.status === 200 && !img.cut && type && img.body.length <= ICON_MAX) { icon = `data:${type};base64,${img.body.toString('base64')}`; break; }
+    } catch (e) { /* try the next one */ }
+  }
+  return { title, icon };
+}

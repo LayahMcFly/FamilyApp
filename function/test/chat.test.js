@@ -449,3 +449,15 @@ test('calls: pass only for people in the conversation, signed, and a call row fo
   const off = await setup();
   await off.w.fail('ann', 'callJoin', { familyId: 'famA', kind: 'channel', convId: off.ch.general }, 400);
 });
+
+
+test('saved links: title and icon lookup is members only, safe addresses only, rate limited', async () => {
+  EXTRA_CFG.fetchSiteInfo = async (u) => ({ title: 'Site ' + u, icon: 'data:image/png;base64,AAAA' });
+  try {
+    const { w } = await setup();
+    const r = await w.ok('ann', 'linkInfo', { familyId: 'famA', url: 'https://example.com/a' });
+    assert.equal(r.title, 'Site https://example.com/a'); assert.ok(r.icon.startsWith('data:image/png'));
+    for (const u of ['http://127.0.0.1/', 'file:///etc/passwd', 'ftp://example.com/', '']) await w.fail('ann', 'linkInfo', { familyId: 'famA', url: u }, 400);
+    await w.fail('zed', 'linkInfo', { familyId: 'famA', url: 'https://example.com/' }, 403);
+  } finally { delete EXTRA_CFG.fetchSiteInfo; }
+});

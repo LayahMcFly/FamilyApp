@@ -15,7 +15,7 @@
  */
 import { createHash, createHmac } from 'node:crypto';
 import { Query, Permission, Role, ID } from 'node-appwrite';
-import { fetchPreview, checkUrl } from './preview.js';
+import { fetchPreview, fetchSiteInfo, checkUrl } from './preview.js';
 
 export const CHAT_TABLES = {
   channels: 'chatChannels',
@@ -58,6 +58,7 @@ export function createChat(c) {
   const { listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf,
     bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable } = c;
   const doPreview = c.fetchPreview || fetchPreview;
+  const doSiteInfo = c.fetchSiteInfo || fetchSiteInfo;
   const lk = c.livekit || {};
   const doFetch = c.httpFetch || ((...a) => fetch(...a));
   const T = CHAT_TABLES;
@@ -501,6 +502,16 @@ export function createChat(c) {
       if (!url || url.length > 500 || !checkUrl(url)) throw bad('That link cannot be previewed.');
       if (!softLimit('preview', user.$id, 12, 60)) throw tooMany('asking for link previews');
       return { preview: await doPreview(url) };
+    },
+
+    /** Saved links: the page title and a small icon for an address. The server talks to the other website, never the phone. */
+    async linkInfo({ user, body }) {
+      await requireMember(user, body.familyId);
+      const url = typeof body.url === 'string' ? body.url.trim() : '';
+      if (!url || url.length > 500 || !checkUrl(url)) throw bad('That link cannot be looked up.');
+      if (!softLimit('linkinfo', user.$id, 12, 60)) throw tooMany('adding links');
+      const info = await doSiteInfo(url);
+      return { title: String(info && info.title || '').slice(0, 120), icon: info && typeof info.icon === 'string' && info.icon.length < 140000 ? info.icon : '' };
     },
 
     /** Sets or clears the picture shown for this family's chat. Owner or chat admin only. fileId '' clears it. */

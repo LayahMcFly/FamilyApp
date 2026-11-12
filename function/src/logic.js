@@ -501,7 +501,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
   }
 
   // Family chat (channels, direct messages, roles). See chat.js and CHAT-GUIDE.md.
-  const chat = createChat({ claimFile, deleteFileQuiet, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf, bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable: TABLES.profiles , fetchPreview: cfg.fetchPreview, httpFetch: cfg.httpFetch, livekit: cfg.livekit });
+  const chat = createChat({ claimFile, deleteFileQuiet, listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf, bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable: TABLES.profiles , fetchPreview: cfg.fetchPreview, fetchSiteInfo: cfg.fetchSiteInfo, httpFetch: cfg.httpFetch, livekit: cfg.livekit });
 
   const actions = {
     addressGet, addressSave, addressDelete, addressView,

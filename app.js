@@ -1923,11 +1923,99 @@
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a Short' })
     });
   };
+  /* ---------- saved links: circles at the top of Saved (kept on my account, so they follow me to every device) ---------- */
+  var MAX_LINKS = 30;
+  function linkList() { var l = S.user && S.user.prefs && S.user.prefs.links; return Array.isArray(l) ? l.filter(function (x) { return x && typeof x.u === 'string'; }) : []; }
+  async function writeLinks(list) {
+    if (JSON.stringify(list).length > 58000) throw new Error('That is too many links for your account to remember. Remove one first.');
+    S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { links: list }) });
+  }
+  function normLink(v) {
+    v = String(v || '').trim(); if (!v) return '';
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(v)) v = 'https://' + v;
+    try { var u = new URL(v); if (u.protocol !== 'https:' && u.protocol !== 'http:') return ''; if (!/\./.test(u.hostname)) return ''; return u.toString(); } catch (e) { return ''; }
+  }
+  function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } }
+  function shrinkIcon(uri) {   // a 40 px copy keeps the whole list small enough to sync
+    return new Promise(function (resolve) {
+      if (!uri) return resolve('');
+      var im = new Image();
+      im.onload = function () {
+        try {
+          var cv = document.createElement('canvas'); cv.width = cv.height = 40; var cx = cv.getContext('2d');
+          cx.drawImage(im, 0, 0, 40, 40); var out = cv.toDataURL('image/png'); resolve(out.length < 4500 ? out : '');
+        } catch (e) { resolve(''); }
+      };
+      im.onerror = function () { resolve(''); }; im.src = uri;
+    });
+  }
+  // The dialog for adding or editing one link. item is null when adding.
+  function linkDialog(item, onDone) {
+    var dlg = h('dialog', { 'aria-labelledby': 'ld-title' });
+    var url = h('input', { type: 'url', inputmode: 'url', 'aria-label': 'Link', placeholder: 'Paste a link', autocomplete: 'off', maxlength: 500 });
+    var name = h('input', { type: 'text', 'aria-label': 'Name', placeholder: item ? 'Name' : 'Name (filled in for you)', maxlength: 40 });
+    url.value = item ? item.u : ''; name.value = item ? item.t : '';
+    var msg = h('div'), ok = h('button', { class: 'btn', type: 'submit', text: item ? 'Save' : 'Save link' }), cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel' });
+    function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    cancel.addEventListener('click', close);
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    var del = item ? h('button', { class: 'btn danger', type: 'button', text: 'Delete', onclick: function () {
+      busy(del, async function () { try { await writeLinks(linkList().filter(function (x) { return x.id !== item.id; })); close(); onDone(); } catch (e) { showAlert(msg, 'error', errText(e)); } });
+    } }) : null;
+    dlg.appendChild(h('form', { novalidate: true, onsubmit: function (ev) {
+      ev.preventDefault();
+      var u = normLink(url.value); if (!u) return showAlert(msg, 'error', 'Please paste a full link, like https://example.com');
+      busy(ok, async function () {
+        try {
+          var list = linkList(), t = name.value.trim(), ic = item ? item.i : '';
+          if (!item && list.length >= MAX_LINKS) throw new Error('You can keep up to ' + MAX_LINKS + ' links. Remove one first.');
+          if (!item || u !== item.u) {   // a new address: look up its title and icon
+            var info = null; try { info = await api('linkInfo', { familyId: S.familyId, url: u }); } catch (e) { info = null; }
+            if (info) { if (!t && info.title) t = info.title; ic = await shrinkIcon(info.icon); } else ic = '';
+          }
+          if (!t) t = hostOf(u);
+          t = t.slice(0, 40);
+          if (item) list = list.map(function (x) { return x.id === item.id ? { id: x.id, u: u, t: t, i: ic } : x; });
+          else list.push({ id: 'l' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), u: u, t: t, i: ic });
+          await writeLinks(list); close(); onDone();
+        } catch (e) { showAlert(msg, 'error', errText(e)); }
+      }, item ? 'Saving…' : 'Looking it up…');
+    } }, h('h2', { id: 'ld-title', text: item ? 'Edit link' : 'Save a link' }),
+      h('p', { class: 'hint', text: item ? 'Change the name or the address.' : 'Paste the address. The name and the little icon are filled in for you.' }),
+      url, name, msg, h('div', { class: 'row' }, cancel, del, ok)));
+    document.body.appendChild(dlg); dlg.showModal(); url.focus();
+  }
+  function linksRow() {
+    var wrap = h('section', { class: 'links-section', 'aria-label': 'Saved links' }), editing = false;
+    function paint() {
+      clear(wrap);
+      var list = linkList();
+      wrap.appendChild(h('div', { class: 'links-head' }, h('h2', { text: 'Links' }),
+        list.length ? h('button', { class: 'link-btn small', type: 'button', text: editing ? 'Done' : 'Edit', onclick: function () { editing = !editing; paint(); } }) : null));
+      var row = h('div', { class: 'link-row' });
+      row.appendChild(h('button', { class: 'link-item', type: 'button', 'aria-label': 'Add a link', onclick: function () { linkDialog(null, paint); } },
+        h('span', { class: 'link-circle add' }, icon('plus')), h('span', { class: 'link-name', text: 'Add' })));
+      list.forEach(function (x) {
+        var circle = h('span', { class: 'link-circle' + (editing ? ' editing' : '') }, x.i ? h('img', { src: x.i, alt: '', width: 40, height: 40 }) : h('span', { class: 'link-letter', text: (x.t || hostOf(x.u)).charAt(0).toUpperCase() }));
+        if (editing) circle.appendChild(h('span', { class: 'link-pencil', 'aria-hidden': 'true' }, icon('edit')));
+        var inner = [circle, h('span', { class: 'link-name', text: x.t || hostOf(x.u) })];
+        row.appendChild(editing
+          ? h('button', { class: 'link-item', type: 'button', 'aria-label': 'Edit ' + x.t, onclick: function () { linkDialog(x, paint); } }, inner)
+          : h('a', { class: 'link-item', href: x.u, target: '_blank', rel: 'noopener noreferrer', 'aria-label': x.t + ', opens in a new tab' }, inner));
+      });
+      wrap.appendChild(row);
+    }
+    paint();
+    return wrap;
+  }
+
   VIEWS.saved = function (main, token) {
     var sel = S.savedTab || '';
     if (sel && !libs().some(function (l) { return l.id === sel; })) sel = '';
     main.appendChild(h('h1', { text: 'Saved' }));
     main.appendChild(h('p', { class: 'muted small', text: 'Only you can see what you save, and what you name your libraries.' }));
+    main.appendChild(linksRow());
+    main.appendChild(h('h2', { class: 'links-posts-h', text: 'Saved posts' }));
     var chips = h('div', { class: 'chips', role: 'group', 'aria-label': 'Libraries' }), manage = h('div', { class: 'row' }), holder = h('div');
     main.appendChild(chips); main.appendChild(manage); main.appendChild(holder);
 
