@@ -2265,7 +2265,9 @@
           if (!sh.parentNode) { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); return; }
           var below = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
           sh.style.bottom = below + 'px';
-          sh.style.height = Math.min(vv.height * 0.76, Math.max(240, vv.height - 80)) + 'px'; sh.style.maxHeight = 'none';
+          var hh = Math.min(vv.height * 0.76, Math.max(240, vv.height - 80));
+          sh.style.height = hh + 'px'; sh.style.maxHeight = 'none';
+          if (backEl) backEl.style.bottom = (below + hh) + 'px';   // the tap-to-close area stops where the sheet starts, so it can never sit on top of the sheet
         }
         vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
       })(commentsEl);

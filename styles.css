@@ -1407,3 +1407,6 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* v1.48.11 — a press or wiggle on the comments sheet never scrolls the Shorts list behind it */
 .sheet { overscroll-behavior: contain; touch-action: pan-y; }
 .sheet .comment-form, .sheet .comment-form * { touch-action: manipulation; }
+
+/* v1.48.13 — the tap-to-close area covers only the part ABOVE the comments sheet, never the sheet itself */
+.sheet-backdrop { bottom: 76dvh; }
