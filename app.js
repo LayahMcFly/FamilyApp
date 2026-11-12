@@ -4057,11 +4057,16 @@
         try {
           var bv = bdIn.value || '';
           if (!bv && ageIn.value) { var ag = Math.floor(Number(ageIn.value)); if (!(ag >= 0 && ag <= 120)) throw new Error('Please enter an age between 0 and 120.'); bv = String(new Date().getFullYear() - ag); }
+          var nameChanged = n !== S.profile.displayName;
           await saveProfile({ displayName: n, bio: bio.value.trim() });
-          if (bv !== String(bd0) || genIn.value !== gen0) {
-            var gv = genIn.value;
-            await api('saveMyPerson', { familyId: fid, name: (meP && meP.name) || savedMe.name || n, birthday: bv, gender: gv });
-            S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { aboutMe: { name: (meP && meP.name) || savedMe.name || n, birthday: bv, gender: gv } }) });
+          if (nameChanged) {   // the new name also goes to the account (Settings, member lists) and to my place in the family tree
+            try { S.user = await account.updateName({ name: n }); } catch (en) { /* the family name is saved; the account name can be changed in Settings */ }
+            if (S.memberList) S.memberList.forEach(function (m) { if (m.userId === S.user.$id) m.userName = n; });
+          }
+          if (bv !== String(bd0) || genIn.value !== gen0 || nameChanged) {
+            var gv = genIn.value, tn = nameChanged ? n : ((meP && meP.name) || savedMe.name || n);
+            await api('saveMyPerson', { familyId: fid, name: tn, birthday: bv, gender: gv });
+            S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { aboutMe: { name: tn, birthday: bv, gender: gv } }) });
             bd0 = bv; gen0 = gv; S.tree = null; await loadTree(true);
           }
           var av = addrIn.value.trim();
