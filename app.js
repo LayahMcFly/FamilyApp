@@ -2263,11 +2263,12 @@
         var vv = window.visualViewport; if (!vv) return;
         function fit() {
           if (!sh.parentNode) { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); return; }
-          var below = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-          sh.style.bottom = below + 'px';
-          var hh = Math.min(vv.height * 0.76, Math.max(240, vv.height - 80));
-          sh.style.height = hh + 'px'; sh.style.maxHeight = 'none';
-          if (backEl) backEl.style.bottom = (below + hh) + 'px';   // the tap-to-close area stops where the sheet starts, so it can never sit on top of the sheet
+          // Place the sheet by its TOP edge in the page's own coordinates: the bottom of what is really visible (above the keyboard) minus the sheet height.
+          var layoutH = document.documentElement.clientHeight || window.innerHeight, keys = vv.height < layoutH * 0.8;
+          var hh = keys ? Math.max(200, vv.height - 56) : Math.min(vv.height * 0.76, Math.max(240, vv.height - 80));
+          var top = Math.max(0, vv.offsetTop + vv.height - hh);
+          sh.style.bottom = 'auto'; sh.style.top = top + 'px'; sh.style.height = hh + 'px'; sh.style.maxHeight = 'none';
+          if (backEl) backEl.style.bottom = (layoutH - top) + 'px';   // the tap-to-close area stops where the sheet starts, so it can never sit on top of the sheet
         }
         vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
       })(commentsEl);
