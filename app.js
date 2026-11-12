@@ -4091,7 +4091,7 @@
     // Banner: a colour, or a picture / looping GIF. Saved as soon as it is chosen, like the profile picture.
     var banBox = h('div', { class: 'ban-edit' }), banFile = h('input', { id: 'newBanner', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a banner picture' });
     var banColor = h('input', { type: 'color', id: 'banColor', 'aria-label': 'Banner colour' }); banColor.value = (bannerValue(S.profile) && bannerValue(S.profile).color) || '#7c5cff';
-    var banRemove = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove banner' });
+    var banRemove = h('button', { class: 'btn secondary small', type: 'button', text: 'No banner (remove it for everyone)' });
     var banReco = h('div', { class: 'ban-reco', role: 'group', 'aria-label': 'Colours from your picture' });
     if (S.profile.avatarFileId) avatarUrl(S.profile.avatarFileId).then(paletteFrom).then(function (cols) {
       if (!cols.length) return;
@@ -4103,8 +4103,6 @@
         banReco.appendChild(sw);
       });
     }).catch(function () { /* no suggestions */ });
-    var banShow = h('input', { type: 'checkbox', id: 'ban-show' }); banShow.checked = bannersOn();
-    banShow.addEventListener('change', function () { try { localStorage.setItem('fc_banners', banShow.checked ? 'on' : 'off'); } catch (e) { /* not saved */ } toast(banShow.checked ? 'Banners are on.' : 'Banners are hidden for you.'); });
     var banUseColor = h('button', { class: 'btn secondary small', type: 'button', text: 'Use this colour' });
     function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page', true) || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
     paintBanner();
@@ -4177,8 +4175,7 @@
       h('div', { class: 'ban-section' }, h('label', { for: 'newBanner', text: 'Banner' }), banBox,
         banReco, h('div', { class: 'row' }, banColor, banUseColor), banFile,
         h('div', { class: 'hint', text: 'A colour, a picture or a looping GIF (GIFs up to 3 MB). It shows on your profile and your profile card.' }),
-        h('div', { class: 'stack' }, banRemove),
-        h('label', { class: 'check', for: 'ban-show' }, banShow, ' Show banners on profiles (this device)')),
+        h('div', { class: 'stack' }, banRemove)),
       form));
     var aboutCard = h('section', { class: 'card', id: 'about-editor', 'aria-label': 'About me' }, h('h2', { text: 'About me' }),
       h('p', { class: 'small muted', text: 'Add as many categories as you like and several answers to each. All of it is optional.' }), ed.el, whoCanSee());
