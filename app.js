@@ -2872,7 +2872,7 @@
       panel.appendChild(h('div', { class: 'tree-who' }, pLink ? h('a', { class: 'avatar-link', href: pLink, 'aria-label': 'Open ' + p.name + '’s profile' }, pAv) : pAv, h('div', { class: 'grow' }, h('h2', null, pLink ? h('a', { class: 'name-link', href: pLink, text: p.name }) : p.name), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null)));
       panel.appendChild(h('div', { class: 'row' }, actions));
       if (canEditTree()) {
-        var addRow = h('div', { class: 'tree-addrel' }, h('strong', { class: 'small', text: 'Add a relative of ' + p.name + ':' }));
+        var addRow = h('div', { class: 'tree-addrel' }, h('strong', { class: 'small tree-addrel-title', text: 'Add a relative' }));
         [['parent', 'Parent'], ['partner', 'Partner'], ['child', 'Child'], ['sibling', 'Sibling']].forEach(function (o) {
           addRow.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: '+ ' + o[1], onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { relation: o[0], of: p, lite: true }); } }));
         });
@@ -4161,7 +4161,7 @@
     (S.memberList || []).forEach(function (m) {   // joined but no profile yet: still a member
       if (linked[m.userId] || seenM[m.userId] || (p && p.userId === m.userId)) return;
       var inv = tree.people.filter(function (x) { return x.inviteMembershipId === m.$id; })[0];
-      memberOpts.push([m.userId, m.userName || (inv && inv.name) || 'Family member']);
+      memberOpts.push([m.userId, m.userName || (m.userId === S.user.$id ? ((S.user.name || 'Me') + ' (you)') : ((inv && inv.name) || 'Member without a name yet'))]);
     });
     var known = {}; tree.people.forEach(function (x) { known[x.$id] = true; });
     var par = p ? (p.parentIds || []).filter(function (x) { return known[x]; }) : [], prt = p ? (p.partnerIds || []).filter(function (x) { return known[x]; }) : [];

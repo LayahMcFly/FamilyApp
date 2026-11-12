@@ -1428,3 +1428,11 @@ video::cue { opacity: 0 !important; background: transparent !important; color: t
 
 .tree-addrel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 10px 0 4px; }
 .tree-bar .tree-add { align-self: flex-end; }
+
+/* Family Tree: the four add buttons are one tidy 2 x 2 block on a phone */
+.tree-addrel { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; margin: 12px 0 8px !important; }
+.tree-addrel .tree-addrel-title { grid-column: 1 / -1; margin: 0 !important; }
+.tree-addrel .btn { margin: 0 !important; width: 100%; min-height: 44px; justify-content: center; transform: none !important; rotate: none !important; white-space: nowrap; }
+.tree-bar { align-items: flex-end; gap: 10px; }
+.tree-bar .tree-add { margin: 0 !important; min-height: 44px; white-space: nowrap; }
+@media (min-width: 700px) { .tree-addrel { grid-template-columns: repeat(4, auto); justify-content: start; } .tree-addrel .tree-addrel-title { grid-column: auto; } }
