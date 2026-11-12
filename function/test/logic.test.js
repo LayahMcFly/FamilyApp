@@ -817,3 +817,25 @@ test('connecting someone already in the tree: sibling of a person with no parent
   const nw = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Newbie', relation: 'sibling', relationOf: bo.json.personId });
   assert.equal(nw.json.linked, true); assert.ok(s.world.tables.people.get(nw.json.personId).parentIds.length === 1);
 });
+
+test('inviting someone who is already in the tree without an account (e.g. a parent): entry becomes theirs, links stay', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  const add = (b) => s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', ...b });
+  const r = await add({ name: 'Mom', relation: 'parent' });
+  assert.equal(r.status, 200);
+  const momId = r.json.personId;
+  // not an admin: refused
+  const denied = await s.call(s.bob, { action: 'treeEditPerson', familyId: 'famA', personId: momId, inviteMembershipId: 'm_famA_bob' });
+  assert.notEqual(denied.status, 200);
+  // the owner attaches the invitation to the existing entry
+  const ok = await s.call(s.alice, { action: 'treeEditPerson', familyId: 'famA', personId: momId, inviteMembershipId: 'm_famA_bob' });
+  assert.equal(ok.status, 200);
+  assert.equal(s.world.tables.people.get(momId).inviteMembershipId, 'm_famA_bob');
+  // she accepts: the same entry is now hers and Alice is still her child
+  const claim = await s.call(s.bob, { action: 'claimInvite', familyId: 'famA' });
+  assert.equal(claim.json.claimed, true);
+  assert.equal(s.world.tables.people.get(momId).userId, 'bob');
+  const aliceRow = [...s.world.tables.people.values()].find((p) => p.userId === 'alice');
+  assert.ok(aliceRow.parentIds.includes(momId));
+});

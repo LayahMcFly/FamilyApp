@@ -802,6 +802,8 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         if (body.birthday !== undefined) extras.birthday = cleanBirthday(body.birthday);
         if (body.gender !== undefined) extras.gender = cleanGender(body.gender);
       }
+      // Inviting someone who is already in the tree but has no account yet: remember which invitation belongs to this entry.
+      if (body.inviteMembershipId && !p.userId && !isSelf) extras.inviteMembershipId = idOf(body.inviteMembershipId, 'inviteMembershipId');
       if (body.userId !== undefined && !isSelf) {
         const linkId = await checkLink(ctx.familyId, body.userId, p.$id, all);
         if (linkId !== (p.userId || '')) { data.userId = linkId; data.confirmed = false; }

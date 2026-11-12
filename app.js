@@ -2925,6 +2925,18 @@
       panel.appendChild(h('div', { class: 'tree-who' }, pLink ? h('a', { class: 'avatar-link', href: pLink, 'aria-label': 'Open ' + p.name + '’s profile' }, pAv) : pAv, h('div', { class: 'grow' }, h('h2', null, pLink ? h('a', { class: 'name-link', href: pLink, text: p.name }) : p.name), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null)));
       panel.appendChild(h('div', { class: 'row' }, actions));
       panel.appendChild(personDetails(p, prof));
+      if (!p.userId && S.isOwner) {   // someone in the tree who has no account yet (for example a parent): invite them from here
+        if (p.inviteMembershipId) panel.appendChild(h('p', { class: 'small muted', text: 'An invitation is waiting for ' + p.name + '. When they accept it, this entry becomes their own. Manage invitations in Settings \u2192 Family.' }));
+        else panel.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn small', type: 'button', text: 'Invite ' + p.name + ' by email', onclick: function () {
+          textDialog('Invite ' + p.name, '', 'Send invitation', { type: 'email', max: 120, aria: 'Email address', placeholder: 'name@example.com',
+            hint: 'They get an email link. When they accept, this tree entry becomes theirs, and the family you drew around it stays connected.' }, async function (e) {
+            if (!emailOk(e)) throw new Error('Please enter a valid email address.');
+            var mem = await teams.createMembership({ teamId: S.familyId, roles: ['member'], email: e, name: p.name, url: baseUrl() + '?action=invite' });
+            await api('treeEditPerson', { familyId: S.familyId, personId: p.$id, inviteMembershipId: mem.$id });
+            S.tree = null; toast('Invitation sent to ' + e + '.'); route(false);
+          });
+        } })));
+      }
       if (editing && canEditTree()) {
         var addRow = h('div', { class: 'tree-addrel' }, h('strong', { class: 'small tree-addrel-title', text: 'Add a relative' }));
         [['parent', 'Parent'], ['partner', 'Partner'], ['child', 'Child'], ['sibling', 'Sibling']].forEach(function (o) {
@@ -3275,7 +3287,7 @@
       var dlg = h('dialog', { 'aria-labelledby': 'dlg-title' });
       var inp = opts.multiline
         ? h('textarea', { rows: 4, maxlength: opts.max || 500, 'aria-label': opts.aria || title, placeholder: opts.placeholder || '' })
-        : h('input', { type: 'text', maxlength: opts.max || 60, 'aria-label': opts.aria || title, placeholder: opts.placeholder || '' });
+        : h('input', { type: opts.type || 'text', maxlength: opts.max || 60, 'aria-label': opts.aria || title, placeholder: opts.placeholder || '', autocomplete: opts.type === 'email' ? 'off' : undefined });
       inp.value = value || '';
       var msg = h('div'), ok = h('button', { class: 'btn', type: 'submit', text: label }), cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel' });
       function done(v) { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); resolve(v); }
