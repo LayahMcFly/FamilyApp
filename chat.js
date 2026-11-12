@@ -602,7 +602,7 @@
     var sub = ch ? (ch.description || '') : (dm ? 'Direct message · only you and ' + realName(dm.otherId) + ' can read this' : '');
     var head = h('header', { class: 'conv-head' },
       h('a', { class: 'btn secondary small only-narrow', href: c.route.mode === 'dms' ? '#/dms' : '#/chat', 'aria-label': 'Back to ' + (c.route.mode === 'dms' ? 'direct messages' : 'channels') }, icon('back')),
-      dm ? avatar(dm.otherId, 'sm') : null,
+      dm ? avWrap(c, dm.otherId, 'sm') : null,
       h('div', { class: 'grow ct' }, h('h1', { text: title }), h('div', { class: 'small muted clamp', text: (dm ? '' : famLabel() + ' · ') + sub })),
       dm ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Conversation options', onclick: function () { dmOptions(c, dm); } }, icon('more')) : h('button', { class: 'btn secondary small', type: 'button', text: 'Members', onclick: function () { membersSheet(c); } }));
     pane.appendChild(head);
@@ -795,7 +795,7 @@
   function messageNode(c, cv, m, grouped) {
     var mine = m.authorId === c.uid;
     var node = h('div', { class: 'msg' + (mine ? ' mine' : '') + (grouped ? ' grouped' : '') + (m._local ? ' local' : ''), 'data-mid': m.$id });
-    node.appendChild(grouped ? h('span', { class: 'av-spacer', 'aria-hidden': 'true' }) : avatar(m.authorId, 'sm'));
+    node.appendChild(grouped ? h('span', { class: 'av-spacer', 'aria-hidden': 'true' }) : avWrap(C, m.authorId, 'sm'));
     var main = h('div', { class: 'msg-main' });
     if (!grouped) main.appendChild(h('div', { class: 'msg-head' }, h('strong', { text: realName(m.authorId) }), h('time', { datetime: m.$createdAt, class: 'small muted', text: ' ' + timeText(m.$createdAt) })));
     var rp = replyPreview(c, cv, m); if (rp) main.appendChild(rp);
@@ -870,7 +870,7 @@
     else { var u = Date.parse(row.until || ''); if (u > Date.now()) c.here[row.userId] = u; else delete c.here[row.userId]; }
     repaintHere(c);
   }
-  function repaintHere(c) { if (C === c) { paintList(); var sd = host && host.querySelector('.chat-side'); if (sd && c.route.mode === 'dms') sd.replaceWith(buildSide(c)); } }
+  function repaintHere(c) { if (C === c) { syncDots(c); paintList(); var sd = host && host.querySelector('.chat-side'); if (sd && c.route.mode === 'dms') sd.replaceWith(buildSide(c)); } }
   async function loadPresence(c) {
     try {
       var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.equal('convId', ['presence']), X.Query.limit(100)] });
@@ -881,7 +881,7 @@
   function beat(c) {
     if (C !== c || document.hidden || !presenceOn() || c.online === false) return;
     if (Date.now() - (c.beatAt || 0) < 30000) return; c.beatAt = Date.now();
-    api('chatPresence', {}).catch(function () { /* silent: presence is a nicety */ });
+    api('chatPresence', {}).then(function () { c.presErr = ''; c.presOkAt = Date.now(); }, function (e) { c.presErr = (e && (e.apiCode || e.code)) ? String(e.apiCode || e.code) + ': ' + msgOf(e) : msgOf(e); });   // never a pop-up
   }
   function startPresence(c) {
     if (c.presenceOn) return; c.presenceOn = true;
@@ -889,6 +889,14 @@
     c.timers.beat = setInterval(function () { beat(c); }, 45000);
     c.timers.expire = setInterval(function () { if (C === c && !document.hidden) repaintHere(c); }, 30000);
     listen(c, document, 'visibilitychange', function () { if (!document.hidden) { beat(c); loadPresence(c); } });
+  }
+  /** A picture with a live green dot. The dot is added or removed in place when someone comes or goes (no redraw of the messages). */
+  function avWrap(c, uid, cls) { var w = h('span', { class: 'av-wrap', 'data-uid': uid }, avatar(uid, cls || 'sm')); var d = onlineDot(c, uid); if (d) w.appendChild(d); return w; }
+  function syncDots(c) {
+    Array.prototype.forEach.call(document.querySelectorAll('.av-wrap[data-uid]'), function (w) {
+      var uid = w.getAttribute('data-uid'), has = w.querySelector('.online-dot'), on = isHere(c, uid);
+      if (on && !has) w.appendChild(h('span', { class: 'online-dot', title: 'Online now', 'aria-label': 'online now' })); else if (!on && has) has.remove();
+    });
   }
   function onlineDot(c, uid) { return isHere(c, uid) ? h('span', { class: 'online-dot', title: 'Online now', 'aria-label': 'online now' }) : null; }
 
@@ -1111,9 +1119,27 @@
     var search = h('input', { type: 'search', 'aria-label': 'Search emoji', placeholder: 'Search emoji', autocomplete: 'off' });
     var tabs = h('div', { class: 'ep-tabs', role: 'group', 'aria-label': 'Emoji groups' }), tonesEl = h('div', { class: 'ep-tones', role: 'group', 'aria-label': 'Skin tone' });
     body.appendChild(h('div', { class: 'spin-line muted small', text: 'Loading emoji…' }));
-    function pick(e) { if (!onPick) s.close(); var r = lsGet('fc_chat_recent', []).filter(function (x) { return x !== e; }); r.unshift(e); lsSet('fc_chat_recent', r.slice(0, 24)); if (onPick) { onPick(e); if (cat === 0 && !search.value.trim()) paint(); } else react(c, cv, m, e); }
+    function pick(e) { if (!onPick) s.close(); var r = lsGet('fc_chat_recent', []).filter(function (x) { return x !== e; }); r.unshift(e); lsSet('fc_chat_recent', r.slice(0, 24)); var cn = lsGet('fc_chat_count', {}); cn[e] = (cn[e] || 0) + 1; lsSet('fc_chat_count', cn); if (onPick) { onPick(e); if (cat === 0 && !search.value.trim()) paint(); } else react(c, cv, m, e); }
     function parse(str) { var skin = str.charAt(0) === '~'; if (skin) str = str.slice(1); var i = str.indexOf(' '); return { e: str.slice(0, i), n: str.slice(i + 1), skin: skin }; }
-    function btn(it) { var e = it.skin ? withTone(it.e, TONES[tone]) : it.e; return h('button', { class: 'ep-e', type: 'button', title: it.n, 'aria-label': it.n, text: e, onclick: function () { pick(e); } }); }
+    function favs() { return lsGet('fc_chat_fav', []); }
+    function toggleFav(e) { var f = favs(), i = f.indexOf(e); if (i >= 0) { f.splice(i, 1); toast('Removed from favorites'); } else { f.unshift(e); toast('Added to favorites'); } lsSet('fc_chat_fav', f.slice(0, 48)); paint(); }
+    /** One tap picks. A double tap or a long press toggles favorite instead (a single tap waits a moment to see if a second one follows). */
+    function emojiBtn(e, label) {
+      var isFav = favs().indexOf(e) >= 0, timer = null, lp = null, held = false, tapAt = 0;
+      var b = h('button', { class: 'ep-e' + (isFav ? ' fav' : ''), type: 'button', title: label + (isFav ? ' (favorite)' : ''), 'aria-label': label + (isFav ? ', favorite' : ''), text: e });
+      b.addEventListener('pointerdown', function () { held = false; clearTimeout(lp); lp = setTimeout(function () { held = true; clearTimeout(timer); tapAt = 0; if (navigator.vibrate) { try { navigator.vibrate(15); } catch (x) { /* ok */ } } toggleFav(e); }, 550); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (t) { b.addEventListener(t, function () { clearTimeout(lp); }); });
+      b.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+      b.addEventListener('keydown', function (ev) { if (ev.key === 'f' || ev.key === 'F') { ev.preventDefault(); toggleFav(e); } });
+      b.addEventListener('click', function () {
+        if (held) { held = false; return; }
+        var t = Date.now();
+        if (tapAt && t - tapAt < 320) { clearTimeout(timer); tapAt = 0; toggleFav(e); return; }
+        tapAt = t; clearTimeout(timer); timer = setTimeout(function () { tapAt = 0; pick(e); }, 330);
+      });
+      return b;
+    }
+    function btn(it) { var e = it.skin ? withTone(it.e, TONES[tone]) : it.e; return emojiBtn(e, it.n); }
     function paint() {
       clear(grid); var q = search.value.trim().toLowerCase();
       tabs.hidden = !!q;
@@ -1121,20 +1147,26 @@
         var n = 0; data.forEach(function (g) { g[1].forEach(function (str) { if (n >= 150) return; var it = parse(str); if (it.n.toLowerCase().indexOf(q) >= 0) { grid.appendChild(btn(it)); n++; } }); });
         if (!n) grid.appendChild(h('p', { class: 'muted small', text: 'No emoji match "' + search.value.trim() + '".' }));
       } else if (cat === 0) {
-        var rec = lsGet('fc_chat_recent', []);
-        if (!rec.length) grid.appendChild(h('p', { class: 'muted small', text: 'Emoji you use show up here.' }));
-        rec.forEach(function (e) { grid.appendChild(h('button', { class: 'ep-e', type: 'button', text: e, 'aria-label': e, onclick: function () { pick(e); } })); });
+        var fv = favs(), cn = lsGet('fc_chat_count', {}), rc = lsGet('fc_chat_recent', []);
+        var freq = Object.keys(cn).sort(function (a, b) { return cn[b] - cn[a] || rc.indexOf(a) - rc.indexOf(b); }).slice(0, 24);
+        if (!freq.length) freq = rc.slice(0, 24);
+        grid.appendChild(h('p', { class: 'ep-h', text: 'Favorites' }));
+        if (!fv.length) grid.appendChild(h('p', { class: 'muted small', text: 'Double-tap or hold any emoji to add it here.' }));
+        fv.forEach(function (e) { grid.appendChild(emojiBtn(e, e)); });
+        grid.appendChild(h('p', { class: 'ep-h', text: 'Frequently used' }));
+        if (!freq.length) grid.appendChild(h('p', { class: 'muted small', text: 'The emoji you use most show up here.' }));
+        freq.forEach(function (e) { grid.appendChild(emojiBtn(e, e)); });
       } else data[cat - 1][1].forEach(function (str) { grid.appendChild(btn(parse(str))); });
       grid.scrollTop = 0;
     }
     function paintChrome() {
       clear(tabs); clear(tonesEl);
-      ['\u{1F552}'].concat(CAT_ICON).forEach(function (ic, i) { tabs.appendChild(h('button', { class: 'ep-tab', type: 'button', 'aria-pressed': i === cat ? 'true' : 'false', 'aria-label': i === 0 ? 'Recently used' : data[i - 1][0], title: i === 0 ? 'Recently used' : data[i - 1][0], text: ic, onclick: function () { cat = i; paintChrome(); paint(); } })); });
+      ['\u2B50'].concat(CAT_ICON).forEach(function (ic, i) { tabs.appendChild(h('button', { class: 'ep-tab', type: 'button', 'aria-pressed': i === cat ? 'true' : 'false', 'aria-label': i === 0 ? 'Favorites and frequently used' : data[i - 1][0], title: i === 0 ? 'Favorites and frequently used' : data[i - 1][0], text: ic, onclick: function () { cat = i; paintChrome(); paint(); } })); });
       TONES.forEach(function (t, i) { tonesEl.appendChild(h('button', { class: 'ep-tone', type: 'button', 'aria-pressed': i === tone ? 'true' : 'false', 'aria-label': i === 0 ? 'Default skin tone' : 'Skin tone ' + i, text: '\u{1F44B}' + t, onclick: function () { tone = i; lsSet('fc_chat_tone', i); paintChrome(); paint(); } })); });
     }
     loadEmoji().then(function (d) {
       data = d; clear(body);
-      if (!lsGet('fc_chat_recent', []).length) cat = 1;
+      if (!lsGet('fc_chat_recent', []).length && !favs().length) cat = 1;
       body.appendChild(search); body.appendChild(tonesEl); body.appendChild(tabs); body.appendChild(grid);
       search.addEventListener('input', paint); paintChrome(); paint();
     }).catch(function () { clear(body); body.appendChild(h('p', { class: 'muted', text: 'The emoji list could not load. Check your connection and try again.' })); });
@@ -1258,6 +1290,8 @@
     var pOn = h('input', { type: 'checkbox' }); pOn.checked = presenceOn();
     pOn.addEventListener('change', function () { lsSet('fc_chat_presence', pOn.checked); if (pOn.checked) { c.beatAt = 0; beat(c); } repaintHere(c); toast(pOn.checked ? 'Others can see when you are online.' : 'Others will see you as offline within about two minutes.'); });
     body.appendChild(h('label', { class: 'check' }, pOn, ' Show family when I am online'));
+    var pStat = !presenceOn() ? 'You are hidden: others see you as offline.' : c.presErr ? 'Your online signal did not reach the server (' + c.presErr + '). Upload the newest family-api zip (CHAT-GUIDE.md, "Online status"), then reopen chat.' : c.presOkAt ? 'Your online signal is reaching the server. Others see a green dot while their chat is open and you have chat or the app open.' : 'Waiting for the first online signal…';
+    body.appendChild(h('p', { class: 'small ' + (c.presErr ? 'err' : 'muted'), role: 'status', text: pStat }));
     body.appendChild(h('p', { class: 'small muted', text: 'While chat is open on your device, a small signal tells the family server you are here. It expires after about 100 seconds and nothing is kept.' }));
     body.appendChild(h('h3', { text: 'Typing hint' }));
     var tOn = h('input', { type: 'checkbox' }); tOn.checked = typingOn();

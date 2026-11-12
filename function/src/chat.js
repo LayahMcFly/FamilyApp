@@ -13,7 +13,7 @@
  *  - Chat roles are their own thing: family owner (Team role), chat admin (profiles.chatAdmin) and member.
  *    A family-tree relationship, `treeAdmin` or any shop permission never grants chat powers.
  */
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { Query, Permission, Role, ID } from 'node-appwrite';
 import { fetchPreview, checkUrl } from './preview.js';
 
@@ -58,6 +58,7 @@ export function createChat(c) {
   const { listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf,
     bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable } = c;
   const doPreview = c.fetchPreview || fetchPreview;
+  const lk = c.livekit || {};
   const doFetch = c.httpFetch || ((...a) => fetch(...a));
   const T = CHAT_TABLES;
   const L = CHAT_LIMITS;
@@ -65,6 +66,25 @@ export function createChat(c) {
   const channelPerms = (familyId) => [Permission.read(Role.team(familyId))];
   const dmPerms = (a, b) => [Permission.read(Role.user(a)), Permission.read(Role.user(b))];
   const iso = (ms) => new Date(ms).toISOString();
+
+  /** HS256 pass for LiveKit: who you are, which room, and that you may speak and listen. Lasts one hour. */
+  function livekitToken(key, secret, { room, identity, ttlSec }) {
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const t = Math.floor(now() / 1000);
+    const head = b64({ alg: 'HS256', typ: 'JWT' });
+    const pay = b64({ iss: key, sub: identity, nbf: t - 10, exp: t + ttlSec, video: { room, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false } });
+    const sig = createHmac('sha256', secret).update(`${head}.${pay}`).digest('base64url');
+    return `${head}.${pay}.${sig}`;
+  }
+  async function markCall(familyId, conv, userId, on) {
+    const typingKey = `c_${conv.row.$id}_${userId}`;
+    const until = iso(on ? now() + 100000 : now() - 1000);
+    const ex = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]);
+    if (ex) { await updateRow(T.typing, ex.$id, { until }); return; }
+    if (!on) return;
+    try { await createRow(T.typing, ID.unique(), { familyId, convId: `call:${conv.row.$id}`, userId, typingKey, text: '', until }, conv.perms); }
+    catch (e) { if (sdkCode(e) !== 409) throw e; const again = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]); if (again) await updateRow(T.typing, again.$id, { until }); }
+  }
   const tooMany = (what) => new ApiError(429, 'rate_limited', `You are ${what} too quickly. Wait a few seconds and try again.`);
   const unavailable = () => new ApiError(403, 'dm_unavailable', 'This person is not taking direct messages right now.');
   const notFound = () => missing('That conversation was not found.');
@@ -378,6 +398,40 @@ export function createChat(c) {
         catch (e) { if (sdkCode(e) !== 409) throw e; const again = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]); if (again) await updateRow(T.typing, again.$id, { until }); }
       }
       return { ok: true, shown: true };
+    },
+
+    /** Calls. A call is a LiveKit room named after the conversation. Only people who can open the conversation get a pass,
+     *  so a DM call is only ever between the two of them and a channel call only for the family. The "call in progress"
+     *  banner uses one expiring row per person (convId "call:<conversation>"), the same idea as the online dots. */
+    async callJoin({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      const conv = await resolveConv(user, ctx.familyId, body.kind, body.convId);
+      if (!conv.open) throw forbidden('This conversation is read-only now, so it cannot be used for calls.');
+      if (conv.kind === 'dm') {
+        if (!(await isMemberOf(ctx.familyId, conv.other))) throw forbidden('That person is no longer in the family.');
+        if (await blockedBetween(ctx.familyId, user.$id, conv.other)) throw forbidden('You cannot call this person.');
+      }
+      if (!lk.url || !lk.key || !lk.secret) throw bad('Calls are not turned on yet. The family owner needs to finish the call setup (see CHAT-GUIDE.md, "Calls").');
+      if (!softLimit('call', user.$id, 20, 60)) throw tooMany('starting calls');
+      await markCall(ctx.familyId, conv, user.$id, true);
+      const room = `fc_${conv.row.$id}`;
+      const token = livekitToken(lk.key, lk.secret, { room, identity: user.$id, ttlSec: 3600 });
+      return { url: lk.url, token, room, identity: user.$id };
+    },
+
+    async callPing({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      const conv = await resolveConv(user, ctx.familyId, body.kind, body.convId);
+      if (!conv.open || !softLimit('callping', user.$id, 6, 60)) return { ok: true };
+      await markCall(ctx.familyId, conv, user.$id, true);
+      return { ok: true };
+    },
+
+    async callLeave({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      const conv = await resolveConv(user, ctx.familyId, body.kind, body.convId);
+      await markCall(ctx.familyId, conv, user.$id, false);
+      return { ok: true };
     },
 
     async chatEdit({ user, body }) {

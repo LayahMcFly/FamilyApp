@@ -13,7 +13,9 @@ const cfg = {
   bucketId: process.env.BUCKET_ID || 'family-media',
   maxOwnedFamilies: Number(process.env.MAX_OWNED_FAMILIES || 3),
   maxVideoMB: Number(process.env.MAX_VIDEO_MB || 15),
-  familyStorageMB: Number(process.env.FAMILY_STORAGE_MB || 500)
+  familyStorageMB: Number(process.env.FAMILY_STORAGE_MB || 500),
+  // Calls (LiveKit). All three are set in the function's Variables in Appwrite, never in the website or in chat.
+  livekit: { url: process.env.LIVEKIT_URL || '', key: process.env.LIVEKIT_API_KEY || '', secret: process.env.LIVEKIT_API_SECRET || '' }
 };
 
 export default async ({ req, res, log, error }) => {

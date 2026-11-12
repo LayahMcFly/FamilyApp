@@ -379,3 +379,6 @@ dialog.cs textarea, dialog.cs input, dialog.cs button, dialog.cs .btn { margin: 
 .side-h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 16px 4px; font-weight: 600; }
 .side-note { margin: 8px 16px; }
 .side-item .av-wrap { margin-right: 2px; }
+.ep-h { margin: 6px 4px 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.ep-e { position: relative; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.ep-e.fav::after { content: "\2605"; position: absolute; top: 1px; right: 3px; font-size: .62rem; color: #f5b301; font-family: system-ui, sans-serif; }

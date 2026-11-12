@@ -426,3 +426,26 @@ test('presence: one expiring row per person, readable by the whole family', asyn
   assert.equal(rows().length, 1); assert.ok(Date.parse(rows()[0].until) > Date.now() + 60000);
   await w.fail('zed', 'chatPresence', { familyId: 'famA' }, 403);
 });
+
+test('calls: pass only for people in the conversation, signed, and a call row for the banner', async () => {
+  EXTRA_CFG.livekit = { url: 'wss://x.livekit.cloud', key: 'APIkey', secret: 'sekret' };
+  try {
+    const { w, ch } = await setup();
+    const r = await w.ok('ann', 'callJoin', { familyId: 'famA', kind: 'channel', convId: ch.general });
+    assert.equal(r.url, 'wss://x.livekit.cloud'); assert.equal(r.room, 'fc_' + ch.general);
+    const [h, p, sig] = r.token.split('.');
+    const { createHmac } = await import('node:crypto');
+    assert.equal(sig, createHmac('sha256', 'sekret').update(h + '.' + p).digest('base64url'));
+    const claims = JSON.parse(Buffer.from(p, 'base64url').toString());
+    assert.equal(claims.iss, 'APIkey'); assert.equal(claims.video.room, r.room); assert.equal(claims.video.roomJoin, true); assert.ok(claims.exp > claims.nbf);
+    const rows = () => [...w.world.tables.chatTyping.values()].filter((x) => x.convId.startsWith('call:'));
+    assert.equal(rows().length, 1);
+    await w.ok('ann', 'callPing', { familyId: 'famA', kind: 'channel', convId: ch.general }); assert.equal(rows().length, 1);
+    const before = rows()[0].until;
+    await w.ok('ann', 'callLeave', { familyId: 'famA', kind: 'channel', convId: ch.general });
+    assert.ok(rows()[0].until < before, 'leaving expires the banner row at once');
+    await w.fail('zed', 'callJoin', { familyId: 'famA', kind: 'channel', convId: ch.general }, 403);
+  } finally { delete EXTRA_CFG.livekit; }
+  const off = await setup();
+  await off.w.fail('ann', 'callJoin', { familyId: 'famA', kind: 'channel', convId: off.ch.general }, 400);
+});
