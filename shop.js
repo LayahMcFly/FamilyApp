@@ -147,7 +147,7 @@
       var scroll = box.querySelector('.sheet-body'), top = scroll ? scroll.scrollTop : 0;
       clear(box);
       var body = h('div', { class: 'sheet-body' });
-      if (cats.length > 1) {
+      if (false) {   // departments live in the tab row on the shop page, not in this sheet
         var byCat = applyFilters(items, f, 'cat');
         body.appendChild(group('Department', [radio('cat', 'All departments', byCat.length, f.cat === 'all', function () { f.cat = 'all'; })].concat(cats.map(function (c) {
           var n = byCat.filter(function (it) { return it.cat === c.id; }).length;
@@ -279,14 +279,13 @@
       var anyStock = items.some(function (it) { return it.availability === 'in_stock' || it.availability === 'out_of_stock'; });
       var results = h('div', { id: 'shop-results' });
       var sortSel = h('select', { 'aria-label': 'Sort by', onchange: function () { f.sort = sortSel.value; f.page = 1; drawPanel(); } }, SORTS.map(function (s) { return h('option', { value: s[0], text: s[1] }); })); sortSel.value = f.sort;
-      var nActive = [f.cat !== 'all', f.kind !== 'all', f.stock, !!f.band || !!f.min || !!f.max].filter(Boolean).length;
+      var nActive = [f.kind !== 'all', f.stock, !!f.band || !!f.min || !!f.max].filter(Boolean).length;
       var filtBtn = h('button', { class: 'btn secondary small', type: 'button', 'aria-haspopup': 'dialog', text: nActive ? 'Filters (' + nActive + ')' : 'Filters', onclick: function () { openSheet(id, items, cats, anyStock, f, drawPanel); } });
       panelHost.appendChild(h('div', { class: 'shop-toolbar' }, filtBtn, h('label', { class: 'small' }, 'Sort ', sortSel)));
       // what is switched on, each removable with one tap
       var chips = [];
       function chip(label, clear1) { chips.push(h('button', { class: 'chip on', type: 'button', 'aria-label': 'Remove filter: ' + label, onclick: function () { clear1(); f.page = 1; if (!f.q) search.value = ''; drawPanel(); } }, label + ' ×')); }
       if (f.q) chip('“' + f.q + '”', function () { f.q = ''; search.value = ''; });
-      if (f.cat !== 'all') chip((cats.filter(function (c) { return c.id === f.cat; })[0] || {}).title || f.cat, function () { f.cat = 'all'; });
       if (f.kind !== 'all') chip(f.kind === 'words' ? 'Add your words' : 'Add your photo', function () { f.kind = 'all'; });
       if (f.stock) chip('In stock', function () { f.stock = false; });
       if (f.band || f.min || f.max) chip(priceLabel(f), function () { f.band = ''; f.min = ''; f.max = ''; });
