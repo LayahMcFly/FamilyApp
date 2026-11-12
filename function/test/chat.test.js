@@ -467,3 +467,15 @@ test('saved links: title and icon lookup is members only, safe addresses only, r
     await w.fail('zed', 'linkInfo', { familyId: 'famA', url: 'https://example.com/' }, 403);
   } finally { delete EXTRA_CFG.fetchSiteInfo; }
 });
+
+test('picture from a web link: members only, safe addresses only, and a non-picture is refused', async () => {
+  EXTRA_CFG.fetchPicture = async (u) => (u.includes('good') ? { type: 'image/png', data: 'AAAA' } : null);
+  try {
+    const { w } = await setup();
+    const r = await w.ok('ann', 'pictureFromUrl', { familyId: 'famA', url: 'https://example.com/good.png' });
+    assert.equal(r.picture.type, 'image/png');
+    await w.fail('ann', 'pictureFromUrl', { familyId: 'famA', url: 'https://example.com/page.html' }, 400);
+    for (const u of ['http://127.0.0.1/a.png', 'file:///etc/passwd', '']) await w.fail('ann', 'pictureFromUrl', { familyId: 'famA', url: u }, 400);
+    await w.fail('zed', 'pictureFromUrl', { familyId: 'famA', url: 'https://example.com/good.png' }, 403);
+  } finally { delete EXTRA_CFG.fetchPicture; }
+});

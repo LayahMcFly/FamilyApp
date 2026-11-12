@@ -15,7 +15,7 @@
  */
 import { createHash, createHmac } from 'node:crypto';
 import { Query, Permission, Role, ID } from 'node-appwrite';
-import { fetchPreview, fetchSiteInfo, checkUrl } from './preview.js';
+import { fetchPreview, fetchSiteInfo, fetchPictureUrl, checkUrl } from './preview.js';
 
 export const CHAT_TABLES = {
   channels: 'chatChannels',
@@ -58,6 +58,7 @@ export function createChat(c) {
   const { listRows, createRow, updateRow, deleteRow, getRowOrNull, firstRow, requireMember, confirmedMemberships, idOf, textOf,
     bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable } = c;
   const doPreview = c.fetchPreview || fetchPreview;
+  const doPicture = c.fetchPicture || fetchPictureUrl;
   const doSiteInfo = c.fetchSiteInfo || fetchSiteInfo;
   const lk = c.livekit || {};
   const doFetch = c.httpFetch || ((...a) => fetch(...a));
@@ -512,6 +513,17 @@ export function createChat(c) {
       if (!url || url.length > 500 || !checkUrl(url)) throw bad('That link cannot be previewed.');
       if (!softLimit('preview', user.$id, 12, 60)) throw tooMany('asking for link previews');
       return { preview: await doPreview(url) };
+    },
+
+    /** A picture from a web address, for a profile picture. The server downloads it (so the phone never contacts that site) and hands it back to be cropped. */
+    async pictureFromUrl({ user, body }) {
+      await requireMember(user, body.familyId);
+      const url = typeof body.url === 'string' ? body.url.trim() : '';
+      if (!url || url.length > 1000 || !checkUrl(url)) throw bad('That does not look like a picture link. Paste an address that starts with https://');
+      if (!softLimit('pictureurl', user.$id, 8, 60)) throw tooMany('loading pictures');
+      const pic = await doPicture(url);
+      if (!pic) throw bad('That link did not give a JPEG, PNG, WebP or GIF picture under 3 MB. Try copying the image address (long-press the picture, then Copy image address).');
+      return { picture: pic };
     },
 
     /** Saved links: the page title and a small icon for an address. The server talks to the other website, never the phone. */

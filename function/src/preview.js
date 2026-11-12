@@ -183,6 +183,17 @@ export async function fetchPreview(rawUrl, opts = {}) {
 }
 export function clearPreviewCache() { cache.clear(); }
 
+/** A picture from a web address (for a profile picture). Same guards as the link preview; the bytes are checked, not the header. */
+export const PICTURE_MAX = 3 * 1024 * 1024;
+export async function fetchPictureUrl(rawUrl, opts = {}) {
+  try {
+    const img = await guardedGet(rawUrl, { ...opts, accept: 'image/jpeg,image/png,image/webp,image/gif', maxBytes: PICTURE_MAX, timeoutMs: 6000 });
+    const type = sniff(img.body);
+    if (img.status !== 200 || img.cut || !IMAGE_TYPES.includes(type) || img.body.length > PICTURE_MAX) return null;
+    return { type, data: img.body.toString('base64') };
+  } catch (e) { return null; }
+}
+
 
 /* ---------- site info for saved links: the page title and a small icon (png, ico, gif, jpeg or webp; never SVG) ---------- */
 function sniffIcon(buf) {

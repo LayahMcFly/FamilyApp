@@ -71,6 +71,7 @@
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var ICONS = {
+    link: ['M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1', 'M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
     globe: ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0', 'M3 12h18', 'M12 3c3 3 3 15 0 18', 'M12 3c-3 3-3 15 0 18'],
     search: ['M11 4a7 7 0 1 0 0 14a7 7 0 0 0 0-14z', 'M20 20l-4-4'],
     home: ['M3 11.5 12 4l9 7.5', 'M5.5 10v10h13V10'],
@@ -4430,7 +4431,7 @@
     if (String(bd0).length === 4) ageIn.value = new Date().getFullYear() - Number(bd0);
     var addrIn = h('input', { type: 'text', id: 'pe-addr', maxlength: 120, autocomplete: 'street-address', placeholder: 'For example 12 Oak St, Valdosta GA' }); addrIn.value = addressOf(S.profile);
     var pmsg = h('div'), avatarBox = h('div', { class: 'row' });
-    function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); avatarBox.appendChild(h('button', { class: 'bi-open', type: 'button', 'aria-label': 'Browse ideas for a profile picture and banner', title: 'Browse ideas on Pinterest', onclick: browseIdeas }, icon('globe'))); }
+    function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); avatarBox.appendChild(h('button', { class: 'bi-open', type: 'button', 'aria-label': 'Browse ideas for a profile picture and banner', title: 'Browse ideas on Pinterest', onclick: browseIdeas }, icon('globe'))); avatarBox.appendChild(h('button', { class: 'bi-open', type: 'button', 'aria-label': 'Use a picture from a web link', title: 'Use a picture from a web link', onclick: pictureLink }, icon('link'))); }
     paintAvatar();
     var file = h('input', { id: 'newAvatar', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a new profile picture' });
     var saveBtn = h('button', { class: 'btn', type: 'submit', text: 'Save profile' });
@@ -4440,8 +4441,7 @@
       if (fid !== S.familyId) return;
       S.profile = Object.assign({}, S.profile, r.profile); S.profiles.set(S.user.$id, S.profile);
     }
-    file.addEventListener('change', async function () {
-      var f = file.files[0]; if (!f) return;
+    async function useAvatar(f) {   // shared by "Choose file" and "Use a picture from a web link": adjust (crop), upload, save
       showAlert(pmsg, 'error', '');
       var up = null;
       try {
@@ -4456,7 +4456,29 @@
         showAlert(pmsg, 'error', errText(e));
       }
       file.value = '';
-    });
+    }
+    file.addEventListener('change', function () { var f = file.files[0]; if (f) useAvatar(f); });
+    function pictureLink() {   // paste the address of a picture; it loads, then the same adjust window opens
+      var dlg = h('dialog', { class: 'sheet-dialog', 'aria-labelledby': 'pl-title' }), msg = h('div');
+      var inp = h('input', { type: 'url', id: 'pl-url', inputmode: 'url', autocomplete: 'off', placeholder: 'https://…', 'aria-label': 'Picture web address' });
+      function close() { try { dlg.close(); } catch (e) { /* closed */ } if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+      var go = h('button', { class: 'btn', type: 'button', text: 'Load picture', onclick: function () { busy(go, async function () {
+        showAlert(msg, 'error', '');
+        var u = inp.value.trim(); if (!/^https:\/\//i.test(u)) return showAlert(msg, 'error', 'Paste an address that starts with https://');
+        try {
+          var r = await api('pictureFromUrl', { familyId: S.familyId, url: u });
+          var bin = atob(r.picture.data), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          var ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[r.picture.type] || 'jpg';
+          close(); useAvatar(new File([arr], 'web-picture.' + ext, { type: r.picture.type }));
+        } catch (e) { showAlert(msg, 'error', errText(e)); }
+      }, 'Loading…'); } });
+      dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+      dlg.appendChild(h('h2', { id: 'pl-title', text: 'Picture from a web link' }));
+      dlg.appendChild(h('p', { class: 'small muted', text: 'Paste the address of a picture (on a phone: press and hold the picture, then choose Copy image address). It loads here, then you can move and zoom it before saving.' }));
+      dlg.appendChild(inp); dlg.appendChild(msg);
+      dlg.appendChild(h('div', { class: 'stack' }, go, h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: close })));
+      document.body.appendChild(dlg); dlg.showModal(); inp.focus();
+    }
     removeAv.addEventListener('click', function () {
       if (!S.profile.avatarFileId) return toast('You have no picture to remove.');
       busy(removeAv, async function () {
