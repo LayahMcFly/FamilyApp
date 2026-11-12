@@ -137,7 +137,7 @@
   }
 
   /** Called by app.js for the center slot of the bottom bar. Returns the handle button (still one of the five items). */
-  function navItem() { return createHandle(); }
+  function navItem() { var li = createHandle(); var d = li.querySelector && li.querySelector('.handle-dot'); if (d) d.hidden = !(TOTALS.ch + TOTALS.dm); setTimeout(function () { paintBadges(); refreshTotals(false); }, 0); return li; }   // a rebuilt nav shows the dot at once
   /** Called once after the bar exists: adds the panel to the page (replacing any earlier copy). */
   function mountPanel() {
     var old = document.getElementById('plus-panel'); if (old) old.remove();
@@ -150,7 +150,7 @@
   async function refreshTotals(force) {
     if (!enabled() || TOTALS.off || !X.S.user || !famId()) return;
     if (C && C.famId === famId()) { sumTotals(C.unread, C); return; }
-    if (!force && Date.now() - peekAt < 60000) return;
+    if (!force && Date.now() - peekAt < 15000) return;
     peekAt = Date.now();
     var fid = famId();
     try { var r = await api('chatUnread'); if (fid !== famId()) return; TOTALS.at = Date.now(); sumTotals(r.unread, null); }
