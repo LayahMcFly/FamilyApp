@@ -144,8 +144,9 @@
       C = '<path d="M14 30A16 16 0 0 1 30 14" stroke="' + c1 + '" stroke-width="2" fill="none"/><path d="M18 30A12 12 0 0 1 30 18" stroke="' + c2 + '" stroke-width="1" fill="none"/>';
     } else if (id === 'scroll') {
       c2 = '#d4af5a';
-      E = '<rect x="30" y="4" width="30" height="26" fill="' + c1 + '"/>' + rep(5, function (k) { return '<circle cx="' + (33 + 6 * k) + '" cy="2" r="1.3" fill="' + c2 + '"/>'; }) + '<path d="M30 25H60" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><path d="M30 14.5C35 8 41 8 44 13C46 17 50 17 52 14C55 9 58 9 60 14.5" stroke="' + c2 + '" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
-      C = '<rect x="4" y="4" width="26" height="26" rx="6" fill="' + c1 + '"/><circle cx="7" cy="7" r="5" fill="' + c1 + '" stroke="' + c2 + '" stroke-width="1.2"/><path d="M30 25H25V30" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><path d="M10 24C10 16 15 11 24 10M24 10C21 10 19 12 19 14C19 16 22 16 22 14" stroke="' + c2 + '" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+      var gl = ' stroke="' + c2 + '" fill="none" stroke-linecap="round"';
+      E = '<rect x="30" y="0" width="30" height="30" fill="' + c1 + '"/><path d="M30 3H60M30 26H60" stroke-width="1.2"' + gl + '/><path d="M30 14.5q3.75 -7 7.5 0t7.5 0t7.5 0t7.5 0" stroke-width="1.5"' + gl + '/>';
+      C = '<rect x="0" y="0" width="30" height="30" fill="' + c1 + '"/><path d="M30 3H3V30M30 26H26V30" stroke-width="1.2" stroke-linejoin="round"' + gl + '/><circle cx="14.5" cy="14.5" r="5" stroke-width="1.5"' + gl + '/><circle cx="14.5" cy="14.5" r="1.7" fill="' + c2 + '"/><path d="M19.5 14.5H30M14.5 19.5V30" stroke-width="1.5"' + gl + '/>';
     }
     return { E: E, C: C, B: B, T: T };
   }
