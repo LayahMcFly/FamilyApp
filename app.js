@@ -3932,12 +3932,13 @@
       top.appendChild(h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': 'Settings', title: 'Settings' }, icon('gear')));
     }
     main.appendChild(top);
-    var pBan = bannerEl(prof, 'on-page'); if (pBan) main.appendChild(pBan);
-    main.appendChild(h('header', { class: 'profile-head' },
+    var pBan = bannerEl(prof, 'hero-bg'), hero = null;   // the banner sits behind the picture, name and Edit profile button
+    if (pBan) { hero = h('div', { class: 'profile-hero has-banner' }, pBan); main.appendChild(hero); }
+    (hero || main).appendChild(h('header', { class: 'profile-head' },
       h('div', { class: 'profile-avatar' }, avatarEl(prof, 'lg')),
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
-    if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
+    if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
     if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/settings/privacy', text: 'My address (private)' }));
     if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block', href: '#/orders', text: 'My orders', onclick: function () { S.ordersFrom = '#/profile'; } }));
     if (!own && !preview) { var addrHolder = h('div'); main.appendChild(addrHolder); addressOnProfile(addrHolder, token, uid); }
@@ -5025,7 +5026,7 @@
     initAppwrite();
     if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
-      avatarUrl: avatarUrl, bannerFor: function (uid) { return bannerEl(S.profiles.get(uid), 'in-sheet'); }, profileFacts: profileFacts, relationFor: relationFor,
+      avatarUrl: avatarUrl, bannerFor: function (uid) { return bannerEl(S.profiles.get(uid), 'hero-bg'); }, profileFacts: profileFacts, relationFor: relationFor,
       uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,

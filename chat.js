@@ -462,8 +462,9 @@
     var p = profileOf(uid), me = uid === X.S.user.$id, s = null;
     var body = h('div', { class: 'pf-sheet' }), rel = h('div', { class: 'pf-rel' });
     if (!me && X.relationFor) X.relationFor(uid).then(function (t) { if (t) rel.textContent = t; });   // for example: Your older sister
-    var ban = X.bannerFor ? X.bannerFor(uid) : null; if (ban) body.appendChild(ban);
-    body.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, h('div', { class: 'small muted', text: isHere(c, uid) ? 'Online now' : 'Offline' }))));
+    var ban = X.bannerFor ? X.bannerFor(uid) : null, topWrap = body;
+    if (ban) { topWrap = h('div', { class: 'profile-hero has-banner in-sheet' }, ban); body.appendChild(topWrap); }   // the banner sits behind the picture and name
+    topWrap.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, h('div', { class: 'small muted', text: isHere(c, uid) ? 'Online now' : 'Offline' }))));
     var acts = h('div', { class: 'pf-actions' });
     if (!me) {
       acts.appendChild(h('button', { class: 'btn', type: 'button', text: 'Message', onclick: function () { s.close(); startDm(c, uid); } }));
