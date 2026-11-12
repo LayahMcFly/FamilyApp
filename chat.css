@@ -578,3 +578,13 @@ img.zoomable { cursor: zoom-in; }
 .yt-open { display: inline-block; margin-top: 4px; }
 
 .body-open .post-body { cursor: pointer; }
+
+/* Comments: yours pops in, comments that arrive while you watch slide in */
+@keyframes cPop { 0% { opacity: 0; transform: translateY(10px) scale(.94); } 60% { opacity: 1; transform: translateY(-2px) scale(1.02); } 100% { opacity: 1; transform: none; } }
+@keyframes cSlide { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.comment.c-pop { animation: cPop .38s cubic-bezier(.2, .9, .3, 1.2) both; }
+.comment.c-slide { animation: cSlide .45s cubic-bezier(.2, .8, .2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .comment.c-pop, .comment.c-slide { animation: none; } }
+
+.pl-loop { font-size: 1.15rem; line-height: 1; }
+.pl-loop[aria-pressed="true"] { background: rgba(255,255,255,.3); border-radius: 8px; }

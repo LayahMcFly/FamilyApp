@@ -717,13 +717,18 @@
       ev.stopPropagation(); var list = [1, 1.5, 2, 0.5], i = (list.indexOf(v.playbackRate) + 1) % list.length; v.playbackRate = list[i];
       speed.textContent = list[i] + 'x'; speed.setAttribute('aria-label', 'Playback speed ' + list[i] + 'x');
     } });
+    var loopBtn = h('button', { class: 'pl-btn pl-loop', type: 'button', text: '\u21BB', onclick: function (ev) {
+      ev.stopPropagation(); v.loop = !v.loop; try { localStorage.setItem('fc_loop', v.loop ? 'on' : 'off'); } catch (e) { /* not saved */ } paintLoop();
+    } });
+    function paintLoop() { loopBtn.setAttribute('aria-pressed', v.loop ? 'true' : 'false'); loopBtn.setAttribute('aria-label', v.loop ? 'Loop is on. Turn loop off' : 'Loop is off. Turn loop on'); loopBtn.title = v.loop ? 'Loop: on' : 'Loop: off'; }
+    try { v.loop = localStorage.getItem('fc_loop') === 'on'; } catch (e) { /* off */ } paintLoop();
     var fsBtn = h('button', { class: 'pl-btn', type: 'button', 'aria-label': 'Full screen', onclick: function (ev) {
       ev.stopPropagation();
       if (document.fullscreenElement) { document.exitFullscreen(); return; }
       if (box.requestFullscreen) box.requestFullscreen().catch(function () {});
       else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();      // iPhone plays full screen in its own player
     } }, icon('fullscreen'));
-    var bar = h('div', { class: 'pl-bar' }, playBtn, seek, time, speed, muteBtn, fsBtn);
+    var bar = h('div', { class: 'pl-bar' }, playBtn, seek, time, loopBtn, speed, muteBtn, fsBtn);
     var ui = h('div', { class: 'pl-ui' }, big, bar);
     box.appendChild(ui);
     var hideT = null, dragging = false;
@@ -2626,6 +2631,7 @@
       });
     }
     function parentOf(c) { return c.parentId || c.__parent || null; }
+    var seenC = {}, readyC = false;
     function redraw(rows) {
       clear(list);
       guessParents(rows);
@@ -2662,6 +2668,7 @@
       var p = S.profiles.get(c.authorId) || null;
       var del = null, pin = null;
       var item = h('div', { class: 'comment' + (isPinned(c) ? ' pinned' : '') });
+      if (!seenC[c.$id]) { seenC[c.$id] = 1; if (readyC) item.classList.add(c.authorId === uid ? 'c-pop' : 'c-slide'); }   // yours pops in; a comment that arrives while you watch slides in
       var liked = Array.isArray(c.likedBy) ? c.likedBy.slice() : [];
       var likeBtn = h('button', { class: 'like-c', type: 'button' });
       var badge = h('span', { class: 'author-liked', hidden: true, title: 'Liked by the author' });
@@ -2728,9 +2735,25 @@
         var rows = await listAllRows('comments', [Query.equal('postId', [post.$id]), Query.orderAsc('$createdAt')], 200);
         await ensureProfiles(rows.map(function (c) { return c.authorId; }));
         clear(status);
-        loaded = rows; redraw(loaded);
+        loaded = rows; redraw(loaded); readyC = true;
         if (!rows.length) status.appendChild(h('p', { class: 'muted small', text: 'No comments yet.' }));
         st.comments = rows.length; onCount();
+        // Live: while this list is open, check every few seconds for comments from family and slide the new ones in.
+        var pollBusy = false, poll = setInterval(async function () {
+          if (!list.isConnected) { clearInterval(poll); return; }
+          if (document.hidden || pollBusy) return; pollBusy = true;
+          try {
+            var fresh = await listAllRows('comments', [Query.equal('postId', [post.$id]), Query.orderAsc('$createdAt')], 200);
+            var have = {}; loaded.forEach(function (x) { have[x.$id] = 1; });
+            var same = fresh.length === loaded.length && fresh.every(function (x) { return have[x.$id]; });
+            if (!same && list.isConnected) {
+              await ensureProfiles(fresh.map(function (c) { return c.authorId; }));
+              var keepLocal = loaded.filter(function (x) { return !fresh.some(function (f) { return f.$id === x.$id; }) && Date.now() - new Date(x.$createdAt) < 15000; });   // your comment that the list does not show yet
+              loaded = fresh.concat(keepLocal); redraw(loaded); clear(status); st.comments = loaded.length; onCount();
+            }
+          } catch (e) { /* the next check tries again */ }
+          pollBusy = false;
+        }, 6000);
       } catch (e) { clear(status); status.appendChild(alertBox('error', friendly(e))); }
     })();
 
