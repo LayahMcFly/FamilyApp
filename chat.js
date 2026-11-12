@@ -427,6 +427,30 @@
     document.body.appendChild(dlg); sheets.push(dlg); dlg.showModal();
     return { close: close, el: dlg, body: inner };
   }
+  /* ---------- profile sheet (tap a person's picture or name) ---------- */
+  function profileSheet(c, uid) {
+    var p = profileOf(uid), me = uid === X.S.user.$id, s = null;
+    var body = h('div', { class: 'pf-sheet' });
+    body.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), h('div', { class: 'small muted', text: isHere(c, uid) ? 'Online now' : 'Offline' }))));
+    var acts = h('div', { class: 'pf-actions' });
+    if (!me) {
+      acts.appendChild(h('button', { class: 'btn', type: 'button', text: 'Message', onclick: function () { s.close(); startDm(c, uid); } }));
+      if (callsAvailable()) acts.appendChild(h('button', { class: 'btn secondary', type: 'button', text: 'Call', onclick: async function () {
+        s.close(); await startDm(c, uid);
+        var tries = 0, t = setInterval(function () { tries++; var cv = c.cur; if (cv && cv.kind === 'dm' && dmById(c, cv.id) && dmById(c, cv.id).otherId === uid) { clearInterval(t); startCall(c, cv, false); } else if (tries > 20) clearInterval(t); }, 250);
+      } }));
+    }
+    acts.appendChild(h('a', { class: 'btn secondary', href: '#/profile/' + uid, text: me ? 'Edit profile' : 'Full profile', onclick: function () { s.close(); } }));
+    body.appendChild(acts);
+    body.appendChild(X.profileFacts ? X.profileFacts(uid) : h('p', { class: 'muted small', text: p && p.bio ? p.bio : '' }));
+    s = sheet('Profile', body);
+  }
+  function openable(node, c, uid, label) {
+    node.classList.add('pf-open'); node.setAttribute('role', 'button'); node.tabIndex = 0; node.setAttribute('aria-label', label || 'Open profile');
+    node.addEventListener('click', function (e) { e.stopPropagation(); profileSheet(c, uid); });
+    node.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); profileSheet(c, uid); } });
+    return node;
+  }
   function listScroller() { return host && host.querySelector('.chat-list'); }
   function nearBottom() { var el = listScroller(); return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
 
@@ -642,7 +666,7 @@
     var sub = ch ? (ch.description || '') : (dm ? 'Direct message · only you and ' + realName(dm.otherId) + ' can read this' : '');
     var head = h('header', { class: 'conv-head' },
       h('a', { class: 'btn secondary small only-narrow', href: c.route.mode === 'dms' ? '#/dms' : '#/chat', 'aria-label': 'Back to ' + (c.route.mode === 'dms' ? 'direct messages' : 'channels') }, icon('back')),
-      dm ? avWrap(c, dm.otherId, 'sm') : null,
+      dm ? openable(avWrap(c, dm.otherId, 'sm'), c, dm.otherId, 'Open ' + title + '’s profile') : null,
       h('div', { class: 'grow ct' }, h('h1', { text: title }), h('div', { class: 'small muted clamp', text: (dm ? '' : famLabel() + ' · ') + sub })),
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a voice call', title: 'Voice call', onclick: function () { startCall(c, cv, false); } }, icon('phone')) : null,
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a video call', title: 'Video call', onclick: function () { startCall(c, cv, true); } }, icon('video')) : null,
@@ -852,9 +876,9 @@
     if (m.body === '[call]' && !m.media) return callCard(c, cv, m);
     var mine = m.authorId === c.uid;
     var node = h('div', { class: 'msg' + (mine ? ' mine' : '') + (grouped ? ' grouped' : '') + (m._local ? ' local' : ''), 'data-mid': m.$id });
-    node.appendChild(grouped ? h('span', { class: 'av-spacer', 'aria-hidden': 'true' }) : avWrap(C, m.authorId, 'sm'));
+    node.appendChild(grouped ? h('span', { class: 'av-spacer', 'aria-hidden': 'true' }) : openable(avWrap(C, m.authorId, 'sm'), C, m.authorId, 'Open ' + realName(m.authorId) + '’s profile'));
     var main = h('div', { class: 'msg-main' });
-    if (!grouped) main.appendChild(h('div', { class: 'msg-head' }, h('strong', { text: realName(m.authorId) }), h('time', { datetime: m.$createdAt, class: 'small muted', text: ' ' + timeText(m.$createdAt) })));
+    if (!grouped) main.appendChild(h('div', { class: 'msg-head' }, openable(h('strong', { text: realName(m.authorId) }), C, m.authorId, 'Open ' + realName(m.authorId) + '’s profile'), h('time', { datetime: m.$createdAt, class: 'small muted', text: ' ' + timeText(m.$createdAt) })));
     var rp = replyPreview(c, cv, m); if (rp) main.appendChild(rp);
     var body = h('div', { class: 'msg-bubble', title: fullTime(m.$createdAt) }, msgText(m));
     if (m.editedAt) body.appendChild(h('span', { class: 'msg-edited small muted', title: 'Edited ' + fullTime(m.editedAt), text: ' (edited)' }));
@@ -962,7 +986,7 @@
     paintDebug(c);
   }
   /* ---------- call debug strip (Chat settings > "Show call debug at the top", or add ?debug to the address) ---------- */
-  function dbgOn() { return lsGet('fc_chat_dbg', false) === true || /[?&]debug\b/.test(location.search + location.hash); }
+  function dbgOn() { return false; }   // switched off for now; the strip code stays so it can be turned back on
   function paintDebug(c) {
     var el = document.getElementById('call-debug'); if (!el) return;
     if (!dbgOn() || !c || !c.cur) { el.hidden = true; return; }
@@ -1445,11 +1469,6 @@
     body.appendChild(h('h3', { text: 'Links and GIFs' }));
     body.appendChild(h('label', { class: 'check' }, pv, ' Show link previews and GIFs on this device'));
     body.appendChild(h('p', { class: 'small muted', text: 'A preview is made by the family server visiting the link, so your device never contacts that website. GIFs load straight from GIPHY, which can see your internet address. Turn this off to see plain links only.' }));
-    body.appendChild(h('h3', { text: 'Call debug' }));
-    var dbg = h('input', { type: 'checkbox' }); dbg.checked = dbgOn();
-    dbg.addEventListener('change', function () { lsSet('fc_chat_dbg', dbg.checked); paintDebug(c); });
-    body.appendChild(h('label', { class: 'check' }, dbg, ' Show call debug at the top of the chat'));
-    body.appendChild(h('p', { class: 'small muted', text: 'A small panel that shows what this device knows about calls: who is in the call, which updates arrived and the time left. For finding problems.' }));
     body.appendChild(h('h3', { text: 'Online status' }));
     var pOn = h('input', { type: 'checkbox' }); pOn.checked = presenceOn();
     pOn.addEventListener('change', function () { lsSet('fc_chat_presence', pOn.checked); if (pOn.checked) { c.beatAt = 0; beat(c); } repaintHere(c); toast(pOn.checked ? 'Others can see when you are online.' : 'Others will see you as offline within about two minutes.'); });

@@ -3564,6 +3564,32 @@
     });
     return m;
   }
+  // Family info for one person (used by the chat profile sheet): bio, age, gender, birthday, address and favorite things. Fills in after the tree loads.
+  function profileFacts(uid) {
+    var box = h('div', { class: 'tree-details pf-facts' });
+    function fill(tree) {
+      clear(box);
+      var prof = S.profiles.get(uid) || null, p = personFor(tree, uid), rows = [];
+      if (prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
+      var a = p ? ageOf(p) : null;
+      if (a && a.n >= 0) rows.push(['Age', (a.approx ? 'About ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'Under 1') : a.n + ' years old')]);
+      if (p && p.gender) rows.push(['Gender', p.gender]);
+      var b = p && p.birthday ? String(p.birthday) : '', bd = '';
+      if (b.length === 4) bd = 'Born in ' + b; else if (b.length === 10) { var d = new Date(Number(b.slice(0, 4)), Number(b.slice(5, 7)) - 1, Number(b.slice(8, 10))); if (!isNaN(d)) bd = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }); }
+      if (bd) rows.push(['Birthday', bd]);
+      var ad = prof ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
+      var mem = (S.memberList || []).filter(function (m) { return m.userId === uid; })[0];
+      if (mem && mem.joined) { var jd = new Date(mem.joined); if (!isNaN(jd)) rows.push(['Member since', jd.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })]); }
+      if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
+      (prof ? visibleAbout(prof) : []).filter(function (c) { return c.items && c.items.length; }).forEach(function (c) {
+        box.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: c.title }), h('ul', { class: 'tags' }, c.items.map(function (i) { return h('li', { class: 'tag', text: i }); }))));
+      });
+      if (!box.childNodes.length) box.appendChild(h('p', { class: 'muted small', text: 'No family info added yet.' }));
+    }
+    fill(S.tree || null);
+    loadTree(false).then(fill).catch(function () { /* the basics above stay */ });
+    return box;
+  }
   function personFor(tree, uid) { return tree ? tree.people.filter(function (p) { return p.userId === uid; })[0] || null : null; }
 
   async function sendSuggestion(personId, prefill) {
@@ -4580,7 +4606,7 @@
     initAppwrite();
     if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
-      avatarUrl: avatarUrl,
+      avatarUrl: avatarUrl, profileFacts: profileFacts,
       uploadPicture: async function (file) { var f = await imageToJpegFile(file, L.avatarEdge || 256, 0.85, true, 'family.jpg'); var up = await uploadFile(f); return up.$id; },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,

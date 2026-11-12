@@ -524,3 +524,16 @@ body.chat-mode .call-pill { bottom: calc(env(safe-area-inset-bottom) + 78px); }
 .cp-chip.cp-new { animation: chip-pop .5s cubic-bezier(.2, 1.5, .4, 1) both; }
 @keyframes chip-pop { 0% { opacity: 0; transform: scale(.4); } 100% { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .call-tile, .cp-chip.cp-new { animation: none; } }
+
+/* v1.50.32 profile sheet */
+.pf-open { cursor: pointer; }
+.pf-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 50%; }
+strong.pf-open:focus-visible { border-radius: 4px; }
+strong.pf-open:hover { text-decoration: underline; }
+.pf-top { display: flex; align-items: center; gap: 14px; margin: 4px 0 12px; }
+.pf-top .av-wrap { flex: none; }
+.pf-top .online-dot { width: 16px; height: 16px; right: 2px; bottom: 2px; }
+.pf-name { margin: 0 !important; font-size: 1.25rem !important; overflow-wrap: anywhere; }
+.pf-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.pf-actions .btn { flex: 1 1 0; text-align: center; justify-content: center; white-space: nowrap; }
+.pf-facts { border-top: 1px solid var(--border); padding-top: 10px; }
