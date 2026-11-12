@@ -1756,6 +1756,31 @@
     container.appendChild(list); if (sentinel) container.appendChild(sentinel); container.appendChild(status); container.appendChild(h('div', { class: 'stack' }, more));
     var st = { cursor: null, done: false, loading: false, count: 0 };
     var sio = null;
+    var seenIds = {}, newest = '';
+    // Cards ease in: the first screen fades up one after another, and a post that arrives while you watch slides down from the top.
+    function addCard(p, m, live, i) {
+      seenIds[p.$id] = 1; if (p.$createdAt > newest) newest = p.$createdAt;
+      var card, tile = opts.textRows && !p.mediaFileId;
+      if (tile) {
+        // Text posts gather into a sideways-scrolling row (10 per row, then a new row), sitting between the photo and video posts.
+        var last = live ? list.querySelector('.text-row') : list.lastElementChild;
+        if (!(last && last.classList.contains('text-row') && last.__n < (L.textRowMax || 10))) {
+          var track = h('div', { class: 'text-track' });
+          last = h('section', { class: 'text-row', 'aria-label': 'Text posts. Scroll sideways to see more.', tabindex: '0' }, track);
+          last.__n = 0; last.__track = track; if (live) list.insertBefore(last, list.firstChild); else list.appendChild(last);
+        }
+        card = postCard(p, m, 'tile', opts);
+        if (live) last.__track.insertBefore(card, last.__track.firstChild); else last.__track.appendChild(card);
+        last.__n++;
+      } else {
+        card = postCard(p, m, opts.variant, opts);
+        if (live) list.insertBefore(card, list.firstChild); else list.appendChild(card);
+      }
+      if (opts.variant !== 'short' && !opts.infinite) {
+        card.classList.add(live ? 'post-new' : 'post-in');
+        if (!live) card.style.setProperty('animation-delay', Math.min(i || 0, 6) * 70 + 'ms');
+      }
+    }
 
     async function load() {
       if (st.loading || st.done) return;
@@ -1770,18 +1795,8 @@
         } while (!page.posts.length && !st.done);
         var meta = page.posts.length ? await decorate(page.posts) : {};
         if (token !== S.nav) return;
-        page.posts.forEach(function (p) {
-          if (opts.textRows && !p.mediaFileId) {
-            // Text posts gather into a sideways-scrolling row (10 per row, then a new row), sitting between the photo and video posts.
-            var last = list.lastElementChild;
-            if (!(last && last.classList.contains('text-row') && last.__n < (L.textRowMax || 10))) {
-              var track = h('div', { class: 'text-track' });
-              last = h('section', { class: 'text-row', 'aria-label': 'Text posts. Scroll sideways to see more.', tabindex: '0' }, track);
-              last.__n = 0; last.__track = track; list.appendChild(last);
-            }
-            last.__track.appendChild(postCard(p, meta[p.$id], 'tile', opts)); last.__n++;
-          } else list.appendChild(postCard(p, meta[p.$id], opts.variant, opts));
-        });
+        var enter = 0;
+        page.posts.forEach(function (p) { addCard(p, meta[p.$id], false, enter++); });
         st.count += page.posts.length;
         clear(status);
         if (!st.count) status.appendChild(h('div', { class: 'empty' }, h('p', { text: opts.emptyTitle }), h('p', { class: 'small', text: opts.emptyHint || '' }), opts.emptyAction || null));
@@ -1801,6 +1816,23 @@
     if (sentinel && 'IntersectionObserver' in window) {
       sio = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) load(); }, { rootMargin: '900px' });
       sio.observe(sentinel); S.sentinelIO = sio;
+    }
+    // Live: every so often look for posts newer than the newest one on screen.
+    if (!opts.infinite && opts.variant !== 'short') {
+      var pollBusy = false, pollT = setInterval(async function () {
+        if (!list.isConnected || token !== S.nav) { clearInterval(pollT); return; }
+        if (document.hidden || pollBusy || st.loading || !st.count) return; pollBusy = true;
+        try {
+          var pg = await fetchPage(null);
+          var fresh = pg.posts.filter(function (p) { return !seenIds[p.$id] && p.$createdAt > newest; }).sort(function (x, y) { return x.$createdAt < y.$createdAt ? -1 : 1; });
+          if (fresh.length && list.isConnected && token === S.nav) {
+            var fm = await decorate(fresh);
+            fresh.forEach(function (p) { addCard(p, fm[p.$id], true, 0); });
+            st.count += fresh.length;
+          }
+        } catch (e) { /* the next check tries again */ }
+        pollBusy = false;
+      }, 15000);
     }
     return load();
   }
