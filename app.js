@@ -3978,6 +3978,8 @@
       return h('div', { class: 'live-preview', 'aria-label': 'Live preview with sample content' }, card, tabs, inp, btns);
     }
     function paintLook() {
+      var sc = document.scrollingElement || document.documentElement, keepY = sc.scrollTop;   // rebuilding the screen must not send you back to the top
+      var keepH = look.offsetHeight; if (keepH) look.style.minHeight = keepH + 'px';
       clear(look);
       var st = lookDraft || appearance, eff = TH.effective(st), dirty = isDirty();
       look.appendChild(h('h2', { text: 'Appearance' }));
@@ -4014,6 +4016,8 @@
           h('button', { class: 'btn secondary small', type: 'button', text: 'Reset everything', onclick: function () { change(function (s2) { s2.theme = 'default'; s2.per = {}; }); } })),
         h('p', { class: 'small muted', text: 'Reset ' + TH.themeOf(eff.theme).name + ': this theme goes back to its own starting mode and accent. Your other themes keep their choices. Reset everything: all themes forget your choices and the Default theme comes back.' })));
       look.appendChild(h('p', { class: 'hint', text: 'Saved on this device and on your account, so it follows you to your other devices. If two devices disagree, the most recent save wins. Photos, videos, GIFs and stickers never change color.' }));
+      sc.scrollTop = keepY; look.style.minHeight = '';
+      requestAnimationFrame(function () { sc.scrollTop = keepY; });
     }
     window.addEventListener('hashchange', function leave() {          // unsaved previews never outlive the Appearance page
       if (/^#\/settings\/appearance/.test(location.hash)) return;
