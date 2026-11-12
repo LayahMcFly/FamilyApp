@@ -4167,6 +4167,17 @@
     var par = p ? (p.parentIds || []).filter(function (x) { return known[x]; }) : [], prt = p ? (p.partnerIds || []).filter(function (x) { return known[x]; }) : [];
     var curKinds = p ? kindsOf(p) : {};
     var s4 = select('link', 'Linked family member', memberOpts, p ? p.userId : '');
+    var presetOn = !p && preset && preset.of;
+    var existSel = null;
+    if (presetOn) {
+      var exOpts = [['', 'Add someone new']].concat(tree.people.filter(function (x) { return x.$id !== preset.of.$id; }).map(function (x) { return [x.$id, x.name]; }));
+      existSel = select('existing', 'Or choose someone already in the tree', exOpts, '');
+      existSel.querySelector('select').addEventListener('change', function () {
+        var on = !!existSel.querySelector('select').value;
+        [].slice.call(dlg.querySelectorAll('.new-only')).forEach(function (el) { el.hidden = on; });
+        save.textContent = on ? 'Connect' : 'Add person';
+      });
+    }
     if (!p) s4.querySelector('select').addEventListener('change', function (ev) {
       var pr = S.profiles.get(ev.target.value); if (!pr) { var mo = memberOpts.filter(function (o) { return o[0] === ev.target.value; })[0]; if (mo && mo[1] !== 'Family member' && !name.value) name.value = mo[1]; } if (pr) { name.value = pr.displayName; if (pr.gender && !gd.value) gd.value = pr.gender; }
     });
@@ -4200,12 +4211,7 @@
     addPartnerBtn = h('button', { class: 'btn secondary small', type: 'button', text: '+ Add a partner', onclick: function () { addPartnerRow(''); } });
     par.forEach(function (id) { addParentRow(id, curKinds[id] || 'birth'); });
     prt.forEach(function (id) { addPartnerRow(id); });
-    // "Add a relative of <person>": the new person starts already linked to them.
-    if (!p && preset && preset.of) {
-      if (preset.relation === 'child') addParentRow(preset.of.$id, 'birth');
-      else if (preset.relation === 'partner') addPartnerRow(preset.of.$id);
-      else if (preset.relation === 'sibling') (preset.of.parentIds || []).filter(function (x) { return known[x]; }).slice(0, 2).forEach(function (x) { addParentRow(x, 'birth'); });
-    }
+
     var msg = h('div'), save = h('button', { class: 'btn', type: 'submit', text: p ? 'Save' : 'Add person' });
     var cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: close });
     var remove = p ? h('button', { class: 'btn danger', type: 'button', text: 'Delete from tree', onclick: async function () {
@@ -4214,6 +4220,13 @@
     } }) : null;
     dlg.appendChild(h('form', { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
+      if (presetOn && existSel.querySelector('select').value) {
+        var exId = existSel.querySelector('select').value;
+        return busy(save, async function () {
+          try { await api('treeLinkRelative', { familyId: S.familyId, personId: exId, relation: preset.relation, relationOf: preset.of.$id }); close(); toast('Connected.'); done(exId); }
+          catch (e) { showAlert(msg, 'error', errText(e)); }
+        }, 'Connecting…');
+      }
       var n = name.value.trim();
       if (!n) return showAlert(msg, 'error', 'Please enter a name.');
       var v = function (id) { return dlg.querySelector('#' + id).value; };
@@ -4231,34 +4244,34 @@
           var payload = { familyId: S.familyId, name: n };
           if (admin && !isSelf) payload.userId = v('link');
           if (!locked) { payload.birthday = bd.value || (p && p.birthday && String(p.birthday).length === 4 ? p.birthday : ''); payload.gender = gd.value; }
+          if (presetOn) { payload.relation = preset.relation; payload.relationOf = preset.of.$id; }
+          else {
           if (!p || parents.join(',') !== par.join(',')) payload.parentIds = parents;
           if (p ? kindsKey(kindsObj) !== kindsKey(origKinds) : Object.keys(kindsObj).length) payload.parentKinds = kindsObj;
           if (!p || partnerList.slice().sort().join(',') !== prt.slice().sort().join(',')) payload.partnerIds = partnerList;
+          }
           var id;
           if (p) { payload.personId = p.$id; await api('treeEditPerson', payload); id = p.$id; }
           else {
             id = (await api('treeAddPerson', payload)).personId;
-            if (preset && preset.relation === 'parent' && preset.of) {   // the new person becomes a parent of the chosen one
-              var op = (preset.of.parentIds || []).filter(function (x) { return known[x]; });
-              await api('treeEditPerson', { familyId: S.familyId, personId: preset.of.$id, parentIds: op.concat([id]) });
-            }
           }
           close(); toast('Saved.'); done(id);
         } catch (e) { showAlert(msg, 'error', errText(e)); }
       }, 'Saving…');
     } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : (preset && preset.of ? 'Add ' + ({ parent: 'a parent', child: 'a child', partner: 'a partner', sibling: 'a sibling' }[preset.relation] || 'a relative') + ' of ' + preset.of.name : 'Add a person') }),
-      (!p && admin) ? h('div', { class: 'pick-member' }, s4,
+      presetOn ? existSel : null,
+      (!p && admin) ? h('div', { class: 'pick-member new-only' }, s4,
         memberOpts.length > 1 ? ((preset && preset.lite) ? null : h('p', { class: 'hint', text: 'Pick someone who has already joined the family, or leave this and type a name below for a relative who has not joined.' }))
           : (preset && preset.lite) ? h('p', { class: 'hint' }, 'No one else has joined yet. Invite people in ', h('a', { href: '#/settings/family', onclick: function () { close(); }, text: 'Settings' }), '. You can still type a name below.')
           : h('p', { class: 'hint' }, 'No one else has joined the family yet. To add someone who can sign in, go to ', h('a', { href: '#/settings/family', onclick: function () { close(); }, text: 'Settings, Family' }), ' and invite them. You can still type a name below for a relative who is not on the app.')) : null,
-      h('div', null, h('label', { for: 'pname', text: 'Name' }), name),
-      h('div', null, h('label', { for: 'pgender', text: 'Gender' }), gd),
-      h('div', null, h('label', { for: 'pbday', text: 'Birthday' }), bd),
+      h('div', { class: 'new-only' }, h('label', { for: 'pname', text: 'Name' }), name),
+      h('div', { class: 'new-only' }, h('label', { for: 'pgender', text: 'Gender' }), gd),
+      h('div', { class: 'new-only' }, h('label', { for: 'pbday', text: 'Birthday' }), bd),
       locked ? h('p', { class: 'hint', text: 'Only ' + p.name + ' can change their name, gender and birthday, because it is their account.' }) : null,
-      noOthers ? h('p', { class: 'hint', text: 'No one else is in the tree yet. Add the first person, then add others.' }) : null,
-      h('div', null, h('strong', { text: 'Parents' }), parentRows, addParentBtn,
+      (noOthers && !presetOn) ? h('p', { class: 'hint', text: 'No one else is in the tree yet. Add the first person, then add others.' }) : null,
+      presetOn ? null : h('div', null, h('strong', { text: 'Parents' }), parentRows, addParentBtn,
         h('p', { class: 'hint', text: 'List everyone who is a parent to this person, and say how: birth, adoptive, step, foster or guardian. The tree can draw two parents at a time, so the tree page lets you switch between birth parents and the parents who raised them.' })),
-      h('div', null, h('strong', { text: 'Partners' }), partnerRows, addPartnerBtn,
+      presetOn ? null : h('div', null, h('strong', { text: 'Partners' }), partnerRows, addPartnerBtn,
         h('p', { class: 'hint', text: 'A person can have more than one partner, for example a current and a former one.' })),
       (admin && !isSelf && p) ? s4 : null,
       (preset && preset.lite) ? null : h('p', { class: 'hint', text: 'Linking a member lets them confirm “this is me”. The tree entry and their sign-in account stay separate.' }),

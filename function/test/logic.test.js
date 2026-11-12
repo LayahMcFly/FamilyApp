@@ -795,3 +795,25 @@ test('a member who joined but never saved a profile can still be linked to their
   const link = await s.call(s.alice, { action: 'treeEditPerson', familyId: 'famA', personId: other.json.personId, userId: 'bob' });
   assert.equal(link.status, 400);   // already linked to Bobby
 });
+
+test('connecting someone already in the tree: sibling of a person with no parents, partner, child', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  const mkp = (name) => s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name });
+  const me = await s.call(s.alice, { action: 'saveMyPerson', familyId: 'famA', name: 'Alice' });
+  const ky = await mkp('Kylah'), bo = await mkp('Bo'), cy = await mkp('Cy');
+  const rows = () => [...s.world.tables.people.values()];
+  const link = (id, relation, of) => s.call(s.alice, { action: 'treeLinkRelative', familyId: 'famA', personId: id, relation, relationOf: of });
+  assert.equal((await link(ky.json.personId, 'sibling', me.json.personId)).status, 200);
+  const k = s.world.tables.people.get(ky.json.personId), m = s.world.tables.people.get(me.json.personId);
+  assert.ok(k.parentIds.length === 1 && m.parentIds[0] === k.parentIds[0], 'share a placeholder parent');
+  assert.equal((await link(bo.json.personId, 'partner', me.json.personId)).status, 200);
+  assert.ok(s.world.tables.people.get(bo.json.personId).partnerIds.includes(me.json.personId) && s.world.tables.people.get(me.json.personId).partnerIds.includes(bo.json.personId));
+  assert.equal((await link(cy.json.personId, 'child', me.json.personId)).status, 200);
+  assert.ok(s.world.tables.people.get(cy.json.personId).parentIds.includes(me.json.personId));
+  assert.equal((await link(cy.json.personId, 'other', me.json.personId)).status, 400);
+  assert.equal((await s.call(s.bob, { action: 'treeLinkRelative', familyId: 'famA', personId: cy.json.personId, relation: 'child', relationOf: me.json.personId })).status, 403);
+  // adding a brand-new sibling of someone with no parents also works
+  const nw = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Newbie', relation: 'sibling', relationOf: bo.json.personId });
+  assert.equal(nw.json.linked, true); assert.ok(s.world.tables.people.get(nw.json.personId).parentIds.length === 1);
+});
