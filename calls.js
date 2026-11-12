@@ -152,7 +152,8 @@
     /* ---------- leaving ---------- */
     call.leave = async function () {
       if (call.ended) return; call.ended = true;
-      Object.keys(call.timers).forEach(function (k) { clearInterval(call.timers[k]); });
+      Object.keys(call.timers).forEach(function (k) { clearInterval(call.timers[k]); clearTimeout(call.timers[k]); });
+      try { window.removeEventListener('offline', call.onOff); window.removeEventListener('online', call.onOn); } catch (e) { /* ok */ }
       try { if (call.proc && call.room) { var tr = camPub(call.room.localParticipant); if (tr && tr.videoTrack) await tr.videoTrack.stopProcessor(); } } catch (e) { /* ok */ }
       try { if (call.room) await call.room.disconnect(); } catch (e) { /* ok */ }
       try { api('callLeave').catch(function () { /* the banner expires by itself */ }); } catch (e) { /* ok */ }
@@ -188,6 +189,13 @@
       if (o.video) { try { await room.localParticipant.setCameraEnabled(true); } catch (e) { toast('Your camera is blocked. Allow it in your browser settings.'); } }
       paintAll(); statusEl.textContent = who();
       call.timers.ping = setInterval(function () { api('callPing').catch(function () { /* next one tries again */ }); }, 45000);
+      // Going offline ends my part of the call after a short wait (a brief dropout is forgiven). The call row on the server also expires by itself.
+      window.addEventListener('offline', call.onOff = function () {
+        if (call.ended || call.timers.offTimer) return;
+        statusEl.textContent = 'You are offline…';
+        call.timers.offTimer = setTimeout(function () { call.timers.offTimer = null; if (!call.ended && navigator.onLine === false) { toast('You went offline, so you left the call.'); call.leave(); } }, 10000);
+      });
+      window.addEventListener('online', call.onOn = function () { if (call.timers.offTimer) { clearTimeout(call.timers.offTimer); call.timers.offTimer = null; paintAll(); } });
       try { if (navigator.wakeLock) call.wake = await navigator.wakeLock.request('screen'); } catch (e) { /* not important */ }
       document.addEventListener('visibilitychange', call.onVis = function () { if (!document.hidden && navigator.wakeLock && !call.ended) navigator.wakeLock.request('screen').then(function (w) { call.wake = w; }, function () { /* ok */ }); });
       if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) navigator.mediaDevices.enumerateDevices().then(function (d) { btnFlip.hidden = d.filter(function (x) { return x.kind === 'videoinput'; }).length < 2; }, function () { /* ok */ });

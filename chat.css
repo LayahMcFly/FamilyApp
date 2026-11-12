@@ -504,3 +504,8 @@ body.chat-mode .call-pill { bottom: calc(env(safe-area-inset-bottom) + 78px); }
 .call-debug > div { overflow-wrap: anywhere; }
 .call-debug .cd-row { display: flex; gap: 8px; margin-top: 6px; }
 .call-debug .cd-row .btn { min-height: 32px; margin: 0; font-size: .75rem; }
+
+/* v1.50.29: the Join bar lines up: the text on its own line, two equal buttons under it */
+.call-banner { flex-wrap: wrap; align-items: center; gap: 8px; }
+.call-banner > .grow { flex: 1 1 100%; min-width: 0; text-align: left; font-weight: 600; }
+.call-banner .btn, .call-banner .call-join { flex: 1 1 0; margin: 0 !important; min-height: 44px; height: 44px; padding: 0 12px; display: inline-grid; place-items: center; text-shadow: none !important; white-space: nowrap; box-shadow: none; }
