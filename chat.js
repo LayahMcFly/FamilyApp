@@ -162,7 +162,8 @@
     TOTALS.ch = ch; TOTALS.dm = dm; paintBadges();
   }
   function startPeek() {
-    setInterval(function () { if (!document.hidden) refreshTotals(false); }, 45000);
+    setInterval(function () { if (!document.hidden) refreshTotals(false); }, 20000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshTotals(false); });
     setTimeout(function () { refreshTotals(true); }, 4000);
   }
 
