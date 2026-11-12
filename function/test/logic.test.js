@@ -757,3 +757,22 @@ test('repost: any member can remind the family; no file is copied; flattened; on
   assert.equal((await s.call(s.alice, { action: 'deletePost', familyId: 'famA', postId: rp.json.postId })).status, 200);
   assert.ok(s.world.tables.posts.has(orig.json.postId));                                       // deleting a repost keeps the original
 });
+
+test('inviting by relationship connects every kind, adding unnamed placeholders for missing middle people', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  const add = (name, relation) => s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name, relation });
+  const rows = () => [...s.world.tables.people.values()];
+  const by = (n) => rows().find((r) => r.name === n);
+  const me = () => rows().find((r) => r.userId === s.alice.$id);
+  const sib = await add('Sis', 'sibling'); assert.equal(sib.json.linked, true);
+  assert.ok(me().parentIds.length === 1 && by('Sis').parentIds[0] === me().parentIds[0], 'sibling shares a parent');
+  const unc = await add('Uncle Joe', 'aunt_uncle'); assert.equal(unc.json.linked, true);
+  const myParent = rows().find((r) => r.$id === me().parentIds[0]);
+  assert.ok(myParent.parentIds.length === 1 && by('Uncle Joe').parentIds[0] === myParent.parentIds[0], 'uncle shares my parent\'s parent');
+  const nn = await add('Nephew', 'niece_nephew'); assert.equal(by('Nephew').parentIds[0], by('Sis').$id);
+  const co = await add('Cousin', 'cousin'); assert.equal(by('Cousin').parentIds[0], by('Uncle Joe').$id);
+  const gc = await add('Grandkid', 'grandchild'); assert.ok(rows().find((r) => r.$id === by('Grandkid').parentIds[0]).parentIds.includes(me().$id));
+  const gp = await add('Granny', 'grandparent'); assert.ok(myParent.parentIds.includes(by('Granny').$id));
+  assert.equal(nn.json.linked && co.json.linked && gc.json.linked && gp.json.linked, true);
+});

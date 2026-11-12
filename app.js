@@ -2994,7 +2994,7 @@
     var email = field('inviteEmail', 'Relative\'s email', 'email', { required: true, autocomplete: 'off' });
     var name = field('inviteName', 'Their name', 'text', { maxlength: 60, autocomplete: 'off', required: true });
     function sel(id, label, opts) { var el = h('select', { id: id, name: id }, opts.map(function (o) { return h('option', { value: o[0], text: o[1] }); })); return { el: el, wrap: h('div', null, h('label', { for: id, text: label }), el) }; }
-    var rel = sel('inviteRelation', 'They are my…', [['', 'Choose one'], ['parent', 'Parent'], ['child', 'Child'], ['sibling', 'Sibling'], ['partner', 'Partner or spouse'], ['grandparent', 'Grandparent'], ['other', 'Other relative (link later)']]);
+    var rel = sel('inviteRelation', 'They are my…', [['', 'Choose one'], ['parent', 'Parent'], ['child', 'Child'], ['sibling', 'Sibling'], ['partner', 'Partner or spouse'], ['grandparent', 'Grandparent'], ['grandchild', 'Grandchild'], ['aunt_uncle', 'Aunt or uncle'], ['niece_nephew', 'Niece or nephew'], ['cousin', 'Cousin'], ['other', 'Other relative (link later)']]);
     var gen = sel('inviteGender', 'Their gender (optional)', [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']]);
     var bday = field('inviteBirthday', 'Their birthday (optional)', 'date', {});
     var age = field('inviteAge', 'Or their age (if you do not know the birthday)', 'number', { placeholder: 'For example 8' });

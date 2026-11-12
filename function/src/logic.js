@@ -595,18 +595,44 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
             { familyId: ctx.familyId, name: (prof && prof.displayName) || 'Me', userId: user.$id, confirmed: true, parentIds: [], partnerIds: [], createdBy: user.$id }, {});
           all.push(meRow);
         }
-        const myParents = Array.isArray(meRow.parentIds) ? meRow.parentIds : [];
+        const idsOf = (r) => (Array.isArray(r.parentIds) ? r.parentIds : []).filter((x) => all.some((y) => y.$id === x));
+        // A relative whose middle link is missing (an uncle needs a parent and a grandparent) gets an unnamed placeholder, so the
+        // new person is still connected. The placeholder is a normal tree person that can be renamed or replaced in Settings.
+        const mk = async (label, pIds) => {
+          const r = await writePerson((d) => createRow(TABLES.people, ID.unique(), d, teamRead(ctx.familyId)),
+            { familyId: ctx.familyId, name: label, confirmed: false, parentIds: pIds, partnerIds: [], createdBy: user.$id }, {});
+          all.push(r); return r;
+        };
+        const ensureParent = async (p) => {
+          const have = idsOf(p); if (have.length) return all.find((y) => y.$id === have[0]);
+          const ph = await mk(`Parent of ${p.name} (add their name)`, []);
+          await updateRow(TABLES.people, p.$id, { parentIds: [ph.$id] }); p.parentIds = [ph.$id]; return ph;
+        };
+        const ensureSibling = async (p) => {
+          const par = await ensureParent(p);
+          return all.find((x) => x.$id !== p.$id && idsOf(x).includes(par.$id)) || mk(`Sibling of ${p.name} (add their name)`, [par.$id]);
+        };
         if (relation === 'child') { parentIds = [meRow.$id]; relationLinked = true; }
         else if (relation === 'partner') { partnerIds = [meRow.$id]; relationLinked = true; }
-        else if (relation === 'sibling') { parentIds = myParents.slice(0, 2); relationLinked = parentIds.length > 0; }
+        else if (relation === 'sibling') { await ensureParent(meRow); parentIds = idsOf(meRow).slice(0, 2); relationLinked = true; }
         else if (relation === 'parent') {
-          if (myParents.length < 2) { relationLinked = true; afterCreate = (newId) => updateRow(TABLES.people, meRow.$id, { parentIds: [...myParents, newId] }); }
+          const mine = idsOf(meRow);
+          if (mine.length < 2) { relationLinked = true; afterCreate = (newId) => updateRow(TABLES.people, meRow.$id, { parentIds: [...mine, newId] }); }
           else relationLinked = false;
         } else if (relation === 'grandparent') {
-          const par = all.find((x) => x.$id === myParents[0]);
-          const gp = par && Array.isArray(par.parentIds) ? par.parentIds : [];
-          if (par && gp.length < 2) { relationLinked = true; afterCreate = (newId) => updateRow(TABLES.people, par.$id, { parentIds: [...gp, newId] }); }
+          const par = await ensureParent(meRow), gp = idsOf(par);
+          if (gp.length < 2) { relationLinked = true; afterCreate = (newId) => updateRow(TABLES.people, par.$id, { parentIds: [...gp, newId] }); }
           else relationLinked = false;
+        } else if (relation === 'aunt_uncle') {
+          const par = await ensureParent(meRow); await ensureParent(par);
+          parentIds = idsOf(par).slice(0, 2); relationLinked = true;
+        } else if (relation === 'niece_nephew') {
+          parentIds = [(await ensureSibling(meRow)).$id]; relationLinked = true;
+        } else if (relation === 'cousin') {
+          parentIds = [(await ensureSibling(await ensureParent(meRow))).$id]; relationLinked = true;
+        } else if (relation === 'grandchild') {
+          const kid = all.find((x) => idsOf(x).includes(meRow.$id)) || await mk(`Child of ${meRow.name} (add their name)`, [meRow.$id]);
+          parentIds = [kid.$id]; relationLinked = true;
         } else relationLinked = false;
       }
       const baseData = { familyId: ctx.familyId, name, userId: linkId, confirmed: false, parentIds, partnerIds, createdBy: user.$id };
