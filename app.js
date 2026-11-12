@@ -1378,7 +1378,8 @@
         try {
           var payload = { familyId: fid, displayName: n };
           if (file.files[0]) {
-            var f = await imageToJpegFile(file.files[0], L.avatarEdge || 256, 0.85, true, 'avatar.jpg');
+            var f = await avatarFile(file.files[0], 'avatar.jpg');
+            if (!f) return;
             uploaded = await uploadFile(f);
             payload.avatarFileId = uploaded.$id;
           }
@@ -2664,7 +2665,42 @@
   }
   // Shrinks a picture in the browser and re-saves it as JPEG. This also removes hidden
   // camera data such as GPS location, because only the pixels are copied.
-  async function imageToJpegFile(file, maxEdge, quality, square, name) {
+  // Lets the person drag and zoom a picture inside a round frame. Resolves with {x, y, s} (fractions of the photo) or null when cancelled.
+  function cropDialog(file) {
+    return new Promise(function (resolve) {
+      var F = 280, url = URL.createObjectURL(file), done = false;
+      var img = h('img', { class: 'crop-img', alt: '', draggable: 'false' });
+      var frame = h('div', { class: 'crop-frame', style: 'width:' + F + 'px;height:' + F + 'px', 'aria-label': 'Drag the picture to choose what shows' }, img, h('div', { class: 'crop-mask', 'aria-hidden': 'true' }));
+      var zoom = h('input', { type: 'range', min: '1', max: '4', step: '0.01', value: '1', 'aria-label': 'Zoom' });
+      var dlg = h('dialog', { class: 'cs crop-dlg', 'aria-label': 'Adjust picture' });
+      function finish(v) { if (done) return; done = true; try { dlg.close(); } catch (e) { /* closed */ } if (dlg.parentNode) dlg.parentNode.removeChild(dlg); URL.revokeObjectURL(url); resolve(v); }
+      var nw = 0, nh = 0, b = 1, z = 1, ox = 0, oy = 0;
+      function clamp() { var k = b * z; ox = Math.min(0, Math.max(F - nw * k, ox)); oy = Math.min(0, Math.max(F - nh * k, oy)); }
+      function paint() { clamp(); var k = b * z; img.style.width = nw * k + 'px'; img.style.height = nh * k + 'px'; img.style.transform = 'translate(' + ox + 'px,' + oy + 'px)'; }
+      function setZoom(nz) { var k0 = b * z, cx = (F / 2 - ox) / k0, cy = (F / 2 - oy) / k0; z = Math.max(1, Math.min(4, nz)); var k = b * z; ox = F / 2 - cx * k; oy = F / 2 - cy * k; zoom.value = String(z); paint(); }
+      img.onload = function () { nw = img.naturalWidth; nh = img.naturalHeight; b = F / Math.min(nw, nh); ox = (F - nw * b) / 2; oy = (F - nh * b) / 2; paint(); };
+      img.onerror = function () { finish('skip'); };   // the browser can't preview it: fall back to the automatic center crop
+      var drag = null;
+      frame.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY, ox: ox, oy: oy }; try { frame.setPointerCapture(e.pointerId); } catch (x) { /* ok */ } });
+      frame.addEventListener('pointermove', function (e) { if (!drag) return; ox = drag.ox + e.clientX - drag.x; oy = drag.oy + e.clientY - drag.y; paint(); });
+      frame.addEventListener('pointerup', function () { drag = null; }); frame.addEventListener('pointercancel', function () { drag = null; });
+      frame.addEventListener('wheel', function (e) { e.preventDefault(); setZoom(z - e.deltaY / 400); }, { passive: false });
+      zoom.addEventListener('input', function () { setZoom(Number(zoom.value)); });
+      dlg.appendChild(h('div', { class: 'cs-head' }, h('h2', { text: 'Adjust picture' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Cancel', onclick: function () { finish(null); } })));
+      dlg.appendChild(h('div', { class: 'cs-body crop-body' }, h('p', { class: 'small muted', text: 'Drag the picture to move it. Use the slider to zoom.' }), frame, h('label', { class: 'crop-zoom small' }, 'Zoom', zoom),
+        h('button', { class: 'btn block', type: 'button', text: 'Use this picture', onclick: function () { var k = b * z; finish({ x: (-ox / k) / nw, y: (-oy / k) / nh, s: (F / k) / Math.min(nw, nh) }); } })));
+      dlg.addEventListener('cancel', function (e) { e.preventDefault(); finish(null); });
+      document.body.appendChild(dlg); dlg.showModal(); img.src = url;
+    });
+  }
+  // Shows the crop dialog, then makes the square avatar. Returns null when the person cancels.
+  async function avatarFile(file, name) {
+    if (file.type === 'image/gif') throw new Error('Animated GIFs are not supported. Please choose a JPEG, PNG or WebP photo.');
+    var c = await cropDialog(file); if (c === null) return null;
+    return imageToJpegFile(file, L.avatarEdge || 256, 0.85, true, name, c === 'skip' ? null : c);
+  }
+
+  async function imageToJpegFile(file, maxEdge, quality, square, name, crop) {
     if (file.type === 'image/gif') throw new Error('Animated GIFs are not supported. Please choose a JPEG, PNG or WebP photo.');
     if (file.size > 40 * 1048576) throw new Error('That photo is over 40 MB. Please choose a smaller one.');
     var bmp;
@@ -2674,7 +2710,11 @@
       catch (e2) { throw new Error("Your browser couldn't open that photo. Try a JPEG or PNG. On iPhone, set Camera > Formats to Most Compatible."); }
     }
     var sw = bmp.width, sh = bmp.height, sx = 0, sy = 0;
-    if (square) { var s = Math.min(sw, sh); sx = (sw - s) / 2; sy = (sh - s) / 2; sw = s; sh = s; }
+    if (square) {
+      var s = Math.min(sw, sh); sx = (sw - s) / 2; sy = (sh - s) / 2;
+      if (crop) { var cs = Math.max(0.05, Math.min(1, crop.s)) * s; sx = Math.max(0, Math.min(sw - cs, crop.x * sw)); sy = Math.max(0, Math.min(sh - cs, crop.y * sh)); s = cs; }
+      sw = s; sh = s;
+    }
     var scale = Math.min(1, maxEdge / Math.max(sw, sh));
     var w = Math.max(1, Math.round(sw * scale)), hh = Math.max(1, Math.round(sh * scale));
     var canvas = document.createElement('canvas'); canvas.width = w; canvas.height = hh;
@@ -3736,8 +3776,10 @@
       showAlert(pmsg, 'error', '');
       var up = null;
       try {
+        var jf = await avatarFile(f, 'avatar.jpg');
+        file.value = ''; if (!jf) return;
         toast('Uploading picture…');
-        up = await uploadFile(await imageToJpegFile(f, L.avatarEdge || 256, 0.85, true, 'avatar.jpg'));
+        up = await uploadFile(jf);
         await saveProfile({ avatarFileId: up.$id });
         paintAvatar(); toast('Picture updated.');
       } catch (e) {
@@ -4607,7 +4649,7 @@
     if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
       avatarUrl: avatarUrl, profileFacts: profileFacts,
-      uploadPicture: async function (file) { var f = await imageToJpegFile(file, L.avatarEdge || 256, 0.85, true, 'family.jpg'); var up = await uploadFile(f); return up.$id; },
+      uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,

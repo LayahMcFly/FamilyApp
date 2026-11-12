@@ -1545,3 +1545,12 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 /* v1.50.21: library chips ("Saved for later" ...) keep the page margin; room for the selected ring */
 .main > .chips { margin-left: 12px !important; margin-right: 12px !important; padding: 4px 4px 10px !important; box-sizing: border-box; max-width: calc(100% - 24px); }
 .main > .chips .chip[aria-pressed="true"] { outline: 0; box-shadow: none; }
+
+/* v1.50.33 picture cropper */
+.crop-body { display: grid; justify-items: center; gap: 12px; }
+.crop-frame { position: relative; overflow: hidden; border-radius: 12px; background: #111; touch-action: none; cursor: grab; max-width: 100%; }
+.crop-img { position: absolute; left: 0; top: 0; max-width: none; user-select: none; -webkit-user-drag: none; pointer-events: none; transform-origin: 0 0; }
+.crop-mask { position: absolute; inset: 0; pointer-events: none; border-radius: 50%; box-shadow: 0 0 0 400px rgba(0,0,0,.55), inset 0 0 0 2px rgba(255,255,255,.9); }
+.crop-zoom { display: flex; align-items: center; gap: 10px; width: 280px; max-width: 100%; }
+.crop-zoom input { flex: 1; }
+.crop-body .btn { width: 280px; max-width: 100%; }
