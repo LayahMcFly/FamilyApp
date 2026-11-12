@@ -1770,6 +1770,18 @@
       if (others.length) items.push({ type: 'clike', postId: c.postId, at: c.$updatedAt, text: (others.length === 1 ? nm(others[0]) : nm(others[0]) + ' and ' + (others.length - 1) + ' more') + ' liked your comment' });
     });
     trend.items.forEach(function (it) { if (mine[it.post.$id]) items.push({ type: 'trend', postId: it.post.$id, at: it.at, text: 'Your post is trending in the family' }); });
+    // New members: someone accepted their invitation and joined this family in the last 30 days.
+    try {
+      var ms = (await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] })).memberships;
+      var mine0 = ms.filter(function (m) { return m.userId === me && m.joined; })[0];
+      var cutoff = Math.max(Date.now() - 30 * 86400000, mine0 ? new Date(mine0.joined).getTime() : 0);   // only people who joined after I did
+      var joined = ms.filter(function (m) { return m.confirm && m.userId !== me && m.joined && new Date(m.joined).getTime() > cutoff; });
+      await ensureProfiles(joined.map(function (m) { return m.userId; }));
+      joined.forEach(function (m) {
+        var pr = S.profiles.get(m.userId), name = (pr && pr.displayName) || m.userName || 'A new family member';
+        items.push({ type: 'join', href: '#/profile/' + m.userId, at: m.joined, text: name + ' accepted the invitation and joined ' + famName() });
+      });
+    } catch (e) { /* the list of people is not available right now; the other entries still show */ }
     items.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     return items.slice(0, 60);
   }
@@ -1793,18 +1805,18 @@
 
   VIEWS.activity = async function (main, token) {
     main.appendChild(h('h1', { text: 'Activity' }));
-    main.appendChild(h('p', { class: 'muted small', text: 'Likes and comments on your posts, likes on your comments, and when a post of yours is trending. These show while the app is open; the app cannot send alerts when it is closed.' }));
+    main.appendChild(h('p', { class: 'muted small', text: 'Likes and comments on your posts, likes on your comments, when a post of yours is trending, and when someone new joins the family. These show while the app is open; the app cannot send alerts when it is closed.' }));
     var box = h('div', { class: 'activity' }, spinnerLine('Loading…'));
     main.appendChild(box);
     var items = await getActivity();
     if (token !== S.nav) return;
     var seen = seenAt();
     clear(box);
-    if (!items.length) box.appendChild(h('div', { class: 'empty' }, h('p', { text: 'Nothing yet. When someone likes or comments on your post, it shows up here.' })));
+    if (!items.length) box.appendChild(h('div', { class: 'empty' }, h('p', { text: 'Nothing yet. When someone likes or comments on your post, or a new person joins the family, it shows up here.' })));
     items.forEach(function (it) {
       var fresh = new Date(it.at).getTime() > seen;
-      box.appendChild(h('a', { class: 'act-item' + (fresh ? ' fresh' : ''), href: '#/post/' + it.postId },
-        h('span', { class: 'act-ico' }, icon(it.type === 'comment' ? 'comment' : it.type === 'trend' ? 'flame' : 'heart')),
+      box.appendChild(h('a', { class: 'act-item' + (fresh ? ' fresh' : ''), href: it.href || ('#/post/' + it.postId) },
+        h('span', { class: 'act-ico' }, icon(it.type === 'comment' ? 'comment' : it.type === 'trend' ? 'flame' : it.type === 'join' ? 'users' : 'heart')),
         h('span', { class: 'act-text', text: it.text }),
         h('span', { class: 'small muted', text: timeAgo(it.at) })));
     });
