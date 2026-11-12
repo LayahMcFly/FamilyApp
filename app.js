@@ -1952,7 +1952,7 @@
   // The dialog for adding or editing one link. item is null when adding.
   function linkDialog(item, onDone) {
     var dlg = h('dialog', { 'aria-labelledby': 'ld-title' });
-    var url = h('input', { type: 'url', inputmode: 'url', 'aria-label': 'Link', placeholder: 'Paste a link', autocomplete: 'off', maxlength: 500 });
+    var url = h('input', { type: 'text', inputmode: 'url', autocapitalize: 'none', spellcheck: 'false', 'aria-label': 'Link', placeholder: 'Paste a link', autocomplete: 'off', maxlength: 500 });
     var name = h('input', { type: 'text', 'aria-label': 'Name', placeholder: item ? 'Name' : 'Name (filled in for you)', maxlength: 40 });
     url.value = item ? item.u : ''; name.value = item ? item.t : '';
     var msg = h('div'), ok = h('button', { class: 'btn', type: 'submit', text: item ? 'Save' : 'Save link' }), cancel = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel' });

@@ -1535,3 +1535,9 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
 .link-pencil svg { width: 12px; height: 12px; }
 .link-name { width: 100%; font-size: .75rem; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .links-posts-h { margin-top: 6px; }
+
+/* v1.50.20: saved links sit inside the page margins; the link box looks like the other boxes */
+.main > .links-section, .main > .links-posts-h { margin-left: 12px; margin-right: 12px; }
+.main > .links-section { margin-top: 14px; }
+.link-row { padding-inline: 2px; }
+dialog form input[type="text"][inputmode="url"] { width: 100%; }
