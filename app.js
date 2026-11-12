@@ -4060,9 +4060,40 @@
     g4: ['Night', 'linear-gradient(135deg,#0f2027,#2c5364)'], g5: ['Candy', 'linear-gradient(135deg,#a18cd1,#fbc2eb)'], g6: ['Graphite', 'linear-gradient(135deg,#232526,#555a5c)'] };
   var PAGE_FONTS = { sans: ['Clean', 'inherit'], serif: ['Storybook', 'Georgia, "Times New Roman", serif'], rounded: ['Rounded', 'Nunito, "Trebuchet MS", system-ui, sans-serif'], script: ['Handwritten', '"Dancing Script", "Segoe Script", cursive'], mono: ['Typewriter', 'ui-monospace, Menlo, Consolas, monospace'] };
   var PAGE_ROUND = { sm: ['Square', '6px'], md: ['Soft', '16px'], lg: ['Round', '28px'] };
-  var PAGE_BORDERS = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', double: 'Double', rainbow: 'Rainbow', stripes: 'Blanket stripes', zigzag: 'Zigzag quilt edge', checker: 'Patchwork checks', stitched: 'Stitched seam', ridge: 'Ridged frame', lace: 'Embroidered lace', quilted: 'Quilted ruffle', rope: 'Golden rope', crochet: 'Crochet scallops', floral: 'Flower wreath and fringe', baroque: 'Baroque scrolls', none: 'No border' };
-  var PAGE_ORN = { lace: ['#c9a46a', '#f6ecd6'], quilted: ['#f4b4c8', '#ffffff'], crochet: ['#b79ae0', '#efe6ff'], rope: ['#b8893a', '#7a5a22'], floral: ['#6f9bd8', '#f7efd9'], baroque: ['#7b2332', '#d4af5a'] };   // [colour, second colour] each ornate edge starts with
-  var PAGE_PATTERNS = { stripes: 1, zigzag: 1, checker: 1, stitched: 1, ridge: 1 };
+  var PAGE_BORDERS = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', double: 'Double', rainbow: 'Rainbow', lace: 'Embroidered lace', quilted: 'Quilted ruffle', rope: 'Golden rope', crochet: 'Crochet scallops', floral: 'Flower wreath and fringe', baroque: 'Baroque scrolls', none: 'No border' };
+  var PAGE_ORN = { lace: ['#c9a46a', '#f6ecd6', 24], quilted: ['#f4b4c8', '#ffffff', 20], crochet: ['#b79ae0', '#efe6ff', 22], rope: ['#b8893a', '#7a5a22', 26], floral: ['#6f9bd8', '#f7efd9', 26], baroque: ['#7b2332', '#d4af5a', 24] };   // [colour, second colour, band width in px] each ornate edge starts with
+  /* The ornate edges are small pictures cut into nine pieces (4 corners + 4 sides), so the decoration stays in the border band and never covers the text. */
+  function ornSvg(id, c1, c2) {
+    function rep(n, f) { var o = '', k; for (k = 0; k < n; k++) o += f(k); return o; }
+    var sc = 'a7.5 7.5 0 0 1 15 0a7.5 7.5 0 0 1 15 0';
+    function flower(cx, cy) { return rep(5, function (k) { var a = k * 1.2566; return '<circle cx="' + (cx + 3.3 * Math.cos(a)).toFixed(2) + '" cy="' + (cy + 3.3 * Math.sin(a)).toFixed(2) + '" r="2.7" fill="' + c1 + '"/>'; }) + '<circle cx="' + cx + '" cy="' + cy + '" r="2" fill="#f0c24b"/>'; }
+    var E = '', C = '', B = null;
+    if (id === 'lace') {
+      E = '<path fill="' + c2 + '" d="M30 30V8' + sc + 'V30z"/><path d="M30 24H60" stroke="' + c1 + '" stroke-width="1.2" stroke-dasharray="3 2" fill="none"/><circle cx="37.5" cy="14" r="3" fill="#e58aaf"/><circle cx="52.5" cy="14" r="3" fill="#7ea6e0"/><ellipse cx="45" cy="14" rx="2.8" ry="1.2" fill="#7fa06a"/>';
+      C = '<g fill="' + c2 + '"><circle cx="9" cy="9" r="9"/><circle cx="22.5" cy="7.5" r="7.5"/><circle cx="7.5" cy="22.5" r="7.5"/><rect x="8" y="8" width="22" height="22"/></g><path d="M30 24H24V30" stroke="' + c1 + '" stroke-width="1.2" stroke-dasharray="3 2" fill="none"/><circle cx="14" cy="14" r="2.4" fill="#e58aaf"/>';
+    } else if (id === 'quilted') {
+      var dia = rep(7, function (k) { var x = k * 15 - 15; return '<path d="M' + x + ' 30L' + (x + 22) + ' 8M' + x + ' 8L' + (x + 22) + ' 30" stroke="' + c2 + '" stroke-width="1" opacity=".9" fill="none"/>'; });
+      E = '<path fill="' + c1 + '" d="M30 30V4' + rep(4, function () { return 'a3.75 3.75 0 0 1 7.5 0'; }) + 'V30z"/>' + dia + '<path d="M30 26H60" stroke="' + c2 + '" stroke-width="1.2" stroke-dasharray="2 1" fill="none"/>';
+      C = '<g fill="' + c1 + '"><rect x="4" y="4" width="26" height="26" rx="5"/><circle cx="5" cy="5" r="5"/>' + rep(3, function (k) { return '<circle cx="' + (11.25 + 7.5 * k) + '" cy="4" r="3.75"/><circle cx="4" cy="' + (11.25 + 7.5 * k) + '" r="3.75"/>'; }) + '</g>' + dia + '<path d="M30 26H26V30" stroke="' + c2 + '" stroke-width="1.2" fill="none"/>';
+    } else if (id === 'crochet') {
+      E = '<path fill="' + c1 + '" d="M30 30V8' + sc + 'V30z"/><circle cx="37.5" cy="8" r="4.2" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><circle cx="52.5" cy="8" r="4.2" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><path d="M30 22H60" stroke="' + c2 + '" stroke-width="1.8" stroke-dasharray="0 3" stroke-linecap="round" fill="none"/>';
+      C = '<g fill="' + c1 + '"><circle cx="9" cy="9" r="9"/><circle cx="22.5" cy="7.5" r="7.5"/><circle cx="7.5" cy="22.5" r="7.5"/><rect x="8" y="8" width="22" height="22"/></g><circle cx="22.5" cy="8" r="4.2" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><circle cx="8" cy="22.5" r="4.2" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><path d="M30 22H22V30" stroke="' + c2 + '" stroke-width="1.8" stroke-dasharray="0 3" stroke-linecap="round" fill="none"/>';
+    } else if (id === 'rope') {
+      var twist = rep(6, function (k) { return '<path d="M' + (24 + 6 * k) + ' 12L' + (30 + 6 * k) + ' 0" stroke="' + c1 + '" stroke-width="3.6" fill="none"/>'; });
+      E = '<rect x="30" y="0" width="30" height="12" fill="' + c2 + '"/>' + twist;
+      C = '<g><rect x="0" y="0" width="30" height="12" fill="' + c2 + '"/>' + rep(6, function (k) { return '<path d="M' + (-6 + 6 * k) + ' 12L' + (6 * k) + ' 0" stroke="' + c1 + '" stroke-width="3.6" fill="none"/>'; }) + '</g><g transform="matrix(0 1 1 0 0 0)"><rect x="0" y="0" width="30" height="12" fill="' + c2 + '"/>' + rep(6, function (k) { return '<path d="M' + (-6 + 6 * k) + ' 12L' + (6 * k) + ' 0" stroke="' + c1 + '" stroke-width="3.6" fill="none"/>'; }) + '</g><path d="M15 28C15 19 20 14 29 14M29 14C26 14 24 16 24 18C24 20 27 20 27 18" stroke="' + c1 + '" stroke-width="1.7" fill="none" stroke-linecap="round"/>';
+    } else if (id === 'floral') {
+      E = '<path fill="' + c2 + '" d="M30 30V8' + sc + 'V30z"/>' + flower(37.5, 16) + flower(52.5, 16) + '<ellipse cx="45" cy="16" rx="2.8" ry="1.2" fill="#7fa06a"/>';
+      C = '<g fill="' + c2 + '"><circle cx="9" cy="9" r="9"/><circle cx="22.5" cy="7.5" r="7.5"/><circle cx="7.5" cy="22.5" r="7.5"/><rect x="8" y="8" width="22" height="22"/></g>' + flower(15, 15);
+      B = '<rect x="30" y="8" width="30" height="22" fill="' + c2 + '"/>' + rep(10, function (k) { return '<path d="M' + (31.5 + 3 * k) + ' 0V9" stroke="#cdbf9a" stroke-width="1.3" fill="none"/>'; }) + flower(37.5, 19) + flower(52.5, 19) + '<ellipse cx="45" cy="19" rx="2.8" ry="1.2" fill="#7fa06a"/>';
+    } else if (id === 'baroque') {
+      E = '<rect x="30" y="4" width="30" height="26" fill="' + c1 + '"/>' + rep(5, function (k) { return '<circle cx="' + (33 + 6 * k) + '" cy="2" r="1.3" fill="' + c2 + '"/>'; }) + '<path d="M30 25H60" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><path d="M30 14.5C35 8 41 8 44 13C46 17 50 17 52 14C55 9 58 9 60 14.5" stroke="' + c2 + '" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+      C = '<rect x="4" y="4" width="26" height="26" rx="6" fill="' + c1 + '"/><circle cx="7" cy="7" r="5" fill="' + c1 + '" stroke="' + c2 + '" stroke-width="1.2"/><path d="M30 25H25V30" stroke="' + c2 + '" stroke-width="1.2" fill="none"/><path d="M10 24C10 16 15 11 24 10M24 10C21 10 19 12 19 14C19 16 22 16 22 14" stroke="' + c2 + '" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+    }
+    function piece(x, inner, tf) { return '<g' + (tf ? ' transform="' + tf + '"' : '') + '><svg x="' + x + '" y="0" width="30" height="30" viewBox="' + x + ' 0 30 30" overflow="hidden">' + inner + '</svg></g>'; }
+    var FLIPY = 'translate(0 90) scale(1 -1)';
+    return "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'>" + piece(0, C) + piece(0, C, 'translate(90 0) scale(-1 1)') + piece(0, C, FLIPY) + piece(0, C, 'translate(90 90) scale(-1 -1)') + piece(30, E) + piece(30, B || E, FLIPY) + piece(30, E, 'matrix(0 1 1 0 0 0)') + piece(30, E, 'matrix(0 1 -1 0 90 0)') + '</svg>';
+  }
   function pageStyleOf(profile) {
     var c = aboutOf(profile).filter(function (x) { return x && x.key === PAGE_KEY; })[0], st = {};
     ((c && c.items) || []).forEach(function (it) { var i = String(it).indexOf(':'); if (i > 0) st[it.slice(0, i)] = it.slice(i + 1); });
@@ -4070,8 +4101,8 @@
   }
   function pageItems(st) { return Object.keys(st).filter(function (k) { return st[k]; }).map(function (k) { return k + ':' + st[k]; }); }
   function applyPageStyle(el, st) {
-    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-border2', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--grad', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
-    ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-border', 'pg-accent', 'pg-pat', 'pg-p-stripes', 'pg-p-zigzag', 'pg-p-checker', 'pg-p-stitched', 'pg-p-ridge', 'pgo', 'pg-scal', 'pg-o-lace', 'pg-o-quilted', 'pg-o-rope', 'pg-o-crochet', 'pg-o-floral', 'pg-o-baroque'].forEach(function (cl) { el.classList.remove(cl); });
+    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-border2', '--pg-bimg', '--ow', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--grad', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
+    ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-border', 'pg-accent', 'pgo2'].forEach(function (cl) { el.classList.remove(cl); });
     if (!st || !Object.keys(st).length) return;
     el.classList.add('pg-custom');
     if (st.bg) { el.classList.add('pg-bg'); el.style.setProperty('--pg-bg', PAGE_GRADS[st.bg] ? PAGE_GRADS[st.bg][1] : st.bg); }
@@ -4080,8 +4111,11 @@
       el.classList.add('pg-border');
       el.style.setProperty('--pg-bwidth', (st.bwidth || '2') + 'px');
       if (bs === 'rainbow') el.classList.add('pg-rainbow');
-      else if (PAGE_ORN[bs]) { el.classList.add('pgo', 'pg-o-' + bs); if (bs === 'lace' || bs === 'quilted' || bs === 'crochet') el.classList.add('pg-scal'); el.style.setProperty('--pg-border', st.border || PAGE_ORN[bs][0]); el.style.setProperty('--pg-border2', st.border2 || PAGE_ORN[bs][1]); }
-      else if (PAGE_PATTERNS[bs]) { el.classList.add('pg-pat', 'pg-p-' + bs); el.style.setProperty('--pg-border', st.border || '#7c5cff'); el.style.setProperty('--pg-border2', st.border2 || '#f6e7c8'); }
+      else if (PAGE_ORN[bs]) {
+        var o = PAGE_ORN[bs], w = Math.max(8, o[2] + ((Number(st.bwidth) || 2) - 2) * 2);
+        el.classList.add('pgo2'); el.style.setProperty('--ow', w + 'px');
+        el.style.setProperty('--pg-bimg', 'url("data:image/svg+xml,' + encodeURIComponent(ornSvg(bs, st.border || o[0], st.border2 || o[1])) + '")');
+      }
       else { el.style.setProperty('--pg-bstyle', bs); el.style.setProperty('--pg-border', st.border || '#7c5cff'); }
     }
     if (st.accent) {
@@ -4093,7 +4127,7 @@
     el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
-  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|border2:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none|stripes|zigzag|checker|stitched|ridge|lace|quilted|rope|crochet|floral|baroque)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
+  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|border2:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none|lace|quilted|rope|crochet|floral|baroque)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
   function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
     var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
     return l.map(function (x) {
@@ -4113,7 +4147,8 @@
     var prev = h('div', { class: 'profile-page pd-preview', 'aria-hidden': 'true' },
       h('div', { class: 'pd-pv-head' }, avatarEl(S.profile, 'sm'), h('strong', { text: (S.profile && S.profile.displayName) || 'You' }), h('span', { class: 'small muted', text: 'Preview' })),
       h('div', { class: 'gal-bar' }, h('div', { class: 'gal-tabs' }, ['Videos 3', 'Pictures 8', 'Posts 12'].map(function (t, i) { return h('button', { class: 'gal-tab', type: 'button', tabindex: '-1', 'aria-selected': i === 0 ? 'true' : 'false', text: t }); }))),
-      h('div', { class: 'card' }, h('h2', { text: 'A card on my page' }), h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', tabindex: '-1', text: 'Like' }), h('button', { class: 'btn secondary', type: 'button', tabindex: '-1', text: 'Share' }))));
+      h('div', { class: 'card' }, h('h2', { text: 'A card on my page' }), h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', tabindex: '-1', text: 'Like' }), h('button', { class: 'btn secondary', type: 'button', tabindex: '-1', text: 'Share' }))),
+      h('button', { class: 'btn secondary block', type: 'button', tabindex: '-1', text: 'Edit profile' }));
     function live() { applyPageStyle(page, st); applyPageStyle(prev, st); }
     function setKey(k, v) { if (v) st[k] = v; else delete st[k]; live(); paint(); }
     function swatches(key, list, label) {
@@ -4188,7 +4223,7 @@
         if (reco.length) bB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('border', reco, 'Border')));
         var orn = PAGE_ORN[st.bstyle];
         bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Color' }), colorInput('border', 'Border color', orn ? orn[0] : '#7c5cff')));
-        if (PAGE_PATTERNS[st.bstyle] || orn) bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Second color' }), colorInput('border2', 'Second border color', orn ? orn[1] : '#f6e7c8')));
+        if (orn) bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Second color' }), colorInput('border2', 'Second border color', orn ? orn[1] : '#f6e7c8')));
       }
       body.appendChild(bB);
       // accent
