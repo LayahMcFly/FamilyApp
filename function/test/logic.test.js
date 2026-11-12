@@ -857,3 +857,14 @@ test('profile banner: a colour or a picture/GIF is stored, checked, and the old 
   assert.equal((await save(['color:#445566'])).status, 200);
   assert.equal(s.world.files.ban1, undefined, 'the replaced banner file is deleted');
 });
+
+test('page style is stored when valid and refused when not', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  const save = (items) => s.call(s.alice, { action: 'saveAbout', familyId: 'famA', about: [{ key: 'pagestyle', title: 'Page', items }] });
+  assert.equal((await save(['bg:g2', 'border:#aa00ff', 'bstyle:dashed', 'bwidth:3', 'font:serif', 'round:lg', 'accent:#112233'])).status, 200);
+  assert.equal((await save(['bstyle:zigzag'])).status, 400);
+  assert.equal((await save(['bg:red'])).status, 400);
+  assert.equal((await save(['bwidth:9'])).status, 400);
+  assert.equal((await save(['font:serif', 'font:mono'])).status, 400);
+});

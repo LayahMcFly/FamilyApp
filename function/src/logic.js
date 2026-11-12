@@ -587,7 +587,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     async saveAbout({ user, body }) {
       const { familyId } = await requireMember(user, body.familyId);
       const list = body.about;
-      if (!Array.isArray(list) || list.filter((c) => !(c && (c.key === 'ringcolors' || c.key === 'address' || c.key === 'banner'))).length > LIMITS.aboutCategories || list.length > LIMITS.aboutCategories + 3) throw bad(`You can have up to ${LIMITS.aboutCategories} categories.`);   // the hidden "ringcolors" entry (own circle colors) does not count
+      if (!Array.isArray(list) || list.filter((c) => !(c && (c.key === 'ringcolors' || c.key === 'address' || c.key === 'banner' || c.key === 'pagestyle'))).length > LIMITS.aboutCategories || list.length > LIMITS.aboutCategories + 4) throw bad(`You can have up to ${LIMITS.aboutCategories} categories.`);   // the hidden "ringcolors" entry (own circle colors) does not count
       const clean = list.map((c, i) => {
         if (!c || typeof c !== 'object') throw bad('A category is not valid.');
         const title = textOf(c.title ?? '', 'Category name', { min: 1, max: LIMITS.aboutTitleMax });
@@ -602,6 +602,13 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       const bannerOf = (arr) => { const b = Array.isArray(arr) ? arr.find((x) => x && x.key === 'banner') : null; return b && Array.isArray(b.items) && typeof b.items[0] === 'string' ? b.items[0] : ''; };
       let oldAbout = []; try { oldAbout = JSON.parse(existing.about || '[]'); } catch (e) { oldAbout = []; }
       const oldBanner = bannerOf(oldAbout), newBanner = bannerOf(clean);
+      // The look of the person's own page: a few allowed "name:value" settings (background, border, accent, font, corners).
+      const pg = clean.find((c) => c.key === 'pagestyle');
+      if (pg) {
+        const okItem = (x) => /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/.test(x);
+        const names = pg.items.map((x) => x.split(':')[0]);
+        if (!pg.items.every(okItem) || new Set(names).size !== names.length) throw bad('That page style is not valid.');
+      }
       if (newBanner && !/^(color:#[0-9a-fA-F]{6}|file:[A-Za-z0-9._-]{1,34})$/.test(newBanner)) throw bad('That banner is not valid.');
       if (newBanner !== oldBanner && newBanner.startsWith('file:')) await claimFile(user, familyId, newBanner.slice(5), 'banner');
       const json = JSON.stringify(clean);

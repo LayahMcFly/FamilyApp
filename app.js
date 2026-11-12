@@ -1065,6 +1065,7 @@
       if (c.key !== 'colors') return;
       (c.items || []).forEach(function (it) {
         var t = String(it || '').trim().toLowerCase().replace(/\s+/g, '');
+        if (t === 'rainbow' || t === 'rainbows') { if (out.indexOf('rainbow') === -1) out.unshift('rainbow'); return; }   // "rainbow" is a real rainbow, not a color name
         if (t && out.length < 2 && window.CSS && CSS.supports('color', t) && t !== 'inherit' && t !== 'initial' && t !== 'unset' && t !== 'currentcolor') out.push(t);
       });
     });
@@ -1073,6 +1074,10 @@
   function paintInitialAvatar(el, profile) {
     var cols = profile ? favoriteColors(profile) : [];
     if (!cols.length) return;   // theme gradient from the stylesheet
+    if (cols[0] === 'rainbow') {
+      el.style.setProperty('--av-fill', 'linear-gradient(135deg, #ff3b6b, #ff8a1f, #e6b800, #2fbf6c, #22a8ff, #7c4dff, #e040fb)');
+      el.style.color = '#fff'; return;
+    }
     var a = cols[0], b = cols[1] || 'color-mix(in srgb, ' + a + ' 65%, #000)';
     el.style.setProperty('--av-fill', 'linear-gradient(135deg, ' + a + ', ' + b + ')');   // fills only the inner circle; the ring around it keeps its own colours
     var rgb = rgbOf(a), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0;
@@ -3547,7 +3552,11 @@
   var RING_KEY = 'ringcolors';
   var ADDR_KEY = 'address';   // also hidden from the About lists: one optional line, shown on the family tree
   var BANNER_KEY = 'banner';   // hidden too: "color:#rrggbb" or "file:<id>" (a picture or a looping GIF) shown at the top of the profile
-  function visibleAbout(profile) { return aboutOf(profile).filter(function (c) { return c && c.key !== RING_KEY && c.key !== ADDR_KEY && c.key !== BANNER_KEY; }); }
+  var PAGE_KEY = 'pagestyle';   // hidden as well: how the person decorated their own page (background, border, accent, font, corners)
+  var HIDDEN_KEYS = [RING_KEY, ADDR_KEY, BANNER_KEY, PAGE_KEY];
+  function visibleAbout(profile) { return aboutOf(profile).filter(function (c) { return c && HIDDEN_KEYS.indexOf(c.key) === -1; }); }
+  // The hidden categories to carry along whenever the About list is saved (except the ones being replaced).
+  function hiddenCats(profile, except) { return aboutOf(profile).filter(function (c) { return c && HIDDEN_KEYS.indexOf(c.key) !== -1 && (except || []).indexOf(c.key) === -1; }); }
   function bannerCat(profile) { return aboutOf(profile).filter(function (c) { return c && c.key === BANNER_KEY; }); }
   function bannerValue(profile) {
     var c = bannerCat(profile)[0], v = c && Array.isArray(c.items) && typeof c.items[0] === 'string' ? c.items[0] : '';
@@ -3783,7 +3792,7 @@
     saveBtn.addEventListener('click', function () {
       busy(saveBtn, async function () {
         try {
-          var r = await api('saveAbout', { familyId: S.familyId, about: draft.concat(ringCat(S.profile), addrCat(S.profile), bannerCat(S.profile)) });
+          var r = await api('saveAbout', { familyId: S.familyId, about: draft.concat(hiddenCats(S.profile)) });
           S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
           draft = visibleAbout(S.profile); base = JSON.stringify(draft);
           showAlert(msg, 'ok', 'Saved. Your family can now see it.'); paint();
@@ -3954,12 +3963,136 @@
 
   /* ---------- PROFILE ---------- */
 
+
+  /* ---------- "Customize my page": background, borders, accent, font and corners of a person's own profile page ---------- */
+  var PAGE_GRADS = { g1: ['Sunset', 'linear-gradient(135deg,#ff9a8b,#ff6a88 55%,#ff99ac)'], g2: ['Ocean', 'linear-gradient(135deg,#2193b0,#6dd5ed)'], g3: ['Forest', 'linear-gradient(135deg,#5a8f4a,#a8e063)'],
+    g4: ['Night', 'linear-gradient(135deg,#0f2027,#2c5364)'], g5: ['Candy', 'linear-gradient(135deg,#a18cd1,#fbc2eb)'], g6: ['Graphite', 'linear-gradient(135deg,#232526,#555a5c)'] };
+  var PAGE_FONTS = { sans: ['Clean', 'inherit'], serif: ['Storybook', 'Georgia, "Times New Roman", serif'], rounded: ['Rounded', 'Nunito, "Trebuchet MS", system-ui, sans-serif'], script: ['Handwritten', '"Dancing Script", "Segoe Script", cursive'], mono: ['Typewriter', 'ui-monospace, Menlo, Consolas, monospace'] };
+  var PAGE_ROUND = { sm: ['Square', '6px'], md: ['Soft', '16px'], lg: ['Round', '28px'] };
+  var PAGE_BORDERS = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', double: 'Double', rainbow: 'Rainbow', none: 'No border' };
+  function pageStyleOf(profile) {
+    var c = aboutOf(profile).filter(function (x) { return x && x.key === PAGE_KEY; })[0], st = {};
+    ((c && c.items) || []).forEach(function (it) { var i = String(it).indexOf(':'); if (i > 0) st[it.slice(0, i)] = it.slice(i + 1); });
+    return st;
+  }
+  function pageItems(st) { return Object.keys(st).filter(function (k) { return st[k]; }).map(function (k) { return k + ':' + st[k]; }); }
+  function applyPageStyle(el, st) {
+    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-font', '--pg-radius', '--accent', '--on-accent'].forEach(function (v) { el.style.removeProperty(v); });
+    ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-border', 'pg-accent'].forEach(function (cl) { el.classList.remove(cl); });
+    if (!st || !Object.keys(st).length) return;
+    el.classList.add('pg-custom');
+    if (st.bg) { el.classList.add('pg-bg'); el.style.setProperty('--pg-bg', PAGE_GRADS[st.bg] ? PAGE_GRADS[st.bg][1] : st.bg); }
+    var bs = st.bstyle || (st.border || st.bwidth ? 'solid' : '');
+    if (bs && bs !== 'none') {
+      el.classList.add('pg-border');
+      el.style.setProperty('--pg-bwidth', (st.bwidth || '2') + 'px');
+      if (bs === 'rainbow') el.classList.add('pg-rainbow'); else { el.style.setProperty('--pg-bstyle', bs); el.style.setProperty('--pg-border', st.border || '#7c5cff'); }
+    }
+    if (st.accent) {
+      el.classList.add('pg-accent'); el.style.setProperty('--accent', st.accent);
+      var rgb = rgbOf(st.accent), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0; el.style.setProperty('--on-accent', lum > 170 ? '#1b1230' : '#fff');
+    }
+    if (st.font && PAGE_FONTS[st.font]) el.style.setProperty('--pg-font', PAGE_FONTS[st.font][1]);
+    el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
+  }
+  function pageDesigner(prof, page) {
+    var saved = pageStyleOf(prof), st = Object.assign({}, saved), done = false, cols = [];
+    var dlg = h('dialog', { class: 'sheet-dialog designer', 'aria-labelledby': 'pd-title' }), msg = h('div');
+    function close(revert) { if (revert) applyPageStyle(page, saved); dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(true); });
+    var body = h('div', { class: 'pd-body' });
+    function live() { applyPageStyle(page, st); }
+    function setKey(k, v) { if (v) st[k] = v; else delete st[k]; live(); paint(); }
+    function swatches(key, list, label) {
+      var row = h('div', { class: 'pd-sw', role: 'group', 'aria-label': label });
+      list.forEach(function (col) {
+        var b = h('button', { class: 'ban-sw', type: 'button', 'aria-pressed': st[key] === col ? 'true' : 'false', 'aria-label': label + ' ' + col, title: col, onclick: function () { setKey(key, col); } });
+        b.style.setProperty('background-color', col); row.appendChild(b);
+      });
+      return row;
+    }
+    function colorInput(key, label, fallback) {
+      var inp = h('input', { type: 'color', 'aria-label': label }); inp.value = /^#[0-9a-f]{6}$/i.test(st[key] || '') ? st[key] : fallback;
+      inp.addEventListener('input', function () { st[key] = inp.value.toLowerCase(); live(); });
+      inp.addEventListener('change', function () { paint(); });
+      return inp;
+    }
+    function select(key, map, label, dflt) {
+      var sel = h('select', { 'aria-label': label });
+      Object.keys(map).forEach(function (k) { sel.appendChild(h('option', { value: k, text: Array.isArray(map[k]) ? map[k][0] : map[k] })); });
+      sel.value = st[key] || dflt; sel.addEventListener('change', function () { setKey(key, sel.value === dflt && key !== 'bstyle' ? '' : sel.value); });
+      return sel;
+    }
+    function block(title, hint) { return h('section', { class: 'pd-block' }, h('h3', { text: title }), hint ? h('p', { class: 'small muted', text: hint }) : null); }
+    function paint() {
+      clear(body);
+      var reco = cols.slice(0, 5);
+      // background
+      var bgB = block('Page background', 'The color or gradient behind your cards.'), bgRow = h('div', { class: 'pd-sw', role: 'group', 'aria-label': 'Page background' });
+      bgRow.appendChild(h('button', { class: 'pd-none', type: 'button', 'aria-pressed': !st.bg ? 'true' : 'false', text: 'None', onclick: function () { setKey('bg', ''); } }));
+      Object.keys(PAGE_GRADS).forEach(function (g) {
+        var b = h('button', { class: 'ban-sw', type: 'button', 'aria-pressed': st.bg === g ? 'true' : 'false', 'aria-label': PAGE_GRADS[g][0] + ' gradient', title: PAGE_GRADS[g][0], onclick: function () { setKey('bg', g); } });
+        b.style.setProperty('background-image', PAGE_GRADS[g][1]); bgRow.appendChild(b);
+      });
+      bgB.appendChild(bgRow);
+      if (reco.length) bgB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('bg', reco, 'Background')));
+      bgB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Any color' }), colorInput('bg', 'Page background color', '#7c5cff')));
+      body.appendChild(bgB);
+      // border
+      var bB = block('Border around my posts', 'The line around your cards and the Videos, Pictures and Posts buttons.');
+      bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Style' }), select('bstyle', PAGE_BORDERS, 'Border style', 'solid')));
+      bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Thickness' }), select('bwidth', { 1: '1 px', 2: '2 px', 3: '3 px', 4: '4 px', 5: '5 px', 6: '6 px' }, 'Border thickness', '2')));
+      if (st.bstyle !== 'rainbow') {
+        if (reco.length) bB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('border', reco, 'Border')));
+        bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Color' }), colorInput('border', 'Border color', '#7c5cff')));
+      }
+      body.appendChild(bB);
+      // accent
+      var aB = block('Accent color', 'Buttons, tabs and highlights on your page.');
+      if (reco.length) aB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('accent', reco, 'Accent')));
+      aB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Any color' }), colorInput('accent', 'Accent color', '#0b84f3'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('accent', ''); } })));
+      body.appendChild(aB);
+      // font + corners
+      var fB = block('Text and corners');
+      fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Font' }), select('font', PAGE_FONTS, 'Font', 'sans')));
+      fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Corners' }), select('round', PAGE_ROUND, 'Corner shape', 'md')));
+      body.appendChild(fB);
+    }
+    if (prof.avatarFileId) avatarUrl(prof.avatarFileId).then(paletteFrom).then(function (c) { cols = c; if (!done) paint(); }).catch(function () { /* no suggestions */ });
+    async function save(items) {
+      var list = visibleAbout(S.profile).concat(hiddenCats(S.profile, [PAGE_KEY]), items.length ? [{ key: PAGE_KEY, title: 'Page', items: items }] : []);
+      var r = await api('saveAbout', { familyId: S.familyId, about: list });
+      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
+    }
+    var saveB = h('button', { class: 'btn', type: 'button', text: 'Save my page', onclick: function () { busy(saveB, async function () {
+      try { await save(pageItems(st)); saved = Object.assign({}, st); done = true; close(false); toast('Your page is saved.'); } catch (e) { showAlert(msg, 'error', errText(e)); }
+    }, 'Saving…'); } });
+    var resetB = h('button', { class: 'btn secondary', type: 'button', text: 'Reset to default', onclick: function () { st = {}; live(); paint(); } });
+    dlg.appendChild(h('h2', { id: 'pd-title', text: 'Customize my page' }));
+    dlg.appendChild(h('p', { class: 'small muted', text: 'Changes show on your page right away. Nothing is saved until you press Save.' }));
+    dlg.appendChild(body); dlg.appendChild(msg);
+    dlg.appendChild(h('div', { class: 'stack' }, saveB, resetB, h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: function () { close(true); } })));
+    paint(); document.body.appendChild(dlg); dlg.showModal();
+  }
+
   /* ---------- a person's gallery on their profile: Videos, Pictures and Posts, like a channel page ---------- */
   function galleryCard(uid, own, name) {
     var card = h('section', { class: 'card gallery', 'aria-label': 'Posts' }, h('h2', { text: own ? 'My posts' : name + '\u2019s posts' }));
     var body = h('div', { class: 'gal-body' }, spinnerLine('Loading…'));
     card.appendChild(body);
-    var rows = null, cur = '';
+    var rows = null, cur = '', sort = 'new', pop = null;
+    try { sort = localStorage.getItem('fc_gal_sort') || 'new'; } catch (e) { sort = 'new'; }
+    var SORTS = { new: 'Newest first', old: 'Oldest first', most: 'Most popular', least: 'Least popular' };
+    async function loadPop() {   // likes and comments per post, fetched only when a popularity order is chosen
+      if (pop) return; pop = {};
+      for (var i = 0; i < rows.length; i += 25) { var m = await decorate(rows.slice(i, i + 25)); Object.keys(m).forEach(function (k) { pop[k] = m[k].likes * 1000 + m[k].comments; }); }
+    }
+    function sorted(list) {
+      var l = list.slice();
+      if (sort === 'old') l.reverse();
+      else if (sort === 'most' || sort === 'least') l.sort(function (x, y) { var d = (pop[y.$id] || 0) - (pop[x.$id] || 0); if (sort === 'least') d = -d; return d || (x.$createdAt < y.$createdAt ? 1 : -1); });
+      return l;
+    }
     var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); if (e.target.__load) e.target.__load(); } }); }, { rootMargin: '300px' }) : null;
     function lazy(el, fn) { el.__load = fn; if (io) io.observe(el); else fn(); }
     function thumbImg(box, fileId) {
@@ -3987,10 +4120,18 @@
       tabs.forEach(function (t) {
         bar.appendChild(h('button', { class: 'gal-tab', type: 'button', role: 'tab', 'aria-selected': t.id === cur ? 'true' : 'false', text: t.label + ' ' + t.list.length, onclick: function () { cur = t.id; paint(); } }));
       });
-      body.appendChild(bar);
+      var sel = h('select', { class: 'gal-sort', 'aria-label': 'Sort posts' });
+      Object.keys(SORTS).forEach(function (k) { sel.appendChild(h('option', { value: k, text: SORTS[k] })); });
+      sel.value = sort;
+      sel.addEventListener('change', async function () {
+        sort = sel.value; try { localStorage.setItem('fc_gal_sort', sort); } catch (e) { /* not saved */ }
+        if ((sort === 'most' || sort === 'least') && !pop) { sel.disabled = true; try { await loadPop(); } catch (e) { pop = null; sort = 'new'; toast('Could not sort by popularity right now.'); } }
+        paint();
+      });
+      body.appendChild(h('div', { class: 'gal-bar' }, bar, sel));
       var t = tabs.filter(function (x) { return x.id === cur; })[0], panel = h('div', { class: 'gal-panel gal-' + cur, role: 'tabpanel' });
       if (!t.list.length) panel.appendChild(h('p', { class: 'muted', text: own ? 'Nothing here yet.' : name + ' has not posted any ' + t.label.toLowerCase() + ' yet.' }));
-      t.list.forEach(function (p) {
+      sorted(t.list).forEach(function (p) {
         if (cur === 'videos') {
           var tb = h('div', { class: 'gal-thumb' }, h('span', { class: 'gal-play', 'aria-hidden': 'true', text: '\u25B6' }));
           if (p.mediaFileId) videoFrame(tb, p.mediaFileId);
@@ -4006,7 +4147,7 @@
       body.appendChild(panel);
     }
     listRows('posts', [Query.equal('familyId', [S.familyId]), Query.equal('authorId', [uid]), Query.orderDesc('$createdAt'), Query.limit(100)])
-      .then(function (r) { rows = r.rows; if (!card.isConnected && !card.parentNode) return; paint(); })
+      .then(function (r) { rows = r.rows; return (sort === 'most' || sort === 'least') ? loadPop().catch(function () { pop = null; sort = 'new'; }) : null; }).then(function () { paint(); })
       .catch(function () { clear(body).appendChild(h('p', { class: 'muted small', text: 'The gallery could not load. Try again in a moment.' })); });
     return card;
   }
@@ -4025,6 +4166,8 @@
     var tree = null;
     try { tree = await loadTree(false); } catch (e) { tree = null; }
     if (token !== S.nav) return;
+    var pageHost = main; main = h('div', { class: 'profile-page' }); pageHost.appendChild(main);   // everything below goes into this wrapper, so the page style never leaks to other screens
+    applyPageStyle(main, pageStyleOf(prof));
     var mine = own && !preview;
     main.appendChild(h('h1', { class: 'sr-only', text: own ? 'My profile' : prof.displayName + '’s profile' }));
     if (preview) {
@@ -4047,6 +4190,7 @@
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
     if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
+    if (mine) main.appendChild(h('button', { class: 'btn secondary block', type: 'button', text: 'Customize my page', onclick: function () { pageDesigner(S.profile, main); } }));
     if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/settings/privacy', text: 'My address (private)' }));
     if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block', href: '#/orders', text: 'My orders', onclick: function () { S.ordersFrom = '#/profile'; } }));
     if (!own && !preview) { var addrHolder = h('div'); main.appendChild(addrHolder); addressOnProfile(addrHolder, token, uid); }
@@ -4186,7 +4330,7 @@
     function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page', true) || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
     paintBanner();
     async function saveBanner(item) {
-      var list = visibleAbout(S.profile).concat(ringCat(S.profile), addrCat(S.profile), item ? [{ key: BANNER_KEY, title: 'Banner', items: [item] }] : []);
+      var list = visibleAbout(S.profile).concat(hiddenCats(S.profile, [BANNER_KEY]), item ? [{ key: BANNER_KEY, title: 'Banner', items: [item] }] : []);
       var r = await api('saveAbout', { familyId: fid, about: list });
       S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); paintBanner();
     }
@@ -4232,7 +4376,7 @@
           }
           var av = addrIn.value.trim();
           if (av !== addressOf(S.profile)) {
-            var rr = await api('saveAbout', { familyId: fid, about: visibleAbout(S.profile).concat(ringCat(S.profile), bannerCat(S.profile), av ? [{ key: ADDR_KEY, title: 'Address', items: [av] }] : []) });
+            var rr = await api('saveAbout', { familyId: fid, about: visibleAbout(S.profile).concat(hiddenCats(S.profile, [ADDR_KEY]), av ? [{ key: ADDR_KEY, title: 'Address', items: [av] }] : []) });
             S.profile = Object.assign({}, S.profile, { about: rr.about }); S.profiles.set(S.user.$id, S.profile);
           }
           showAlert(pmsg, 'ok', 'Saved.');
@@ -4465,7 +4609,7 @@
     }
     async function saveLib(list) { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { ringLib: list }) }); }
     async function saveRing(cols) {
-      var list = visibleAbout(S.profile).concat(addrCat(S.profile), bannerCat(S.profile)); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
+      var list = visibleAbout(S.profile).concat(hiddenCats(S.profile, [RING_KEY])); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
       S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); applyRingTheme();
     }
