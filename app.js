@@ -1499,6 +1499,8 @@
     });
     if (!first) { S.main.focus({ preventScroll: true }); window.scrollTo(0, 0); }
     if (name !== 'activity') S.beforeActivity = location.hash || '#/home';
+    var hNow = location.hash || '#/home';   // remember the page I came from, so "back" on a settings page returns there
+    if (hNow !== S.curHash) { S.prevHash = S.curHash || ''; S.curHash = hNow; }
     refreshBadge(false);
   }
 
@@ -3747,7 +3749,12 @@
       main.appendChild(h('div', { class: 'stack' }, h('button', { class: 'btn danger block', type: 'button', text: 'Sign out', onclick: signOut })));
       return;
     }
-    main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/settings', text: 'Settings' })));
+    var fromProfile = /^#\/profile(\/edit)?\/?$/.test(S.settingsFrom || '');
+    if (S.prevHash && !/^#\/settings/.test(S.prevHash)) S.settingsFrom = S.prevHash;
+    fromProfile = /^#\/profile(\/edit)?\/?$/.test(S.settingsFrom || '');
+    main.appendChild(h('p', null, fromProfile
+      ? h('a', { class: 'link-btn back-btn', href: S.settingsFrom, text: /edit/.test(S.settingsFrom) ? 'Edit profile' : 'Profile' })
+      : h('a', { class: 'link-btn back-btn', href: '#/settings', text: 'Settings' })));
     main.appendChild(h('h1', { text: sec.label }));
     if (sec.id === 'me') await settingsAboutMe(main, token);
     else if (sec.id === 'account') settingsAccount(main);
