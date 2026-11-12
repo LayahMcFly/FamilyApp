@@ -1033,6 +1033,7 @@
     c.timers.expire = setInterval(function () { if (C === c && !document.hidden) { repaintHere(c); paintCallBanner(c); } }, 30000);
     // Live updates for calls and call cards must not depend on realtime alone: ask every few seconds while the chat is open.
     c.timers.callPoll = setInterval(function () { if (C === c && !document.hidden) { loadCalls(c); if (c.cur && (!c.dbg || !c.dbg.anyCount)) catchUp(c); } }, 5000);
+    c.timers.typePoll = setInterval(function () { if (C === c && !document.hidden && c.cur && !(c.live && c.dbg && c.dbg.anyCount)) loadTyping(c); }, 2500);
     c.timers.dbg = setInterval(function () { if (C === c && !document.hidden && dbgOn()) paintDebug(c); }, 2000);
     listen(c, document, 'visibilitychange', function () { if (!document.hidden) { beat(c); loadPresence(c); } });
   }
@@ -1072,13 +1073,24 @@
     if (out.length > 3) return out.length + ' people are typing…';
     return out.map(function (o) { return o.name + ' ' + o.text; }).join(' · ') + '…';
   }
+  /** When live updates are not reaching this device, look for "is typing" rows every few seconds instead. */
+  async function loadTyping(c) {
+    if (!c.cur) return;
+    try {
+      var id = c.cur.id, r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.equal('convId', [id]), X.Query.limit(20)] });
+      if (C !== c || !c.cur || c.cur.id !== id) return;
+      var fresh = {};
+      (r.rows || r.documents || []).forEach(function (row) { var u = Date.parse(row.until || ''); if (row.familyId === c.famId && row.userId !== c.uid && u > Date.now()) fresh[row.userId] = { text: String(row.text || '').slice(0, 40) || TYPING_DEFAULT, until: u }; });
+      c.typing[id] = fresh; paintTyping(c);
+    } catch (e) { /* the next check tries again */ }
+  }
   function paintTyping(c) {
     var el = document.getElementById('typing-line'); if (!el) return;
     var s = typingLine(c); el.textContent = s; el.hidden = !s;
   }
   /** Tells the server I am typing, at most every 4 seconds, and only while someone could see it (realtime is on). */
   function pingTyping(c, cv, ta) {
-    if (!typingOn() || !c.live || !ta.value.trim() || /^\s*\//.test(ta.value)) return;
+    if (!typingOn() || !ta.value.trim() || /^\s*\//.test(ta.value)) return;
     var now = Date.now(); if (now - (c.typingSentAt || 0) < 4000) return; c.typingSentAt = now;
     api('chatTyping', { kind: cv.kind, convId: cv.id, text: typingWords() === TYPING_DEFAULT ? '' : typingWords() })
       .then(function (r) { c.typingErr = ''; c.typingOkAt = Date.now(); return r; },
