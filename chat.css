@@ -338,3 +338,15 @@ dialog.cs textarea, dialog.cs input, dialog.cs button, dialog.cs .btn { margin: 
 /* comment buttons (Reply, Pin, Delete) sit on one line, same baseline */
 .comments .comment-actions { display: flex !important; align-items: center !important; flex-wrap: wrap; gap: 4px 18px !important; }
 .comments .comment-actions .link-btn { margin: 0 !important; padding: 6px 0 !important; transform: none !important; rotate: none !important; translate: none !important; line-height: 1.2 !important; vertical-align: baseline; align-self: center !important; position: static !important; top: auto !important; }
+
+/* Layout: my messages sit on the left (avatar, name and time on the left); everyone else's sit on the right. */
+.chat-root .msg:not(.mine), .chat-app .msg:not(.mine), .msg:not(.mine) { flex-direction: row-reverse; text-align: right; }
+.msg:not(.mine) .msg-head { flex-direction: row-reverse; justify-content: flex-start; }
+.msg:not(.mine) .msg-main { display: flex; flex-direction: column; align-items: flex-end; }
+.msg:not(.mine) .msg-bubble { display: block; }
+.msg:not(.mine) .msg-reacts { justify-content: flex-end; }
+.msg:not(.mine) .msg-reply { flex-direction: row-reverse; border-left: 0; border-right: 3px solid var(--accent); padding: 0 8px 0 0; text-align: right; }
+.msg:not(.mine) .msg-more { right: auto; left: 12px; }
+@media (hover: none) { .msg:not(.mine) .msg-more { left: 6px; right: auto; } }
+.msg:not(.mine) .msg-text { text-align: right; }
+.msg:not(.mine) .link-card, .msg:not(.mine) .gif-img { align-self: flex-end; text-align: left; }
