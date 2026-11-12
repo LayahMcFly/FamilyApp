@@ -1408,38 +1408,6 @@
     var name = field('familyName', 'Family name', 'text', { required: true, maxlength: 60, placeholder: 'The Rivera family', hint: 'Everyone you invite will see this name.' });
     var msg = h('div');
     var btn = h('button', { class: 'btn block', type: 'submit', text: 'Create family' });
-    // Banner: a colour, or a picture / looping GIF. Saved as soon as it is chosen, like the profile picture.
-    var banBox = h('div', { class: 'ban-edit' }), banFile = h('input', { id: 'newBanner', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a banner picture' });
-    var banColor = h('input', { type: 'color', id: 'banColor', 'aria-label': 'Banner colour' }); banColor.value = (bannerValue(S.profile) && bannerValue(S.profile).color) || '#7c5cff';
-    var banRemove = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove banner' });
-    var banUseColor = h('button', { class: 'btn secondary small', type: 'button', text: 'Use this colour' });
-    function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page') || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
-    paintBanner();
-    async function saveBanner(item) {
-      var list = visibleAbout(S.profile).concat(ringCat(S.profile), addrCat(S.profile), item ? [{ key: BANNER_KEY, title: 'Banner', items: [item] }] : []);
-      var r = await api('saveAbout', { familyId: fid, about: list });
-      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); paintBanner();
-    }
-    banUseColor.addEventListener('click', function () { busy(banUseColor, async function () {
-      try { await saveBanner('color:' + banColor.value.toLowerCase()); toast('Banner saved.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); }
-    }); });
-    banRemove.addEventListener('click', function () {
-      if (!bannerValue(S.profile)) return toast('You have no banner to remove.');
-      busy(banRemove, async function () { try { await saveBanner(''); toast('Banner removed.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); } });
-    });
-    banFile.addEventListener('change', async function () {
-      var f = banFile.files[0]; if (!f) return; showAlert(pmsg, 'error', '');
-      var up = null;
-      try {
-        var bf = await bannerFile(f); toast('Uploading banner…');
-        up = await uploadFile(bf);
-        await saveBanner('file:' + up.$id); up = null; toast('Banner saved.');
-      } catch (e) {
-        if (up) storage.deleteFile({ bucketId: CFG.bucketId, fileId: up.$id }).catch(function () {});
-        showAlert(pmsg, 'error', errText(e));
-      }
-      banFile.value = '';
-    });
     var form = h('form', { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
       var n = name.input.value.trim();
@@ -4048,6 +4016,38 @@
         try { await saveProfile({ avatarFileId: '' }); paintAvatar(); toast('Picture removed.'); }
         catch (e) { showAlert(pmsg, 'error', errText(e)); }
       });
+    });
+    // Banner: a colour, or a picture / looping GIF. Saved as soon as it is chosen, like the profile picture.
+    var banBox = h('div', { class: 'ban-edit' }), banFile = h('input', { id: 'newBanner', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a banner picture' });
+    var banColor = h('input', { type: 'color', id: 'banColor', 'aria-label': 'Banner colour' }); banColor.value = (bannerValue(S.profile) && bannerValue(S.profile).color) || '#7c5cff';
+    var banRemove = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove banner' });
+    var banUseColor = h('button', { class: 'btn secondary small', type: 'button', text: 'Use this colour' });
+    function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page') || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
+    paintBanner();
+    async function saveBanner(item) {
+      var list = visibleAbout(S.profile).concat(ringCat(S.profile), addrCat(S.profile), item ? [{ key: BANNER_KEY, title: 'Banner', items: [item] }] : []);
+      var r = await api('saveAbout', { familyId: fid, about: list });
+      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); paintBanner();
+    }
+    banUseColor.addEventListener('click', function () { busy(banUseColor, async function () {
+      try { await saveBanner('color:' + banColor.value.toLowerCase()); toast('Banner saved.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); }
+    }); });
+    banRemove.addEventListener('click', function () {
+      if (!bannerValue(S.profile)) return toast('You have no banner to remove.');
+      busy(banRemove, async function () { try { await saveBanner(''); toast('Banner removed.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); } });
+    });
+    banFile.addEventListener('change', async function () {
+      var f = banFile.files[0]; if (!f) return; showAlert(pmsg, 'error', '');
+      var up = null;
+      try {
+        var bf = await bannerFile(f); toast('Uploading banner…');
+        up = await uploadFile(bf);
+        await saveBanner('file:' + up.$id); up = null; toast('Banner saved.');
+      } catch (e) {
+        if (up) storage.deleteFile({ bucketId: CFG.bucketId, fileId: up.$id }).catch(function () {});
+        showAlert(pmsg, 'error', errText(e));
+      }
+      banFile.value = '';
     });
     var form = h('form', { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
