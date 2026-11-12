@@ -70,6 +70,7 @@
     plus: ['M12 5v14', 'M5 12h14'],
     shorts: ['M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M10.5 9.5v5l4-2.5z'],
     bookmark: ['M6 4h12v17l-6-4-6 4z'],
+    palette: ['M12 3a9 9 0 1 0 0 18c1.3 0 1.9-.9 1.5-2-.4-1.1.3-2 1.4-2H17a4 4 0 0 0 4-4c0-5-4-10-9-10z', 'M7.8 12.2a.9.9 0 1 0 0-.01', 'M10 7.8a.9.9 0 1 0 0-.01', 'M14.4 7.8a.9.9 0 1 0 0-.01'],
     bag: ['M5 8h14l-1 12H6z', 'M9 8V6.5a3 3 0 0 1 6 0V8'],
     cart: ['M3 4h2.5l2.2 10.5h9.6L19.5 8H6.6', 'M9.5 19.2a.9.9 0 1 0 0-.01', 'M16.5 19.2a.9.9 0 1 0 0-.01'],
     users: ['M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20', 'M10 11a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z', 'M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.3', 'M15.5 4.8a3.2 3.2 0 0 1 0 6.1'],
@@ -1446,6 +1447,7 @@
       h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity', onclick: function (ev) {
         if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/home'; }
       } }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
+      h('a', { class: 'bell theme-btn', id: 'theme-btn', href: '#/settings/appearance', 'aria-label': 'Change theme: light or dark, style and color', title: 'Theme' }, icon('palette')),
       h('a', { class: 'bell saved-btn', id: 'saved-btn', href: '#/saved', 'aria-label': 'Saved posts', title: 'Saved' }, icon('bookmark'))));
     clear(root).appendChild(h('div', { class: 'shell' }, nav, h('div', { class: 'shell-body' }, top, S.main)));
     var n = takeNotice(); if (n) toast(n.textContent);
