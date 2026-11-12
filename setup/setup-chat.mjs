@@ -28,7 +28,7 @@ const schema = {
     indexes: [['idx_familyId', 'key', ['familyId']], ['uniq_channelKey', 'unique', ['channelKey']]]
   },
   chatMessages: {
-    columns: [S('familyId', 36, true), S('convId', 36, true), S('kind', 8, true), S('authorId', 36, true), S('body', 2000, true), S('replyToId', 36, false, ''), S('clientId', 36, true), S('sendKey', 80, true), S('editedAt', 32, false, '')],
+    columns: [S('familyId', 36, true), S('convId', 36, true), S('kind', 8, true), S('authorId', 36, true), S('body', 2000, true), S('replyToId', 36, false, ''), S('clientId', 36, true), S('sendKey', 80, true), S('editedAt', 32, false, ''), S('media', 200, false, '')],
     indexes: [['idx_convId', 'key', ['convId']], ['idx_conv_author', 'key', ['convId', 'authorId']], ['idx_authorId', 'key', ['authorId']], ['idx_familyId', 'key', ['familyId']], ['uniq_sendKey', 'unique', ['sendKey']]]
   },
   chatReactions: {

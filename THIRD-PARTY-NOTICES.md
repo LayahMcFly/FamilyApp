@@ -43,7 +43,7 @@ The emoji names and groups in `emoji-data.js` are derived from the npm package `
 
 ## GIFs (GIPHY)
 
-The optional GIF picker calls the GIPHY API through the family server. GIFs are © their respective owners and are shown with a "Powered by GIPHY" credit as GIPHY's terms ask. No GIPHY code is included in this site.
+The optional GIF picker calls the GIPHY API directly from each person's browser (GIPHY's rules do not allow proxying). GIFs are © their respective owners and are shown with a "Powered by GIPHY" credit as GIPHY's terms ask. No GIPHY code is included in this site.
 
 ## What your own code adds
 

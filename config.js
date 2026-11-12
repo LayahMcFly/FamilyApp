@@ -9,8 +9,12 @@
 window.FAMILY_CONFIG = {
   appName: "Family Circle",
 
+  // GIF and sticker search (GIPHY). This key is PUBLIC by design: GIPHY keys are used in the browser, so anyone can read it. Leave it empty to turn GIFs off.
+  // Get one free at developers.giphy.com (see CHAT-GUIDE.md, step 5b). Never put any other secret here.
+  giphyKey: "",
+
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.48.32",
+  version: "1.49.0",
 
   // "Xenova/whisper-tiny.en" is about 40 MB, faster, but misses a lot. Base is the better balance.
   // "Xenova/whisper-base.en" is more accurate but about 3 times bigger and slower.

@@ -13,9 +13,7 @@ const cfg = {
   bucketId: process.env.BUCKET_ID || 'family-media',
   maxOwnedFamilies: Number(process.env.MAX_OWNED_FAMILIES || 3),
   maxVideoMB: Number(process.env.MAX_VIDEO_MB || 15),
-  familyStorageMB: Number(process.env.FAMILY_STORAGE_MB || 500),
-  giphyKey: process.env.GIPHY_API_KEY || '',          // optional: turns on GIF search in chat (see CHAT-GUIDE.md)
-  giphyRating: process.env.GIPHY_RATING || 'g'         // g keeps it family safe
+  familyStorageMB: Number(process.env.FAMILY_STORAGE_MB || 500)
 };
 
 export default async ({ req, res, log, error }) => {

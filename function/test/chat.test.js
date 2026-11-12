@@ -366,34 +366,27 @@ test('link previews: members only, safe addresses only, rate limited', async () 
   } finally { delete EXTRA_CFG.fetchPreview; }
 });
 
-test('GIF search: off until a key is set, family-safe rating, only GIPHY addresses come back, key never returned', async () => {
-  let setupW = await setup();
-  const off = await setupW.w.ok('ann', 'chatGifs', { familyId: 'famA', q: 'cat' });
-  assert.deepEqual([off.configured, off.results, off.next], [false, [], 0]);
-  const urls = [];
-  EXTRA_CFG.giphyKey = 'SECRET_KEY';
-  let impl = async (u) => { urls.push(String(u));
-    return { ok: true, status: 200, json: async () => ({ pagination: { total_count: 100 }, data: [
-      { id: 'a1', title: 'Happy cat', images: { fixed_width: { url: 'https://media2.giphy.com/media/a1/200w.gif?cid=x', width: '200', height: '150' }, fixed_width_small: { url: 'https://media2.giphy.com/media/a1/100w.gif', width: '100', height: '75' } } },
-      { id: 'evil', title: 'x', images: { fixed_width: { url: 'https://evil.example/x.gif' }, fixed_width_small: { url: 'https://evil.example/y.gif' } } },
-      { id: 'http', title: 'x', images: { fixed_width: { url: 'http://media.giphy.com/x.gif' }, fixed_width_small: { url: 'http://media.giphy.com/y.gif' } } },
-      { id: 'noimg', title: 'x' }] }) }; };
-  EXTRA_CFG.httpFetch = (u, o) => impl(u, o);
-  try {
-    const { w } = await setup();
-    const r = await w.ok('ann', 'chatGifs', { familyId: 'famA', q: '  happy   cat ' + 'z'.repeat(80), offset: 9999 });
-    assert.equal(r.configured, true); assert.equal(r.results.length, 1); assert.equal(r.results[0].id, 'a1');
-    assert.equal(r.results[0].url, 'https://media2.giphy.com/media/a1/200w.gif?cid=x'); assert.equal(r.results[0].thumb, 'https://media2.giphy.com/media/a1/100w.gif');
-    assert.ok(!JSON.stringify(r).includes('SECRET_KEY'), 'the key stays on the server');
-    const u = new URL(urls[0]); assert.equal(u.hostname, 'api.giphy.com'); assert.equal(u.pathname, '/v1/gifs/search'); assert.equal(u.searchParams.get('rating'), 'g');
-    assert.ok(u.searchParams.get('q').length <= 50 && u.searchParams.get('q').startsWith('happy cat')); assert.equal(u.searchParams.get('offset'), '200');
-    await w.ok('ann', 'chatGifs', { familyId: 'famA', kind: 'stickers' }); assert.equal(new URL(urls[1]).pathname, '/v1/stickers/trending');
-    await w.fail('zed', 'chatGifs', { familyId: 'famA', q: 'cat' }, 403);
-    impl = async () => ({ ok: false, status: 429 }); await w.fail('ann', 'chatGifs', { familyId: 'famA', q: 'dog' }, 429);
-    impl = async () => { throw new Error('network'); }; assert.equal((await w.ok('ann', 'chatGifs', { familyId: 'famA', q: 'dog' })).unavailable, true);
-  } finally { delete EXTRA_CFG.giphyKey; delete EXTRA_CFG.httpFetch; }
+test('GIF and sticker messages: only a GIPHY id is stored, bad data is refused, permissions and retries still apply', async () => {
+  const { w, ch: chans } = await setup();
+  const ch = chans.general;
+  const send = (who, extra, status) => (status ? w.fail(who, 'chatSend', { familyId: 'famA', kind: 'channel', convId: ch, ...extra }, status) : w.ok(who, 'chatSend', { familyId: 'famA', kind: 'channel', convId: ch, ...extra }));
+  const media = { provider: 'giphy', type: 'gif', id: 'xT9IgDEI1iZyb2wqo8', w: 200, h: 150, alt: 'Happy <b>cat</b>' };
+  const a = await send('ann', { body: '', media, clientId: 'c-gif-1-0000' });
+  assert.equal(a.message.body, '[GIF]');
+  const stored = JSON.parse(a.message.media);
+  assert.deepEqual([stored.p, stored.t, stored.id, stored.w, stored.h], ['giphy', 'gif', 'xT9IgDEI1iZyb2wqo8', 200, 150]);
+  assert.ok(!/[<>]/.test(stored.a), 'markup stripped from the description');
+  assert.ok(!a.message.media.includes('http'), 'no web address is stored');
+  const dup = await send('ann', { body: '', media, clientId: 'c-gif-1-0000' }); assert.equal(dup.duplicate, true);
+  const st = await send('ann', { body: 'for you', media: { ...media, type: 'sticker' }, clientId: 'c-st-1-0000' });
+  assert.equal(st.message.body, 'for you'); assert.equal(JSON.parse(st.message.media).t, 'sticker');
+  const rep = await send('bob', { body: '', media, clientId: 'c-gif-2-0000', replyToId: a.message.id }); assert.equal(rep.message.replyToId, a.message.id);
+  const bads = [{ ...media, provider: 'tenor' }, { ...media, type: 'video' }, { ...media, id: 'https://evil.example/x.gif' }, { ...media, id: 'a b' }, { ...media, id: 'abc' }, 'x', [media]];
+  for (let i = 0; i < bads.length; i++) await send('ann', { body: '', media: bads[i], clientId: 'c-bad--0000' + i }, 400);
+  await send('zed', { body: '', media, clientId: 'c-zed-0000' }, 403);
+  const plain = await send('ann', { body: 'hello', clientId: 'c-plain-0000' }); assert.equal(plain.message.media, '');
+  await send('ann', { body: '', clientId: 'c-empty-0000' }, 400);
 });
-
 
 test('family chat picture: owner and chat admins only, stored for the whole family, old file removed', async () => {
   const { w } = await setup();

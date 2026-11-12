@@ -362,8 +362,8 @@
   }
 
   /* ---------- sending ---------- */
-  function sendText(c, cv, text, replyToId) {
-    var local = { $id: 'local:' + newClientId(), _local: true, _status: 'sending', convId: cv.id, authorId: c.uid, body: text, replyToId: replyToId || '', clientId: newClientId(), $createdAt: new Date().toISOString(), familyId: c.famId };
+  function sendText(c, cv, text, replyToId, media) {
+    var local = { $id: 'local:' + newClientId(), _local: true, _status: 'sending', convId: cv.id, authorId: c.uid, body: media && !text ? (media.type === 'sticker' ? '[Sticker]' : '[GIF]') : text, _media: media || null, media: media ? JSON.stringify({ p: 'giphy', t: media.type, id: media.id, w: media.w, h: media.h, a: media.alt || '' }) : '', replyToId: replyToId || '', clientId: newClientId(), $createdAt: new Date().toISOString(), familyId: c.famId };
     cv.msgs.push(local); cv.newCount = 0;
     paintMessages('bottom');
     doSend(c, cv, local);
@@ -371,9 +371,9 @@
   async function doSend(c, cv, local) {
     local._status = 'sending'; local._err = ''; paintMessages('keep');
     try {
-      var r = await api('chatSend', { kind: cv.kind, convId: cv.id, body: local.body, clientId: local.clientId, replyToId: local.replyToId || undefined });
+      var r = await api('chatSend', { kind: cv.kind, convId: cv.id, body: local._media && /^\[(GIF|Sticker)\]$/.test(local.body) ? '' : local.body, media: local._media || undefined, clientId: local.clientId, replyToId: local.replyToId || undefined });
       if (C !== c) return;
-      var m = r.message, row = { $id: m.id, convId: m.convId, authorId: m.authorId, body: m.body, replyToId: m.replyToId, clientId: m.clientId, editedAt: m.editedAt, $createdAt: m.createdAt, familyId: c.famId, kind: m.kind };
+      var m = r.message, row = { $id: m.id, convId: m.convId, authorId: m.authorId, body: m.body, replyToId: m.replyToId, clientId: m.clientId, editedAt: m.editedAt, $createdAt: m.createdAt, familyId: c.famId, kind: m.kind, media: m.media || '' };
       if (cv.kind === 'dm') { touchDm(c, cv.id, row.$createdAt); paintList(); }
       var i = cv.msgs.indexOf(local);
       var already = cv.msgs.some(function (x) { return x.$id === row.$id; });   // realtime got there first
@@ -629,9 +629,53 @@
     if (last < text.length) out.push({ t: text.slice(last) });
     return out;
   }
+  /* GIF and sticker messages: the row holds only {p:'giphy', t, id, w, h, a}. The address is rebuilt here from the id. */
+  function mediaOf(m) {
+    if (!m || !m.media) return null;
+    try {
+      var x = JSON.parse(m.media);
+      if (!x || x.p !== 'giphy' || (x.t !== 'gif' && x.t !== 'sticker') || !/^[A-Za-z0-9]{5,30}$/.test(String(x.id))) return null;
+      var n = function (v) { v = Math.round(Number(v)); return v >= 20 && v <= 1000 ? v : 200; };
+      return { type: x.t, id: String(x.id), w: n(x.w), h: n(x.h), alt: String(x.a || '').slice(0, 80) };
+    } catch (e) { return null; }
+  }
+  var ANIM = { shown: [], io: null, max: 3 };
+  function reducedMotion() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches || lsGet('fc_chat_autoplay', true) === false; } catch (e) { return false; } }
+  function animInit() {
+    if (ANIM.io || !window.IntersectionObserver) return;
+    ANIM.io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { var api = e.target._gif; if (api) { if (e.isIntersecting && !reducedMotion() && !api.userStopped) api.play(); else if (!e.isIntersecting) api.stop(); } });
+    }, { threshold: 0.6 });
+  }
+  function mediaNode(m, md) {
+    var sticker = md.type === 'sticker', base = 'https://media.giphy.com/media/' + md.id + '/';
+    var dw = Math.min(md.w, sticker ? 160 : 260), still = base + '200w_s.gif', moving = base + '200w.gif', playing = false, tried = 0;
+    var label = md.alt || (sticker ? 'Sticker' : 'GIF');
+    var wrap = h('div', { class: 'media-wrap ' + (sticker ? 'is-sticker' : 'is-gif') });
+    var box = h('div', { class: 'media-box', style: 'width:' + dw + 'px;aspect-ratio:' + md.w + '/' + md.h });
+    var img = h('img', { class: 'media-img', src: still, alt: label, loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', draggable: 'false' });
+    var btn = h('button', { class: 'media-play', type: 'button', 'aria-label': 'Play ' + label, 'aria-pressed': 'false' }, h('span', { 'aria-hidden': 'true', text: '▶' }));
+    var api = { userStopped: false,
+      play: function () {
+        if (playing) return; playing = true; img.src = tried ? base + 'giphy.gif' : moving; btn.setAttribute('aria-pressed', 'true'); btn.setAttribute('aria-label', 'Pause ' + label); btn.firstChild.textContent = '❚❚'; btn.classList.add('on');
+        ANIM.shown = ANIM.shown.filter(function (x) { return x !== api; }); ANIM.shown.push(api);
+        while (ANIM.shown.length > ANIM.max) ANIM.shown.shift().stop();   // never more than a few moving pictures at once
+      },
+      stop: function () { if (!playing) return; playing = false; img.src = still; btn.setAttribute('aria-pressed', 'false'); btn.setAttribute('aria-label', 'Play ' + label); btn.firstChild.textContent = '▶'; btn.classList.remove('on'); ANIM.shown = ANIM.shown.filter(function (x) { return x !== api; }); } };
+    btn.addEventListener('click', function (ev) { ev.stopPropagation(); if (playing) { api.userStopped = true; api.stop(); } else { api.userStopped = false; api.play(); } });
+    img.addEventListener('error', function () {
+      if (!tried) { tried = 1; img.src = playing ? base + 'giphy.gif' : base + 'giphy_s.gif'; return; }   // one fallback address, then give up
+      box.classList.add('gone'); clear(box); box.appendChild(h('span', { class: 'media-gone small muted', text: (sticker ? 'Sticker' : 'GIF') + ' no longer available' }));
+    });
+    box.appendChild(img); box.appendChild(btn); wrap.appendChild(box);
+    wrap.appendChild(h('span', { class: 'gif-credit small muted', text: 'via GIPHY' }));
+    box._gif = api; animInit(); if (ANIM.io) ANIM.io.observe(box); else if (!reducedMotion()) api.play();
+    return wrap;
+  }
   function gifOf(m) { var b = String(m.body || '').trim(); return GIF_RE.test(b) ? b : ''; }
   function msgText(m) {
     var el = h('div', { class: 'msg-text' });
+    if (mediaOf(m) && /^\[(GIF|Sticker)\]$/.test(String(m.body || '').trim())) { el.classList.add('is-gif'); return el; }   // no caption, only the picture
     if (gifOf(m) && previewsOn()) { el.classList.add('is-gif'); return el; }
     splitLinks(String(m.body || '')).forEach(function (p) {
       if (p.u) el.appendChild(h('a', { href: p.u, target: '_blank', rel: 'noopener noreferrer nofollow ugc', class: 'msg-link', text: p.u }));
@@ -680,6 +724,8 @@
     return card;
   }
   function msgExtras(m) {
+    var md = mediaOf(m);
+    if (md) return previewsOn() ? mediaNode(m, md) : h('p', { class: 'small muted', text: (md.type === 'sticker' ? 'Sticker' : 'GIF') + ' hidden. Turn on link previews and GIFs in Chat settings to see it.' });
     if (!previewsOn()) return null;
     var g = gifOf(m);
     if (g) return h('div', { class: 'gif-wrap' }, h('img', { class: 'gif-img', src: g, alt: 'GIF', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }), h('span', { class: 'gif-credit small muted', text: 'via GIPHY' }));
@@ -834,7 +880,7 @@
     var ta = h('textarea', { rows: 1, maxlength: c.limits.body, 'aria-label': 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), placeholder: 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), enterkeyhint: 'send', autocomplete: 'off' });
     ta.value = c.drafts[cv.id] || '';
     var count = h('div', { class: 'small muted count', hidden: true, 'aria-live': 'off' });
-    var gifBtn = h('button', { class: 'btn ghost gif-btn', type: 'button', 'aria-label': 'Choose a GIF or sticker', text: 'GIF', onclick: function () { gifPicker(c, function (url) { sendText(c, cv, url, reply ? reply.$id : ''); setReply(null); }); } });
+    var gifBtn = h('button', { class: 'btn ghost gif-btn', type: 'button', 'aria-label': 'Choose a GIF or sticker', text: 'GIF', onclick: function () { gifPicker(c, function (media, caption) { sendText(c, cv, caption, reply ? reply.$id : '', media); setReply(null); }); } });
     var send = h('button', { class: 'btn ghost send-btn', type: 'submit', 'aria-label': 'Send message' }, icon('send'));
     function grow() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; var n = ta.value.length; count.hidden = n < c.limits.body - 150; count.textContent = n + ' / ' + c.limits.body; c.drafts[cv.id] = ta.value; send.disabled = !ta.value.trim(); }
     function setReply(m) { reply = m; replyBar.hidden = !m; clear(replyBar); if (m) { replyBar.appendChild(h('span', { class: 'clamp' }, 'Replying to ', h('strong', { text: realName(m.authorId) }), ': ' + m.body)); replyBar.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Cancel reply', text: '×', onclick: function () { setReply(null); ta.focus(); } })); ta.focus(); } }
@@ -852,30 +898,84 @@
     return wrap;
   }
 
-  /* ----- GIF and sticker picker (GIPHY, searched through the family server) ----- */
+  /* ----- GIF and sticker picker -----
+   * GIPHY's rules say searches must be made from the viewer's own browser (no proxying) and that no media addresses are stored.
+   * So the browser searches GIPHY directly with the public key from config.js, and a message keeps only the GIPHY id. */
+  function giphyKey() { return (X.CFG && X.CFG.giphyKey) || ''; }
   function gifPicker(c, onPick) {
-    var body = h('div', { class: 'gp' }), kind = 'gifs', q = '', offset = 0, seq = 0, timer = 0, s;
+    var body = h('div', { class: 'gp' }), kind = 'gifs', q = '', offset = 0, seq = 0, timer = 0, s, busyCtl = null;
     var tabs = h('div', { class: 'gp-tabs', role: 'group', 'aria-label': 'Type' });
-    var search = h('input', { type: 'search', class: 'gp-search', placeholder: 'Search GIPHY', 'aria-label': 'Search GIFs', maxlength: 50, autocomplete: 'off' });
-    var grid = h('div', { class: 'gp-grid' }), note = h('p', { class: 'small muted gp-note', role: 'status' }), more = h('button', { class: 'btn secondary small', type: 'button', text: 'Load more', hidden: true });
-    ['gifs', 'stickers'].forEach(function (k) { tabs.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-pressed': k === kind ? 'true' : 'false', 'data-k': k, text: k === 'gifs' ? 'GIFs' : 'Stickers', onclick: function () { kind = k; Array.prototype.forEach.call(tabs.children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-k') === kind ? 'true' : 'false'); }); load(true); } })); });
-    function load(fresh) {
-      var my = ++seq; if (fresh) { offset = 0; clear(grid); } note.textContent = 'Loading…'; more.hidden = true;
-      api('chatGifs', { kind: kind, q: q, offset: offset }).then(function (r) {
-        if (my !== seq || !C) return;
-        if (!r.configured) { note.textContent = 'GIFs are not set up yet. The family owner can add a free GIPHY key; the steps are in CHAT-GUIDE.md.'; return; }
-        if (r.unavailable) { note.textContent = 'GIPHY could not be reached. Try again in a moment.'; return; }
-        r.results.forEach(function (g) {
-          grid.appendChild(h('button', { class: 'gp-item', type: 'button', 'aria-label': g.title || 'GIF', onclick: function () { s.close(); onPick(g.url); } }, h('img', { src: g.thumb, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' })));
-        });
-        note.textContent = grid.children.length ? '' : 'Nothing found. Try another word.';
-        offset = r.next; more.hidden = !r.next;
-      }, function (e) { if (my === seq) note.textContent = msgOf(e); });
+    var search = h('input', { type: 'search', class: 'gp-search', placeholder: 'Search GIPHY', 'aria-label': 'Search GIFs and stickers', maxlength: 50, autocomplete: 'off', enterkeyhint: 'search' });
+    var grid = h('div', { class: 'gp-grid', role: 'list' });
+    var note = h('p', { class: 'small muted gp-note', role: 'status', 'aria-live': 'polite' });
+    var retry = h('button', { class: 'btn secondary small', type: 'button', text: 'Try again', hidden: true });
+    var more = h('button', { class: 'btn secondary small', type: 'button', text: 'Load more', hidden: true });
+    var list = h('div', { class: 'gp-list' });
+    var view = h('div', { class: 'gp-pre', hidden: true });
+    function setKind(k) {
+      kind = k; [].slice.call(tabs.children).forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-k') === k ? 'true' : 'false'); });
+      load(true);
     }
-    search.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { q = search.value.replace(/\s+/g, ' ').trim(); load(true); }, 350); });
+    [['gifs', 'GIFs'], ['stickers', 'Stickers']].forEach(function (k) {
+      tabs.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-pressed': k[0] === kind ? 'true' : 'false', 'data-k': k[0], text: k[1], onclick: function () { setKind(k[0]); } }));
+    });
+    function fail(msg) { note.textContent = msg; retry.hidden = false; more.hidden = true; }
+    function load(fresh) {
+      if (!giphyKey()) { note.textContent = 'GIFs are not set up yet. The family owner needs to add a free GIPHY key to config.js (steps are in CHAT-GUIDE.md).'; return; }
+      var my = ++seq; if (busyCtl) { try { busyCtl.abort(); } catch (e) { /* ok */ } }
+      if (fresh) { offset = 0; clear(grid); }
+      retry.hidden = true; more.hidden = true; note.textContent = 'Loading…';
+      var p = new URLSearchParams({ api_key: giphyKey(), limit: '24', offset: String(offset), rating: 'g', bundle: 'messaging_non_clips' });
+      if (q) { p.set('q', q); p.set('lang', 'en'); }
+      busyCtl = window.AbortController ? new AbortController() : null;
+      fetch('https://api.giphy.com/v1/' + kind + '/' + (q ? 'search' : 'trending') + '?' + p, { signal: busyCtl ? busyCtl.signal : undefined, referrerPolicy: 'no-referrer', credentials: 'omit' })
+        .then(function (res) {
+          if (res.status === 429) throw new Error('rate');
+          if (res.status === 401 || res.status === 403) throw new Error('key');
+          if (!res.ok) throw new Error('http');
+          return res.json();
+        }).then(function (json) {
+          if (my !== seq || !C) return;   // a newer search already replaced this one
+          var items = Array.isArray(json.data) ? json.data : [];
+          items.forEach(function (g) {
+            var im = g.images || {}, th = im.fixed_width_small || im.fixed_width || {}, full = im.fixed_width || im.downsized || {};
+            var id = String(g.id || ''); if (!/^[A-Za-z0-9]{5,30}$/.test(id) || !/^https:\/\/(media\d*|i)\.giphy\.com\//.test(th.url || '') || !/^https:\/\/(media\d*|i)\.giphy\.com\//.test(full.url || '')) return;
+            var item = { id: id, title: String(g.title || '').slice(0, 80), thumb: th.url, url: full.url, w: Number(full.width) || 200, h: Number(full.height) || 200 };
+            grid.appendChild(h('div', { role: 'listitem' }, h('button', { class: 'gp-item', type: 'button', 'aria-label': (item.title || (kind === 'stickers' ? 'Sticker' : 'GIF')) + '. Preview', onclick: function () { showPreview(item); } },
+              h('img', { src: item.thumb, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', onerror: function () { this.style.visibility = 'hidden'; } }))));
+          });
+          var total = Number((json.pagination || {}).total_count) || 0, next = offset + 24;
+          note.textContent = grid.children.length ? '' : 'Nothing found. Try another word.';
+          more.hidden = !(items.length && next < total && next <= 200); offset = next;
+        }).catch(function (e) {
+          if (my !== seq || (e && e.name === 'AbortError')) return;
+          fail(e && e.message === 'rate' ? 'GIPHY says there have been too many searches. Wait a minute and try again.'
+            : e && e.message === 'key' ? 'GIPHY did not accept the key in config.js. Check the guide, step 5b.'
+            : 'GIPHY could not be reached. Check your connection and try again.');
+        });
+    }
+    function showPreview(item) {
+      list.hidden = true; clear(view); view.hidden = false;
+      var cap = h('input', { type: 'text', class: 'gp-caption', maxlength: 200, placeholder: 'Add a caption (optional)', 'aria-label': 'Caption' });
+      var send = h('button', { class: 'btn', type: 'button', text: 'Send' });
+      var back = h('button', { class: 'btn secondary', type: 'button', text: 'Cancel' });
+      back.addEventListener('click', function () { view.hidden = true; list.hidden = false; });
+      send.addEventListener('click', function () {
+        send.disabled = true; var media = { provider: 'giphy', type: kind === 'stickers' ? 'sticker' : 'gif', id: item.id, w: item.w, h: item.h, alt: item.title };
+        s.close(); onPick(media, cap.value.replace(/\s+/g, ' ').trim());
+      });
+      view.appendChild(h('div', { class: 'gp-pre-img' + (kind === 'stickers' ? ' sticker' : '') }, h('img', { src: item.url, alt: item.title || (kind === 'stickers' ? 'Sticker preview' : 'GIF preview'), referrerpolicy: 'no-referrer', decoding: 'async' })));
+      view.appendChild(cap); view.appendChild(h('div', { class: 'row gp-pre-btns' }, back, send));
+      setTimeout(function () { try { send.focus({ preventScroll: true }); } catch (e) { /* ok */ } }, 0);
+    }
+    search.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { q = search.value.replace(/\s+/g, ' ').trim(); load(true); }, 400); });
+    search.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); clearTimeout(timer); q = search.value.replace(/\s+/g, ' ').trim(); load(true); } });
     more.addEventListener('click', function () { load(false); });
-    [tabs, search, grid, note, more, h('p', { class: 'small muted gp-credit', text: 'Powered by GIPHY. Your search words go to GIPHY through the family server; the pictures load from giphy.com.' })].forEach(function (n) { body.appendChild(n); });
-    s = sheet('GIFs and stickers', body);
+    retry.addEventListener('click', function () { load(false); });
+    [tabs, search, grid, note, retry, more].forEach(function (n) { list.appendChild(n); });
+    body.appendChild(list); body.appendChild(view);
+    body.appendChild(h('p', { class: 'small muted gp-credit' }, h('strong', { text: 'Powered by GIPHY' }), '. Your search words and your device’s internet address go to GIPHY, which shows pictures from giphy.com. Filtering is set to “G”, which lowers the chance of unsuitable results but cannot guarantee it.'));
+    s = sheet('GIFs and stickers', body, { onClose: function () { seq++; if (busyCtl) { try { busyCtl.abort(); } catch (e) { /* ok */ } } } });
     load(true);
   }
 

@@ -59,7 +59,6 @@ export function createChat(c) {
     bad, forbidden, missing, ApiError, sdkCode, now, db, databaseId, teams, profilesTable } = c;
   const doPreview = c.fetchPreview || fetchPreview;
   const doFetch = c.httpFetch || ((...a) => fetch(...a));
-  const giphyKey = c.giphyKey || '', giphyRating = /^(g|pg|pg-13|r)$/.test(c.giphyRating || '') ? c.giphyRating : 'g';
   const T = CHAT_TABLES;
   const L = CHAT_LIMITS;
 
@@ -69,6 +68,16 @@ export function createChat(c) {
   const tooMany = (what) => new ApiError(429, 'rate_limited', `You are ${what} too quickly. Wait a few seconds and try again.`);
   const unavailable = () => new ApiError(403, 'dm_unavailable', 'This person is not taking direct messages right now.');
   const notFound = () => missing('That conversation was not found.');
+  /** A GIF or sticker message carries only a GIPHY id and a few small fields. Anything else is refused (no URLs, no HTML). */
+  const cleanMedia = (m) => {
+    if (m === undefined || m === null) return null;
+    if (typeof m !== 'object' || Array.isArray(m)) throw bad('That GIF or sticker is not valid.');
+    if (m.provider !== 'giphy' || (m.type !== 'gif' && m.type !== 'sticker')) throw bad('That GIF or sticker is not valid.');
+    if (typeof m.id !== 'string' || !/^[A-Za-z0-9]{5,30}$/.test(m.id)) throw bad('That GIF or sticker is not valid.');
+    const dim = (v) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 20 && n <= 1000 ? n : 200; };
+    const alt = typeof m.alt === 'string' ? m.alt.replace(/[\u0000-\u001f\u007f<>"\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+    return JSON.stringify({ p: 'giphy', t: m.type, id: m.id, w: dim(m.w), h: dim(m.h), a: alt });
+  };
   const cleanBody = (v) => {
     const t = textOf(typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '') : v, 'Message', { min: 1, max: L.bodyMax });
     return t;
@@ -149,7 +158,7 @@ export function createChat(c) {
     const r = await listRows(table, [Query.equal(field, [userId]), Query.greaterThan('$createdAt', cutoff), ...extra, Query.limit(win.count + 1)]);
     return r.rows.length > win.count - 1;   // already at the limit
   }
-  const pubMessage = (r) => ({ id: r.$id, convId: r.convId, kind: r.kind, authorId: r.authorId, body: r.body, replyToId: r.replyToId || '', clientId: r.clientId || '', editedAt: r.editedAt || '', createdAt: r.$createdAt });
+  const pubMessage = (r) => ({ id: r.$id, convId: r.convId, kind: r.kind, authorId: r.authorId, body: r.body, replyToId: r.replyToId || '', clientId: r.clientId || '', editedAt: r.editedAt || '', createdAt: r.$createdAt, media: r.media || '' });
   // Light per-person limiter for the two actions that call other websites. It lives in memory, so it is a brake rather than a guarantee.
   const hits = new Map();
   function softLimit(kind, userId, count, seconds) {
@@ -288,7 +297,10 @@ export function createChat(c) {
     async chatSend({ user, body }) {
       const ctx = await requireMember(user, body.familyId);
       const conv = await resolveConv(user, ctx.familyId, body.kind, body.convId);
-      const text = cleanBody(body.body);
+      const media = cleanMedia(body.media);
+      const mediaKind = media ? JSON.parse(media).t : '';
+      const caption = typeof body.body === 'string' ? body.body.trim() : '';
+      const text = media && !caption ? (mediaKind === 'sticker' ? '[Sticker]' : '[GIF]') : cleanBody(body.body);
       if (typeof body.clientId !== 'string' || !CLIENT_ID_RE.test(body.clientId)) throw bad('Message id is not valid.');
       const sendKey = `${user.$id}_${body.clientId}`;
       // A retry of a message that already arrived must not post it twice: the same clientId returns the stored message.
@@ -314,6 +326,7 @@ export function createChat(c) {
       }
       const data = { familyId: ctx.familyId, convId: conv.row.$id, kind: conv.kind, authorId: user.$id, body: text, clientId: body.clientId, sendKey };
       if (replyToId) data.replyToId = replyToId;
+      if (media) data.media = media;
       let row;
       try { row = await createRow(T.messages, ID.unique(), data, conv.perms); }
       catch (e) {
@@ -418,31 +431,6 @@ export function createChat(c) {
       if (!url || url.length > 500 || !checkUrl(url)) throw bad('That link cannot be previewed.');
       if (!softLimit('preview', user.$id, 12, 60)) throw tooMany('asking for link previews');
       return { preview: await doPreview(url) };
-    },
-
-    async chatGifs({ user, body }) {
-      await requireMember(user, body.familyId);
-      if (!giphyKey) return { configured: false, results: [], next: 0 };
-      const kind = body.kind === 'stickers' ? 'stickers' : 'gifs';
-      const q = typeof body.q === 'string' ? body.q.replace(/\s+/g, ' ').trim().slice(0, 50) : '';
-      const offset = Math.min(Math.max(parseInt(body.offset, 10) || 0, 0), 200);
-      if (!softLimit('gifs', user.$id, 30, 60)) throw tooMany('searching for GIFs');
-      const p = new URLSearchParams({ api_key: giphyKey, limit: '24', offset: String(offset), rating: giphyRating, bundle: 'messaging_non_clips' });
-      if (q) { p.set('q', q); p.set('lang', 'en'); }
-      let res;
-      try { res = await doFetch(`https://api.giphy.com/v1/${kind}/${q ? 'search' : 'trending'}?${p}`, { signal: AbortSignal.timeout(5000), headers: { Accept: 'application/json' } }); }
-      catch (e) { return { configured: true, results: [], next: 0, unavailable: true }; }
-      if (res.status === 429) throw tooMany('searching for GIFs');
-      if (!res.ok) return { configured: true, results: [], next: 0, unavailable: true };
-      let json; try { json = await res.json(); } catch (e) { return { configured: true, results: [], next: 0, unavailable: true }; }
-      const okUrl = (u) => { try { const x = new URL(u); return x.protocol === 'https:' && /^(media\d*|i)\.giphy\.com$/.test(x.hostname) ? x.toString() : ''; } catch (e) { return ''; } };
-      const results = (Array.isArray(json.data) ? json.data : []).map((g) => {
-        const im = g.images || {}, thumb = okUrl((im.fixed_width_small || im.fixed_width || {}).url), full = okUrl((im.fixed_width || im.downsized || {}).url);
-        const w = Number((im.fixed_width || {}).width) || 200, h = Number((im.fixed_width || {}).height) || 200;
-        return thumb && full && full.length <= 600 ? { id: String(g.id || '').slice(0, 40), title: String(g.title || '').slice(0, 80), thumb, url: full, w, h } : null;
-      }).filter(Boolean);
-      const total = Number((json.pagination || {}).total_count) || 0;
-      return { configured: true, results, next: offset + 24 < total && offset + 24 <= 200 ? offset + 24 : 0 };
     },
 
     /** Sets or clears the picture shown for this family's chat. Owner or chat admin only. fileId '' clears it. */

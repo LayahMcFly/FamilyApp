@@ -17,7 +17,7 @@ Version 1.47.0. Channels and direct messages for each family, opened from the sm
 | Replies, reactions with any emoji, edit (with "edited"), delete (with confirmation) | Tap and hold a message (or right-click) to open the menu. Six quick emoji sit on top, and the **+** opens every emoji with search and skin tones. Up to 20 different emoji per message. Reply and react work only inside the same conversation. |
 | Family chat picture | Owner or chat admin: Chat settings, **Family chat picture**, Upload. It replaces the letter at the top of the left bar for everyone in that family. It is kept in the family's team settings, so no new table is needed. This needs the new `family-api` upload (step 4). |
 | Links with preview cards | A web address in a message becomes a tappable link. The first link also gets a card with the site name, title, description and picture. The family server fetches the page, so nobody's phone contacts that site. |
-| GIFs and stickers | The **GIF** button next to the message box searches GIPHY. It needs a free GIPHY key (step 5b). Until then the button says GIFs are not set up. |
+| GIFs and stickers | The **GIF** button next to the message box opens a picker with GIFs and Stickers tabs, search, a preview with Send and Cancel, and an optional caption. It needs a free GIPHY key in `config.js` (step 5b, with the full walkthrough in Part 10). Until then the picker says GIFs are not set up. |
 | Older messages (30 at a time), "New messages" line, "Jump to latest" | A new message never drags you away from older ones you are reading. |
 | Sending, failed and retry | Retry reuses the same message id, so a retry can never post twice. |
 | Unread dots and counts per person and per conversation | Counts come from the server. "Read" is defined in Part 2. |
@@ -72,7 +72,7 @@ Being someone's parent in the family tree, a tree admin, or a store admin grants
 ### Links, previews and GIFs
 - **Links:** only `http://` and `https://` addresses become links. They open in a new tab with `noopener noreferrer nofollow`. Example: `https://example.com/recipe, thanks!` links to the address without the comma.
 - **Previews:** when a card is about to scroll into view, the phone asks the family server for it. The server refuses addresses that point inside its own network (home-network and cloud-internal ranges, `localhost`, and web addresses that resolve to them), checks every redirect the same way, reads at most 512 KB of page, accepts only HTML, takes the picture only if it is a normal PNG, JPEG, GIF or WebP under 200 KB, and gives up after 5 seconds. Only members of the family can ask, 12 requests per minute per person. If a site refuses or has nothing to show, no card appears.
-- **GIFs:** choosing one sends its GIPHY address as an ordinary message. A message that is only a GIPHY address shows the picture with "via GIPHY".
+- **GIFs and stickers:** a message stores only the GIPHY id, the size, a short description and whether it is a GIF or sticker (the `media` column). The picture address is rebuilt from the id when the message is shown. Searches go from each person's own phone straight to GIPHY, because GIPHY's rules do not allow searches to be proxied through a server. Older messages that are only a GIPHY address still show as pictures.
 - **Switch:** Chat settings, **Links and GIFs**. Off means plain links, no cards, no GIFs, and no preview requests.
 
 ### Direct message policy
@@ -130,7 +130,7 @@ Database `family`. Every new table has **no table-level permissions** and **Row 
 | Table | Columns (type, size) | Indexes | Row read permission |
 |---|---|---|---|
 | `chatChannels` | familyId (string 36), channelKey (string 120), name (40), description (200, optional), position (integer), readOnly (boolean), archived (boolean), createdBy (36, optional) | key `idx_familyId`; **unique** `uniq_channelKey` | `team:<familyId>` |
-| `chatMessages` | familyId (36), convId (36), kind (8: `channel` or `dm`), authorId (36), body (2000), replyToId (36, optional), clientId (36), sendKey (80), editedAt (32, optional) | key `idx_convId`; key `idx_conv_author` (convId, authorId); key `idx_authorId`; key `idx_familyId`; **unique** `uniq_sendKey` | channel: `team:<familyId>`. DM: `user:<a>` and `user:<b>` |
+| `chatMessages` | familyId (36), convId (36), kind (8: `channel` or `dm`), authorId (36), body (2000), replyToId (36, optional), clientId (36), sendKey (80), editedAt (32, optional), **media** (200, optional, text: JSON such as `{"p":"giphy","t":"gif","id":"…","w":200,"h":150,"a":"description"}`) | key `idx_convId`; key `idx_conv_author` (convId, authorId); key `idx_authorId`; key `idx_familyId`; **unique** `uniq_sendKey` | channel: `team:<familyId>`. DM: `user:<a>` and `user:<b>` |
 | `chatReactions` | familyId (36), convId (36), messageId (36), userId (36), emoji (8), reactionKey (100) | key `idx_messageId`, `idx_convId`, `idx_userId`, `idx_familyId`; **unique** `uniq_reactionKey` | same as the message it belongs to |
 | `chatDms` | familyId (36), userA (36), userB (36), dmKey (120), status (8: `open` or `closed`), lastAt (40, optional), closedFor (36, optional), pending (boolean) | key `idx_familyId`, `idx_userA`, `idx_userB`, `idx_status`; **unique** `uniq_dmKey` | `user:<a>` and `user:<b>`; after closing, only the person who stayed |
 | `chatTyping` | familyId (36), convId (36), userId (36), typingKey (80, required), text (60, default empty), until (40) | key `idx_convId`, key `idx_familyId`, **unique** `uniq_typingKey` | Only the people in that conversation (same as its messages) |
@@ -182,14 +182,8 @@ Do these in order. About 30 minutes, most of it waiting for Appwrite to build co
 **Check:** the Events section now lists `teams.*.memberships.*.delete`.
 **If you can't find Custom event:** pick **Teams**, then **Memberships**, then **Delete** from the lists instead. Appwrite builds the same text for you. Screens differ a little between Console versions, so if neither works, skip this step and tell me what you see.
 
-### Step 5b. Turn on GIFs (optional, 5 minutes)
-*Why:* the GIF button needs a search service. Google's Tenor shut its service down on June 30, 2026, so this uses GIPHY, which has a free tier. Without a key everything else in chat works and the GIF picker explains that GIFs are not set up.
-*Where and do:*
-1. Go to developers.giphy.com, create a free account, choose **Create an App**, pick **API**, and copy the key it shows.
-2. In the Appwrite Console open Functions, `family-api`, Settings, Variables, and add `GIPHY_API_KEY` with that key. Optionally add `GIPHY_RATING` with `g` (default, the safest), `pg` or `pg-13`.
-3. Open Deployments and redeploy (step 4 again, or the three-dot menu on the active deployment, Redeploy). Variables are read only when a deployment starts.
-*Check:* in chat tap **GIF**. Pictures appear. *If it says "not set up":* the variable name is misspelled or the redeploy did not finish. *If it says GIPHY could not be reached:* wait a minute. A new free key has a low hourly allowance, which is enough for a family and can be raised from the GIPHY dashboard.
-*Privacy:* the words you search go to GIPHY through the family server, without your name. A GIF in a message loads from giphy.com in each viewer's browser, so GIPHY can see that viewer's internet address. Each person can switch this off under Chat settings, Links and GIFs.
+### Step 5b. Turn on GIFs and stickers (optional)
+Everything about GIFs is in **Part 10** below, with every click. Short version: get a free GIPHY key, paste it into `config.js` on GitHub, upload the new `family-api.tar.gz`, and run the "Add the Family Chat tables" workflow once so the new `media` column exists.
 
 ### Step 6. Confirm the web platform (for Realtime)
 *Where:* Console, your project, Overview, Platforms. *Check:* a Web platform with hostname `layahmcfly.github.io` exists (no path). Realtime uses the same list. You already have it, so nothing to change.
@@ -252,7 +246,7 @@ Use two accounts, A (owner) and B (member), plus C (member who is in a different
 21. Chat settings, Links and GIFs off: the card and any GIF turn into plain links.
 21b. Typing hint (needs two phones): type in a chat on phone A. Within a second phone B shows "Name is typing…" above the message box, and it disappears about 7 seconds after A stops or as soon as A's message arrives. In Chat settings, Typing hint, change the words (for example "is cooking letters") and try again. Switch it off and phone B sees nothing.
 21c. Unread dots: leave chat on phone B and send a message from A. Within seconds the Chat button and the browser tab icon get a red dot, and the tab title starts with a number. Open the conversation and the dots go away.
-22. With a GIPHY key set (step 5b): tap **GIF**, search "cat", tap a result. It sends as a picture. Try the Stickers tab and **Load more**.
+22. GIFs and stickers: see the full checklist in Part 10, step 10.
 23. Keyboard only: Tab to the handle, Enter, arrow keys inside the panel, Escape. Reduced motion (phone setting Reduce Motion) removes the panel animation. On a phone, tap the message box: the box stays above the keyboard.
 
 ---
@@ -266,6 +260,9 @@ Use two accounts, A (owner) and B (member), plus C (member who is in a different
 | Messages appear only after a few seconds, or not until reopening | Realtime not connected, so the 8 second fallback is running | Step 6, and check the browser console for a blocked WebSocket |
 | "Index not found" in an execution log | An index is missing | Run step 3 again |
 | Someone cannot post in `# announcements` | By design (read-only) | Make them a chat admin (step 9) |
+| GIF picker says "too many searches" | The free GIPHY key allows 100 searches per hour for everyone using it | Wait, or see Part 10, step 11 |
+| GIF picker says GIPHY did not accept the key | Typo in `config.js`, or the key was deleted | Part 10, step 4 |
+| Sending a GIF fails with a bad-request message | The new `family-api` zip is not uploaded, or the `media` column is missing | Upload the zip and run the workflow again |
 | "You are sending messages too quickly" | The 6 per 10 seconds limit | Wait a few seconds |
 | A removed person still sees a channel on an old tab | The page was open before removal | They lose access to new data at once; the app re-checks every 5 minutes and when the tab returns |
 | Starter channels appear twice | Should not be possible (unique key) | Send me a screenshot of `chatChannels` |
@@ -288,3 +285,81 @@ Sources: Appwrite Realtime documentation (channels and the `Realtime` subscribe 
 The typing hint stores a few-second note in a new table, `chatTyping`. After uploading the new `family-api` zip, run the GitHub workflow **Add the Family Chat tables (one-time)** again (it needs the API key from step 2, and you delete the key afterwards, as before). It only adds what is missing and leaves your chats alone. Until then chat works as usual and the typing hint simply does not appear.
 
 The words after a person's name are chosen in Chat settings, are saved on that device, and are limited to 40 characters. The server removes control characters and `<` `>`, and the app shows them as plain text.
+
+
+---
+
+## Part 10. GIFs and stickers: the full walkthrough
+
+### What was checked (on 11 November 2026) and what it means
+- **Provider: GIPHY.** Google shut down its Tenor GIF service for developers, so new apps cannot use it (reported by [heise](https://www.heise.de/en/news/Google-cuts-off-Tenor-access-Apps-must-replace-GIF-search-11350334.html) and others). GIPHY's developer pages still describe creating a key from a developer dashboard ([GIPHY API Quickstart](https://developers.giphy.com/docs/api/)). GIPHY has both GIFs and transparent stickers, and a content rating filter. One caution: I could read GIPHY's developer guide but not its full legal terms page, so read GIPHY's terms yourself before relying on this long term.
+- **Free tier:** every new key is a **beta key**: 100 searches or API calls per hour, 50 results per search at most. For more, you apply for a production key in the dashboard. Approval is not guaranteed and GIPHY staff discuss pricing with you ([GIPHY support](https://support.giphy.com/hc/en-us/articles/10389869671322-Is-there-a-fee-for-using-GIPHY-s-API)). Nothing in this app signs you up for a paid plan. When the hourly limit is reached the picker shows "too many searches" and a Try again button; sending and viewing GIFs already in chat keep working.
+- **Attribution:** GIPHY's guide says apps must show "Powered By GIPHY" wherever the API is used. The picker shows it, and each GIF in a message shows "via GIPHY". If you want GIPHY's official logo mark, download it from GIPHY's developer site and ask me to add it.
+- **Storing and copying:** GIPHY's guide says not to cache or store copies of its media, not to store returned media addresses, and not to proxy search calls. So this app does not copy any GIF anywhere, does not store addresses (only the GIPHY id), and searches from the phone itself. This is why the earlier version, which searched through your server, was replaced.
+- **Usage reporting:** GIPHY "highly recommends" (does not require) sending small "this GIF was shown, clicked, sent" notices. They carry an identifier for the viewer, so this version does **not** send them. If GIPHY later makes them mandatory for your key, tell me.
+- **What GIPHY receives:** the search words, the key, and each viewer's internet address and browser details when the pictures load. It does not receive message text, names, channel names or the family name. A private chat does not make a GIF private: the picture itself is public on giphy.com.
+- **Filtering:** every search uses rating **G**, GIPHY's strictest. That lowers the chance of unsuitable results but cannot guarantee none appear. Anyone can switch GIFs off under Chat settings, Links and GIFs.
+- **Stickers:** GIPHY's sticker catalogue (transparent animated stickers) is the sticker source. A built-in sticker pack and user-uploaded stickers are **not** part of this version (deferred, see the end).
+
+### Step 1. Open the provider site
+Open **developers.giphy.com** in your browser. *Check:* it says GIPHY Developers and has a way to log in or sign up.
+
+### Step 2. Create an account
+Choose the sign-up option, use any email you control, and confirm the email GIPHY sends. *Check:* you can log in and reach the **Developer Dashboard**.
+
+### Step 3. Create an API key
+In the Developer Dashboard choose **Create an API Key** (GIPHY's guide uses this wording). Give the app a name such as `Family Circle` and a short description such as "Private family chat GIF picker". If it asks what platform it is for, choose the web option. Accept the terms after reading them. *Check:* the dashboard now lists your key. Screens change, so if a name differs from this guide, send me a screenshot and I will adjust the guide.
+
+### Step 4. Put the key into the website
+1. This key is **public by design**. GIPHY keys are used inside the browser, so anyone who opens your site can see it, and anyone could use up your 100 searches per hour. It is not a password and cannot reach your family data. Never paste any other secret next to it.
+2. On GitHub open the repository `LayahMcFly/FamilyCircle`, open the file `config.js`, and tap the pencil (Edit).
+3. Find the line `giphyKey: "",` and paste your key between the two quote marks. Example: `giphyKey: "AbCd1234...",`.
+4. Tap **Commit changes** and confirm. Wait about two minutes for GitHub Pages.
+*Check:* open `https://layahmcfly.github.io/FamilyCircle/config.js` and find your key in it. If you do not see it, refresh once.
+
+### Step 5. Restrict where the key can be used
+I found no setting in GIPHY's documentation that limits a key to your website address. Look through your key's settings in the dashboard for anything about allowed domains. If there is none, the only protection is the 100 per hour limit and that you can delete the key and make a new one any time (repeat steps 3 and 4).
+
+### Step 6. Content filtering
+The app asks GIPHY for rating **G** on every search and cannot be loosened by family members. To change it, the developer edits `rating: 'g'` in `chat.js`. Remember filtering is risk reduction, not a guarantee.
+
+### Step 7. Upload the server update
+1. Download `family-api.tar.gz` (sent with this version).
+2. Appwrite Console, Functions, `family-api`, Deployments, Create deployment, Manual, upload it, entrypoint `src/main.js`.
+*Why:* the server now checks GIF and sticker messages (only a valid GIPHY id, no web addresses, no HTML) and applies the same channel and direct-message rules as text. *Check:* the new deployment shows Ready.
+
+### Step 8. Add the new database column
+Run the GitHub workflow **Add the Family Chat tables (one-time)** again, with the temporary API key steps (Step 2 above in this guide) and the clean-up afterwards. It adds the `media` column to `chatMessages` and skips everything that already exists. *Check:* the log shows `created` for `chatMessages media` and ends with `Done`.
+
+### Step 9. Deploy the website
+Nothing else is needed: GitHub Pages publishes the files already on GitHub. Reload the site once. The site address list that the browser may contact is in `index.html`; `api.giphy.com` and `giphy.com` pictures are already allowed there.
+
+### Step 10. Test checklist
+1. Chat, tap **GIF**. Nothing about GIPHY loads until you do this. Pictures appear within a few seconds.
+2. Search "cat". Tap a result: a preview opens with **Send** and **Cancel**, and a caption box.
+3. Tap **Cancel**: nothing is sent and you are back at the results.
+4. Pick again, type a caption, tap **Send**. The message appears once, with "Sending…" then normal.
+5. Do the same in a **direct message** with a second account.
+6. Switch to **Stickers**, send one. It has no box around it.
+7. Long-press a GIF message, choose **Reply**, send a text. The reply shows "[GIF]".
+8. Reload the page. The GIF still shows. A second account sees it appear live without a duplicate.
+9. Phone settings, reduce motion on: GIFs show a still picture with a round play button. Tap it to play and pause. Without that setting, at most three GIFs move at once and only the ones on screen.
+10. Turn on airplane mode, open the picker: it says GIPHY could not be reached with a Try again button. Reload with a GIF whose picture was removed by GIPHY: it says "GIF no longer available".
+11. Open the picker with the keyboard up on a phone: the search box stays visible and the message box is not covered.
+12. A person who is not in the family (or has been removed) cannot read or send in the conversation (server rule, already in the main checklist).
+13. In your browser's developer tools, Network tab, open the picker: the only outside request is `api.giphy.com`, and its address contains the key, the search words and paging numbers, nothing from your messages.
+14. Search GitHub for your repository: `config.js` contains only the public GIPHY key and no Appwrite API key or other secret.
+
+### Step 11. If something goes wrong
+- **"GIPHY did not accept the key":** a typo, extra spaces, or the key was deleted. Redo step 4.
+- **"Too many searches":** the beta key allows 100 per hour across everyone using it. Wait. For a bigger allowance apply for production access in the dashboard (approval and price are up to GIPHY). I will not add a paid plan without your approval.
+- **A GIF will not send:** the zip (step 7) or the column (step 8) is missing. Run those.
+- **A picture shows "no longer available":** GIPHY removed it. The message keeps its text and caption.
+- **Layout problems on a phone:** send me a screenshot and your phone model.
+
+### Step 12. Watch usage without reading anyone's chats
+Open your GIPHY dashboard and look for usage or request counts for the key (the exact screen name is GIPHY's, so I am not guessing it). Appwrite never sees GIF searches, and the app logs no search words. Do not turn on browser extensions or analytics that record network requests.
+
+### What is finished and what is deferred
+- **Finished:** GIF and sticker picker, search with debounce and out-of-order protection, load more, loading, empty and error states with retry, preview before sending, optional caption, GIF and sticker message type with server checks, replies, duplicate-safe sending, inline rendering with correct proportions, transparent stickers, still images with play and pause, at most three moving pictures at once, "no longer available" handling, attribution, rating G.
+- **Deferred:** a built-in sticker pack, user-uploaded stickers (needs upload checks and moderation), GIPHY's optional usage notices, and the official GIPHY logo mark.
