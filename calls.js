@@ -67,12 +67,13 @@
     var btnCam = h('button', { class: 'call-btn', type: 'button', 'aria-pressed': 'false', 'aria-label': 'Camera' }, h('span', { class: 'cb-i' }, svg('video')), h('span', { class: 'cb-l', text: 'Camera' }));
     var btnFx = h('button', { class: 'call-btn', type: 'button', 'aria-label': 'Effects: backgrounds and face filters', 'aria-expanded': 'false' }, h('span', { class: 'cb-i' }, svg('sparkles')), h('span', { class: 'cb-l', text: 'Effects' }));
     var btnFlip = h('button', { class: 'call-btn', type: 'button', 'aria-label': 'Switch camera', hidden: true }, h('span', { class: 'cb-i' }, svg('flip')), h('span', { class: 'cb-l', text: 'Flip' }));
+    var people = h('div', { class: 'call-people', 'aria-label': 'People in this call' });
     var btnEnd = h('button', { class: 'call-btn end', type: 'button', 'aria-label': 'Leave call' }, h('span', { class: 'cb-i' }, svg('hangup')), h('span', { class: 'cb-l', text: 'Leave' }));
     var btnMin = h('button', { class: 'btn small call-min', type: 'button', 'aria-label': 'Minimize the call and keep chatting' }, svg('down', 18), ' Minimize');
     var fxPanel = h('div', { class: 'call-fx', hidden: true, role: 'dialog', 'aria-label': 'Camera effects' });
     var screen = h('div', { class: 'call', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Call: ' + o.title },
       h('header', { class: 'call-head' }, h('div', { class: 'grow ct' }, h('strong', { class: 'clamp', text: o.title }), h('div', { class: 'small' }, timerEl, ' · ', statusEl)), btnMin),
-      grid, fxPanel, h('div', { class: 'call-bar' }, btnMic, btnCam, btnFx, btnFlip, btnEnd), audioHost);
+      people, grid, fxPanel, h('div', { class: 'call-bar' }, btnMic, btnCam, btnFx, btnFlip, btnEnd), audioHost);
     var pillMic = h('button', { class: 'btn small', type: 'button', 'aria-label': 'Mute or unmute microphone' }, svg('mic', 18));
     var pillTxt = h('span', { class: 'grow clamp' });
     var pill = h('div', { class: 'call-pill', hidden: true, role: 'region', 'aria-label': 'Call in progress' }, pillTxt, pillMic,
@@ -128,6 +129,14 @@
       Object.keys(call.tiles).forEach(function (id) { if (!seen[id]) dropTile(id); });
       grid.setAttribute('data-n', String(Object.keys(call.tiles).length));
       statusEl.textContent = who();
+      var n = Object.keys(call.tiles).length;   // who is in the call: a row of names above the tiles
+      clear(people);
+      people.appendChild(h('span', { class: 'cp-count', text: n + (n === 1 ? ' person in this call' : ' people in this call') }));
+      var order = [r.localParticipant].concat(Array.from(r.remoteParticipants.values()));
+      order.forEach(function (p) {
+        var t = call.tiles[p.identity], muted = t && !t.mic.hidden;
+        people.appendChild(h('span', { class: 'cp-chip' + (t && t.el.classList.contains('speaking') ? ' speaking' : '') }, o.avatarEl(p.identity, 'sm'), h('span', { class: 'clamp', text: p.isLocal ? 'You' : o.nameOf(p.identity) }), muted ? svg('micoff', 14) : null));
+      });
       paintButtons();
     }
     function swap(host, name, size) { if (!host) return; while (host.firstChild) host.removeChild(host.firstChild); host.appendChild(svg(name, size)); }
@@ -166,7 +175,7 @@
         .on(E.TrackMuted, paintAll).on(E.TrackUnmuted, paintAll)
         .on(E.LocalTrackPublished, function (pub) { if (pub.source === L.Track.Source.Camera) applyEffects(); paintAll(); })
         .on(E.LocalTrackUnpublished, paintAll)
-        .on(E.ActiveSpeakersChanged, function (sp) { var ids = {}; sp.forEach(function (p) { ids[p.identity] = 1; }); Object.keys(call.tiles).forEach(function (id) { call.tiles[id].el.classList.toggle('speaking', !!ids[id]); }); })
+        .on(E.ActiveSpeakersChanged, function (sp) { var ids = {}; sp.forEach(function (p) { ids[p.identity] = 1; }); Object.keys(call.tiles).forEach(function (id) { call.tiles[id].el.classList.toggle('speaking', !!ids[id]); }); paintAll(); })
         .on(E.Reconnecting, function () { statusEl.textContent = 'Reconnecting…'; })
         .on(E.Reconnected, paintAll)
         .on(E.Disconnected, function () { if (!call.ended) { toast('The call ended.'); call.leave(); } })

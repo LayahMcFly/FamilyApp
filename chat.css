@@ -456,3 +456,13 @@ body.call-open { overflow: hidden; }
 .call-banner { position: sticky; top: 0; z-index: 5; padding: 10px 12px; font-weight: 600; }
 .call-banner .call-join { min-height: 40px; margin: 0; }
 .call-banner .call-join:not(.secondary) { background: #2e9e4f !important; color: #fff !important; }
+
+/* v1.50.16: who is in the call */
+.call-people { display: flex; gap: 8px; align-items: center; overflow-x: auto; padding: 8px 10px 0; flex: none; scrollbar-width: none; }
+.call-people::-webkit-scrollbar { display: none; }
+.cp-count { flex: none; font-size: .8rem; color: #aeb7bf; margin-right: 2px; }
+.cp-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 999px; background: #2a3138; color: #f3f5f7; font-size: .85rem; border: 2px solid transparent; max-width: 180px; }
+.cp-chip.speaking { border-color: #2e9e4f; }
+.cp-chip .avatar { width: 24px; height: 24px; font-size: .65rem; }
+.cp-chip svg { color: #ff8a80; }
+.ct-bar { font-weight: 600; font-size: 1rem; }
