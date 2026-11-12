@@ -4313,19 +4313,31 @@
         h('button', { class: 'tab', type: 'button', 'aria-pressed': mode === 'custom' ? 'true' : 'false', text: 'My colors', onclick: function () { mode = 'custom'; paintRing(); paintControls(); } })));
       if (mode !== 'custom') return;
       var row = h('div', { class: 'ring-colors' });
+      if (recoSlot >= picks.length) recoSlot = 0;
       picks.forEach(function (c, i) {
-        var inp = h('input', { type: 'color', 'aria-label': 'Circle color ' + (i + 1), value: c });
-        inp.addEventListener('input', function () { picks[i] = inp.value.toLowerCase(); paintRing(); });
-        row.appendChild(h('label', { class: 'ring-color' }, inp, h('span', { class: 'small', text: 'Color ' + (i + 1) })));
+        // One tap selects this colour (then tap a suggestion to change it). A double tap opens the full colour picker.
+        var inp = h('input', { type: 'color', class: 'rc-input', tabindex: '-1', 'aria-hidden': 'true', value: c });
+        inp.addEventListener('input', function () { picks[i] = inp.value.toLowerCase(); paintRing(); dot.style.setProperty('background-color', picks[i]); });
+        var dot = h('span', { class: 'rc-dot' }); dot.style.setProperty('background-color', c);
+        var lastTap = 0;
+        var slot = h('button', { class: 'rc-slot', type: 'button', 'aria-pressed': i === recoSlot ? 'true' : 'false', 'aria-label': 'Circle color ' + (i + 1) + (i === recoSlot ? ', selected. Tap a suggestion to change it, or double tap for the full picker' : '. Tap to select, double tap for the full picker') },
+          dot, h('span', { class: 'small', text: 'Color ' + (i + 1) }), inp);
+        slot.addEventListener('click', function () {
+          var now = Date.now();
+          if (now - lastTap < 400) { lastTap = 0; try { if (inp.showPicker) inp.showPicker(); else inp.click(); } catch (e) { inp.click(); } return; }
+          lastTap = now;
+          if (recoSlot !== i) { recoSlot = i; Array.prototype.forEach.call(row.querySelectorAll('.rc-slot'), function (b, k) { b.setAttribute('aria-pressed', k === i ? 'true' : 'false'); }); }
+        });
+        row.appendChild(slot);
       });
       controls.appendChild(row);
       if (recoCols.length) {
-        var reco = h('div', { class: 'ban-reco', role: 'group', 'aria-label': 'Colours from your picture' }, h('span', { class: 'small muted', text: 'From your picture:' }));
+        var recoGrid = h('div', { class: 'reco-grid' }), reco = h('div', { class: 'reco-box', role: 'group', 'aria-label': 'Colours from your picture' }, h('span', { class: 'small muted', text: 'Tap a colour above, then pick a colour from your picture:' }), recoGrid);
         recoCols.forEach(function (col) {
-          var sw = h('button', { class: 'ban-sw', type: 'button', 'aria-label': 'Use ' + col + ' for color ' + (recoSlot % picks.length + 1), title: col });
+          var sw = h('button', { class: 'ban-sw', type: 'button', 'aria-label': 'Use ' + col + ' for the selected color', title: col });
           sw.style.setProperty('background-color', col);
-          sw.addEventListener('click', function () { picks[recoSlot % picks.length] = col; recoSlot++; paintRing(); paintControls(); });
-          reco.appendChild(sw);
+          sw.addEventListener('click', function () { picks[recoSlot % picks.length] = col; paintRing(); paintControls(); });
+          recoGrid.appendChild(sw);
         });
         reco.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Use the top ' + Math.min(3, recoCols.length > 2 ? 3 : 2) + ' together', onclick: function () {
           var n = recoCols.length > 2 ? 3 : 2; if (recoCols.length < 2) return toast('Your picture has only one main colour.');
