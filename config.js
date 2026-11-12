@@ -11,7 +11,7 @@ window.FAMILY_CONFIG = {
 
   // GIF and sticker search (GIPHY). This key is PUBLIC by design: GIPHY keys are used in the browser, so anyone can read it. Leave it empty to turn GIFs off.
   // Get one free at developers.giphy.com (see CHAT-GUIDE.md, step 5b). Never put any other secret here.
-  giphyKey: "",
+  giphyKey: "gV7kw5ScYkdgbcuTOyohUjySrjmarfpL",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
   version: "1.49.2",
