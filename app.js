@@ -269,11 +269,11 @@
 
   // The appearance engine lives in theme.js (loaded in <head>, so the first paint is already correct). Here we only keep the saved state,
   // reconcile it with the account, and sync it. State shape: { v:2, theme, per:{ <theme>:{mode, accent} }, at }.
-  var T = window.FCTheme;
-  var appearance = T.sanitize(T.readLocal().state);     // the SAVED appearance for whoever is signed in (or this device before sign-in)
+  var TH = window.FCTheme;
+  var appearance = TH.sanitize(TH.readLocal().state);     // the SAVED appearance for whoever is signed in (or this device before sign-in)
   var lookDraft = null;                                 // unsaved changes while the Appearance screen is open
-  function applyPrefs() { T.apply(T.effective(lookDraft || appearance)); }
-  T.onSystemChange = function () { var e = T.effective(lookDraft || appearance); if (e.mode === 'system') T.apply(e); };
+  function applyPrefs() { TH.apply(TH.effective(lookDraft || appearance)); }
+  TH.onSystemChange = function () { var e = TH.effective(lookDraft || appearance); if (e.mode === 'system') TH.apply(e); };
   var syncTimer = null;
   function pushAppearance() {
     if (!S.user) return;
@@ -284,8 +284,8 @@
     }, 500);
   }
   function saveAppearance(state) {
-    appearance = T.sanitize(state); appearance.at = Date.now();
-    T.writeLocal(S.user && S.user.$id, appearance);
+    appearance = TH.sanitize(state); appearance.at = Date.now();
+    TH.writeLocal(S.user && S.user.$id, appearance);
     lookDraft = null; applyPrefs(); pushAppearance();
   }
 
@@ -1070,8 +1070,8 @@
     catch (e) { if (!isUnauthorized(e)) S.notice = { kind: 'error', text: friendly(e) }; return; }
 
     // Appearance: the account copy and this device's copy are reconciled (newest wins; another account's local copy is ignored).
-    var rec = T.reconcile(S.user.$id, S.user.prefs && S.user.prefs.appearance);
-    appearance = rec.state; T.writeLocal(S.user.$id, appearance); lookDraft = null; applyPrefs();
+    var rec = TH.reconcile(S.user.$id, S.user.prefs && S.user.prefs.appearance);
+    appearance = rec.state; TH.writeLocal(S.user.$id, appearance); lookDraft = null; applyPrefs();
     if (rec.pushToAccount) pushAppearance();
 
     if (!S.user.emailVerification) return;                  // the server refuses family actions until the email is verified
@@ -1348,7 +1348,7 @@
 
   async function signOut() {
     try { await account.deleteSession({ sessionId: 'current' }); } catch (e) { /* already signed out */ }
-    T.clearLocal(); appearance = T.sanitize(); lookDraft = null; applyPrefs();   // the next person on this device starts from Default
+    TH.clearLocal(); appearance = TH.sanitize(); lookDraft = null; applyPrefs();   // the next person on this device starts from Default
     await mediaCacheClear();     // photos and videos kept on this device are removed when you sign out
     resetState();
     S.authMode = 'signin';
@@ -3943,7 +3943,7 @@
     function change(fn) { fn(draftState()); applyPrefs(); paintLook(); }
     function modeLabel(m) { return m === 'system' ? 'Follow system' : m === 'dark' ? 'Dark' : 'Light'; }
     function swatchSet(themeId, eff) {
-      var list = T.ACCENTS[themeId] || [], sw = h('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' }), known = false;
+      var list = TH.ACCENTS[themeId] || [], sw = h('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' }), known = false;
       if (themeId === 'default') sw.appendChild(h('button', { class: 'swatch none', type: 'button', 'aria-label': 'Style color (the original look)', title: 'Style color', 'aria-pressed': eff.accent ? 'false' : 'true', onclick: function () { change(function (st) { setFor(st, themeId, { accent: '' }); }); } }));
       list.forEach(function (c) {
         var on = eff.accent === c.hex; known = known || on;
@@ -3957,8 +3957,8 @@
     }
     // A small picture of the theme: it re-uses the theme's own tokens, so card, button and input shapes really differ.
     function miniTheme(t) {
-      var st = copyState(appearance), e = T.effective(lookDraft || appearance, t.id), dark = T.isDark(e.mode);
-      var surf = T.surfaces[t.id][dark ? 'dark' : 'light'], col = e.accent ? T.accentColors(e.accent, dark, surf) : { fill: dark ? '#0095f6' : '#0095f6', on: '#ffffff', text: '#0095f6' };
+      var st = copyState(appearance), e = TH.effective(lookDraft || appearance, t.id), dark = TH.isDark(e.mode);
+      var surf = TH.surfaces[t.id][dark ? 'dark' : 'light'], col = e.accent ? TH.accentColors(e.accent, dark, surf) : { fill: dark ? '#0095f6' : '#0095f6', on: '#ffffff', text: '#0095f6' };
       var el = h('div', { class: 'mini-theme', 'data-style': t.id, 'data-theme': dark ? 'dark' : 'light', 'aria-hidden': 'true' },
         h('div', { class: 'm-card' }, h('div', { class: 'm-row' }, h('span', { class: 'lp-av m-av' }), h('div', { class: 'm-lines' }, h('span', { class: 'm-line' }), h('span', { class: 'm-line s' }))), h('span', { class: 'm-line' })),
         h('div', { class: 'm-row' }, h('span', { class: 'm-btn' }), h('span', { class: 'm-btn sec' })),
@@ -3979,27 +3979,27 @@
     }
     function paintLook() {
       clear(look);
-      var st = lookDraft || appearance, eff = T.effective(st), dirty = isDirty();
+      var st = lookDraft || appearance, eff = TH.effective(st), dirty = isDirty();
       look.appendChild(h('h2', { text: 'Appearance' }));
-      look.appendChild(h('p', { class: 'look-sum', role: 'status', text: (dirty ? 'Previewing: ' : 'Saved: ') + T.summary(eff) }));
+      look.appendChild(h('p', { class: 'look-sum', role: 'status', text: (dirty ? 'Previewing: ' : 'Saved: ') + TH.summary(eff) }));
       look.appendChild(h('p', { class: 'hint', text: 'Appearance is personal. It only changes how Family Circle looks for you, not for your family.' }));
       look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: 'Live preview' }), liveSample(eff)));
 
       look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: '1. Theme' }),
         h('p', { class: 'hint', text: 'The theme changes the shape of cards, buttons, tabs and fields, not just colors. Each theme remembers its own display mode and accent.' }),
-        h('div', { class: 'theme-grid', role: 'group', 'aria-label': 'Theme' }, T.THEMES.map(function (t) {
+        h('div', { class: 'theme-grid', role: 'group', 'aria-label': 'Theme' }, TH.THEMES.map(function (t) {
           var on = eff.theme === t.id;
           return h('button', { class: 'theme-card', type: 'button', 'aria-pressed': on ? 'true' : 'false', onclick: function () { change(function (s2) { s2.theme = t.id; }); } },
             miniTheme(t), h('div', { class: 'tc-name' }, h('span', { text: t.name }), on ? h('span', { class: 'tc-sel', text: 'Selected' }) : null), h('div', { class: 'tc-note', text: t.note }));
         }))));
 
       look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: '2. Display mode' }),
-        h('div', { class: 'tabs', role: 'group', 'aria-label': 'Light or dark mode' }, T.MODES.map(function (m) {
+        h('div', { class: 'tabs', role: 'group', 'aria-label': 'Light or dark mode' }, TH.MODES.map(function (m) {
           return h('button', { class: 'tab', type: 'button', text: modeLabel(m), 'aria-pressed': eff.mode === m ? 'true' : 'false', onclick: function () { change(function (s2) { setFor(s2, eff.theme, { mode: m }); }); } });
         }))));
 
       look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: '3. Accent color' }), swatchSet(eff.theme, eff),
-        h('p', { class: 'hint', text: 'The colors on offer match the ' + (T.themeOf(eff.theme) || {}).name + ' theme. Text on top of an accent color switches between black and white so it stays readable.' })));
+        h('p', { class: 'hint', text: 'The colors on offer match the ' + (TH.themeOf(eff.theme) || {}).name + ' theme. Text on top of an accent color switches between black and white so it stays readable.' })));
 
       var bar = h('div', { class: 'look-actions' },
         h('button', { class: 'btn', type: 'button', text: 'Save', disabled: !dirty, onclick: function () { saveAppearance(lookDraft); base = JSON.stringify(appearance.per) + appearance.theme; toast('Appearance saved.'); paintLook(); } }),
@@ -4010,9 +4010,9 @@
       look.appendChild(h('div', { class: 'look-sec look-reset' }, h('h3', { text: 'Reset' }),
         h('p', { class: 'hint', text: 'Resets are previewed first. Tap Save to keep them, or Cancel to undo.' }),
         h('div', { class: 'row' },
-          h('button', { class: 'btn secondary small', type: 'button', text: 'Reset ' + T.themeOf(eff.theme).name, onclick: function () { change(function (s2) { delete s2.per[eff.theme]; }); } }),
+          h('button', { class: 'btn secondary small', type: 'button', text: 'Reset ' + TH.themeOf(eff.theme).name, onclick: function () { change(function (s2) { delete s2.per[eff.theme]; }); } }),
           h('button', { class: 'btn secondary small', type: 'button', text: 'Reset everything', onclick: function () { change(function (s2) { s2.theme = 'default'; s2.per = {}; }); } })),
-        h('p', { class: 'small muted', text: 'Reset ' + T.themeOf(eff.theme).name + ': this theme goes back to its own starting mode and accent. Your other themes keep their choices. Reset everything: all themes forget your choices and the Default theme comes back.' })));
+        h('p', { class: 'small muted', text: 'Reset ' + TH.themeOf(eff.theme).name + ': this theme goes back to its own starting mode and accent. Your other themes keep their choices. Reset everything: all themes forget your choices and the Default theme comes back.' })));
       look.appendChild(h('p', { class: 'hint', text: 'Saved on this device and on your account, so it follows you to your other devices. If two devices disagree, the most recent save wins. Photos, videos, GIFs and stickers never change color.' }));
     }
     window.addEventListener('hashchange', function leave() {          // unsaved previews never outlive the Appearance page
