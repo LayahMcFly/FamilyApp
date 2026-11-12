@@ -110,12 +110,22 @@
       var gold = '#d9b86a';
       E = '<path d="M30 ' + CL + 'H60" stroke="' + c1 + '" stroke-width="1.5" fill="none"/><path d="M30 ' + (CL + 3.5) + 'H60" stroke="' + gold + '" stroke-width=".8" fill="none"/>' + sparkle(45, CL, 6, c1) + '<circle cx="35" cy="' + (CL - 4) + '" r="1" fill="' + gold + '"/><circle cx="56" cy="' + (CL + 6) + '" r="1" fill="' + gold + '"/>';
       C = '<path d="M' + CL + ' 30A17 17 0 0 1 30 ' + CL + '" stroke="' + c1 + '" stroke-width="1.5" fill="none"/><path d="M' + (CL + 3.5) + ' 30A13.5 13.5 0 0 1 30 ' + (CL + 3.5) + '" stroke="' + gold + '" stroke-width=".8" fill="none"/>' + sparkle(12, 12, 9, c1) + sparkle(22, 20, 3.4, gold);
-    } else if (id === 'lace') {
-      E = '<path fill="' + cream + '" d="M30 30V8' + SC + 'V30z"/><path d="M30 24H60" stroke="' + c1 + '" stroke-width="1.3" stroke-dasharray="3 2" fill="none"/><circle cx="37.5" cy="14" r="3" fill="#e58aaf"/><circle cx="52.5" cy="14" r="3" fill="#7ea6e0"/><ellipse cx="45" cy="14" rx="3" ry="1.3" fill="#7fa06a"/>';
-      C = '<g fill="' + cream + '"><circle cx="9" cy="9" r="9"/><circle cx="22.5" cy="7.5" r="7.5"/><circle cx="7.5" cy="22.5" r="7.5"/><rect x="8" y="8" width="22" height="22"/></g><path d="M30 24H24V30" stroke="' + c1 + '" stroke-width="1.3" stroke-dasharray="3 2" fill="none"/><circle cx="14" cy="14" r="3" fill="#e58aaf"/>';
-    } else if (id === 'floral') {
-      E = '<path fill="' + cream + '" d="M30 30V8' + SC + 'V30z"/>' + leaf(45, 16, 0) + flower(37.5, 16, c1, 1) + flower(52.5, 16, c1, 1) + '<path d="M30 25H60" stroke="' + shade(cream, 0.15) + '" stroke-width="1" stroke-dasharray="2 1" fill="none"/>';
-      C = '<g fill="' + cream + '"><circle cx="9" cy="9" r="9"/><circle cx="22.5" cy="7.5" r="7.5"/><circle cx="7.5" cy="22.5" r="7.5"/><rect x="8" y="8" width="22" height="22"/></g>' + flower(15, 15, c1, 1);
+    } else if (id === 'lace' || id === 'floral') {
+      // one shared cream scalloped band: bumps of radius 5 every 10 units, so sides and corners line up
+      var edge = [[35, 7], [45, 7], [55, 7]], cor = [[7, 7, 7], [15, 7, 5], [25, 7, 5], [7, 15, 5], [7, 25, 5]], line = shade(cream, 0.28);
+      var ring = function (list, f) { return list.map(function (c) { return f(c[0], c[1], c[2] || 5); }).join(''); };
+      var band = ring(edge, function (x, y, r) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" stroke="' + c1 + '" stroke-width="1.8" fill="' + cream + '"/>'; }) + '<rect x="30" y="7" width="30" height="23" fill="' + cream + '"/>' + ring(edge, function (x, y, r) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + cream + '"/>'; });
+      var cband = ring(cor, function (x, y, r) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" stroke="' + c1 + '" stroke-width="1.8" fill="' + cream + '"/>'; }) + '<rect x="7" y="7" width="23" height="23" fill="' + cream + '"/>' + ring(cor, function (x, y, r) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + cream + '"/>'; });
+      var stitch = '<path d="M30 23H60" stroke="' + c1 + '" stroke-width="1.1" stroke-dasharray="2.5 2" fill="none"/>', cstitch = '<path d="M30 23H25Q23 23 23 25V30" stroke="' + c1 + '" stroke-width="1.1" stroke-dasharray="2.5 2" fill="none"/>';
+      if (id === 'lace') {
+        var eye = function (x, y, r) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="#fff" stroke="' + c1 + '" stroke-width="1"/>'; };
+        E = band + stitch + edge.map(function (c) { return eye(c[0], c[1], 2.3); }).join('') + [40, 50].map(function (x) { return '<circle cx="' + x + '" cy="14" r="1.3" fill="' + c1 + '"/>'; }).join('');
+        C = cband + cstitch + cor.map(function (c) { return eye(c[0], c[1], c[2] === 7 ? 2.8 : 2.3); }).join('');
+      } else {
+        var vine = '#7fa06a';
+        E = band + '<path d="M30 15H60" stroke="' + vine + '" stroke-width="1.2" fill="none"/>' + leaf(45, 15, 0) + flower(37.5, 15, c1, 0.8) + flower(52.5, 15, c1, 0.8) + stitch.replace('M30 23', 'M30 24').replace('H60', 'H60');
+        C = cband + '<path d="M30 15H19Q15 15 15 19V30" stroke="' + vine + '" stroke-width="1.2" fill="none"/>' + flower(15, 15, c1, 1) + '<path d="M30 24H26Q24 24 24 26V30" stroke="' + c1 + '" stroke-width="1.1" stroke-dasharray="2.5 2" fill="none"/>';
+      }
     } else if (id === 'rope') {
       c2 = shade(c1, 0.35);
       var twist = rep(6, function (k) { return '<path d="M' + (24 + 6 * k) + ' 12L' + (30 + 6 * k) + ' 0" stroke="' + c1 + '" stroke-width="3.6" fill="none"/>'; });
