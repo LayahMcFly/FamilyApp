@@ -1496,3 +1496,10 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
 .about-cat-head h3 { min-width: 0; overflow-wrap: anywhere; }
 .tag .mini { min-width: 28px; min-height: 28px; padding: 0 3px; }
 .tag .mini svg { width: 15px; height: 15px; }
+
+/* v1.50.6: family tree details */
+.tree-details { margin: 4px 0 14px; }
+.tree-bio { margin: 0 0 10px; }
+.tree-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 14px; margin: 0 0 12px; }
+.tree-facts dt { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.tree-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }

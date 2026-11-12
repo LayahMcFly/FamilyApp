@@ -582,7 +582,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     async saveAbout({ user, body }) {
       const { familyId } = await requireMember(user, body.familyId);
       const list = body.about;
-      if (!Array.isArray(list) || list.filter((c) => !(c && c.key === 'ringcolors')).length > LIMITS.aboutCategories || list.length > LIMITS.aboutCategories + 1) throw bad(`You can have up to ${LIMITS.aboutCategories} categories.`);   // the hidden "ringcolors" entry (own circle colors) does not count
+      if (!Array.isArray(list) || list.filter((c) => !(c && (c.key === 'ringcolors' || c.key === 'address'))).length > LIMITS.aboutCategories || list.length > LIMITS.aboutCategories + 2) throw bad(`You can have up to ${LIMITS.aboutCategories} categories.`);   // the hidden "ringcolors" entry (own circle colors) does not count
       const clean = list.map((c, i) => {
         if (!c || typeof c !== 'object') throw bad('A category is not valid.');
         const title = textOf(c.title ?? '', 'Category name', { min: 1, max: LIMITS.aboutTitleMax });

@@ -2849,7 +2849,12 @@
         h('option', { value: 'birth', text: 'Draw birth parents' }), h('option', { value: 'raised', text: 'Draw the parents who raised them' }));
       bar.appendChild(h('div', { class: 'grow' }, h('label', { for: 'tree-lens', class: 'small muted', text: 'Parents shown' }), lensSel));
     }
-    if (canEditTree()) bar.appendChild(h('button', { class: 'btn small tree-add', type: 'button', text: '+ Add person', onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { lite: true }); } }));
+    var editing = false, canToggle = canEditTree() || !!mine;
+    var editBtn = canToggle ? h('button', { class: 'btn secondary small', type: 'button', 'aria-pressed': 'false', text: 'Edit', onclick: function () { editing = !editing; editBtn.setAttribute('aria-pressed', String(editing)); editBtn.textContent = editing ? 'Done editing' : 'Edit'; if (addBtn) addBtn.hidden = !editing; if (ctl && ctl.mainId) select(jump.value); } }) : null;
+    var addBtn = null;
+    if (canEditTree()) bar.appendChild(addBtn = h('button', { class: 'btn small tree-add', type: 'button', text: '+ Add person', onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { lite: true }); } }));
+    if (addBtn) addBtn.hidden = true;
+    if (editBtn) bar.appendChild(editBtn);
     holder.appendChild(bar);
 
     var chartEl = h('div', { class: 'tree-chart', role: 'group', 'aria-label': 'Family tree. Drag to move around. Use the plus and minus buttons to zoom. Press Tab to move through the people, then Enter to choose one.' });
@@ -2887,6 +2892,26 @@
       var sibs = people.filter(function (c) { return c.$id !== id && (c.parentIds || []).some(function (x) { return pids.indexOf(x) !== -1; }); }).map(function (c) { return c.$id; });
       return { parents: parents, partners: partners, children: kids, siblings: sibs };
     }
+    function fmtBirthday(b) {
+      b = String(b || ''); if (b.length !== 10) return b.length === 4 ? 'Born in ' + b : '';
+      var d = new Date(Number(b.slice(0, 4)), Number(b.slice(5, 7)) - 1, Number(b.slice(8, 10)));
+      return isNaN(d) ? '' : d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+    function personDetails(p, prof) {
+      var box = h('div', { class: 'tree-details' }), a = ageOf(p), rows = [];
+      if (prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
+      if (a && a.n >= 0) rows.push(['Age', (a.approx ? 'About ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'Under 1') : a.n + ' years old')]);
+      if (p.gender) rows.push(['Gender', p.gender]);
+      var bd = fmtBirthday(p.birthday); if (bd) rows.push(['Birthday', bd]);
+      var ad = prof ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
+      if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
+      var cats = prof ? visibleAbout(prof).filter(function (c) { return c.items && c.items.length; }) : [];
+      cats.forEach(function (c) {
+        box.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: c.title }), h('ul', { class: 'tags' }, c.items.map(function (i) { return h('li', { class: 'tag', text: i }); }))));
+      });
+      if (!box.childNodes.length) box.appendChild(h('p', { class: 'muted small', text: p.userId ? p.name + ' has not added details yet.' : 'No details added for ' + p.name + ' yet.' }));
+      return box;
+    }
     function select(id) {
       var p = byId[id], r = relatives(id);
       jump.value = id;
@@ -2895,11 +2920,12 @@
       var actions = [];
       if (ctl && ctl.mainId && ctl.mainId() !== p.$id) actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Center tree here', onclick: function () { ctl.focus(p.$id); select(p.$id); } }));
       actions.push(h('button', { class: 'btn secondary small', type: 'button', text: 'Suggest a change', onclick: function () { sendSuggestion(p.$id); } }));
-      if (canEditTree() || p.userId === S.user.$id) actions.push(h('button', { class: 'edit-pencil', type: 'button', 'aria-label': 'Edit ' + p.name, title: 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (nid) { S.tree = null; route(false); }); } }, icon('edit')));
+      if (editing && (canEditTree() || p.userId === S.user.$id)) actions.push(h('button', { class: 'edit-pencil', type: 'button', 'aria-label': 'Edit ' + p.name, title: 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (nid) { S.tree = null; route(false); }); } }, icon('edit')));
       var pLink = p.userId ? '#/profile/' + p.userId : null, pAv = avatarEl(prof || { displayName: p.name });
       panel.appendChild(h('div', { class: 'tree-who' }, pLink ? h('a', { class: 'avatar-link', href: pLink, 'aria-label': 'Open ' + p.name + '’s profile' }, pAv) : pAv, h('div', { class: 'grow' }, h('h2', null, pLink ? h('a', { class: 'name-link', href: pLink, text: p.name }) : p.name), detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null)));
       panel.appendChild(h('div', { class: 'row' }, actions));
-      if (canEditTree()) {
+      panel.appendChild(personDetails(p, prof));
+      if (editing && canEditTree()) {
         var addRow = h('div', { class: 'tree-addrel' }, h('strong', { class: 'small tree-addrel-title', text: 'Add a relative' }));
         [['parent', 'Parent'], ['partner', 'Partner'], ['child', 'Child'], ['sibling', 'Sibling']].forEach(function (o) {
           addRow.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: '+ ' + o[1], onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { relation: o[0], of: p, lite: true }); } }));
@@ -3202,8 +3228,11 @@
   }
   // Own circle colors are kept inside the About list as one hidden category (key "ringcolors"), so family can see them without a server change.
   var RING_KEY = 'ringcolors';
-  function visibleAbout(profile) { return aboutOf(profile).filter(function (c) { return c && c.key !== RING_KEY; }); }
+  var ADDR_KEY = 'address';   // also hidden from the About lists: one optional line, shown on the family tree
+  function visibleAbout(profile) { return aboutOf(profile).filter(function (c) { return c && c.key !== RING_KEY && c.key !== ADDR_KEY; }); }
   function ringCat(profile) { return aboutOf(profile).filter(function (c) { return c && c.key === RING_KEY; }); }
+  function addrCat(profile) { return aboutOf(profile).filter(function (c) { return c && c.key === ADDR_KEY; }); }
+  function addressOf(profile) { var c = addrCat(profile)[0]; return c && Array.isArray(c.items) && c.items[0] ? String(c.items[0]) : ''; }
   function ringColorsOf(profile) {
     var c = ringCat(profile)[0]; if (!c || !Array.isArray(c.items)) return [];
     return c.items.filter(function (x) { return /^#[0-9a-fA-F]{6}$/.test(x); }).slice(0, 3).map(function (x) { return x.toLowerCase(); });
@@ -3353,7 +3382,7 @@
     saveBtn.addEventListener('click', function () {
       busy(saveBtn, async function () {
         try {
-          var r = await api('saveAbout', { familyId: S.familyId, about: draft.concat(ringCat(S.profile)) });
+          var r = await api('saveAbout', { familyId: S.familyId, about: draft.concat(ringCat(S.profile), addrCat(S.profile)) });
           S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
           draft = visibleAbout(S.profile); base = JSON.stringify(draft);
           showAlert(msg, 'ok', 'Saved. Your family can now see it.'); paint();
@@ -3539,6 +3568,7 @@
     var bdIn = h('input', { type: 'date', id: 'pe-bday' }); bdIn.value = String(bd0).length === 10 ? bd0 : '';
     var ageIn = h('input', { type: 'number', id: 'pe-age', min: 0, max: 120, placeholder: 'For example 34' });
     if (String(bd0).length === 4) ageIn.value = new Date().getFullYear() - Number(bd0);
+    var addrIn = h('input', { type: 'text', id: 'pe-addr', maxlength: 120, autocomplete: 'street-address', placeholder: 'For example 12 Oak St, Valdosta GA' }); addrIn.value = addressOf(S.profile);
     var pmsg = h('div'), avatarBox = h('div', { class: 'row' });
     function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); }
     paintAvatar();
@@ -3587,6 +3617,11 @@
             S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { aboutMe: { name: (meP && meP.name) || savedMe.name || n, birthday: bv, gender: gv } }) });
             bd0 = bv; S.tree = null; await loadTree(true);
           }
+          var av = addrIn.value.trim();
+          if (av !== addressOf(S.profile)) {
+            var rr = await api('saveAbout', { familyId: fid, about: visibleAbout(S.profile).concat(ringCat(S.profile), av ? [{ key: ADDR_KEY, title: 'Address', items: [av] }] : []) });
+            S.profile = Object.assign({}, S.profile, { about: rr.about }); S.profiles.set(S.user.$id, S.profile);
+          }
           showAlert(pmsg, 'ok', 'Saved.');
         }
         catch (e) { showAlert(pmsg, 'error', errText(e)); }
@@ -3594,6 +3629,7 @@
     } }, name.wrap, h('div', null, h('label', { for: 'bio', text: 'Bio' }), bio, h('div', { class: 'hint', text: 'Up to 200 characters. Optional.' })),
       h('div', null, h('label', { for: 'pe-bday', text: 'Birthday (optional)' }), bdIn, h('div', { class: 'hint', text: 'Shows in the family tree.' })),
       h('div', null, h('label', { for: 'pe-age', text: 'Or your age (if you would rather not share the birthday)' }), ageIn),
+      h('div', null, h('label', { for: 'pe-addr', text: 'Address (optional)' }), addrIn, h('div', { class: 'hint', text: 'Family members can see this on the family tree. Leave it empty to keep it private.' })),
       pmsg, h('div', { class: 'stack' }, saveBtn));
     var ed = aboutEditor(visibleAbout(S.profile));
     if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
@@ -3744,7 +3780,7 @@
       more.appendChild(saveB); controls.appendChild(more);
     }
     async function saveRing(cols) {
-      var list = visibleAbout(S.profile); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
+      var list = visibleAbout(S.profile).concat(addrCat(S.profile)); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
       S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); applyRingTheme();
     }
