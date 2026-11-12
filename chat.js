@@ -944,6 +944,14 @@
     var ta = h('textarea', { rows: 1, maxlength: c.limits.body, 'aria-label': 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), placeholder: 'Message ' + (ch ? '#' + ch.name : realName(dm.otherId)), enterkeyhint: 'send', autocomplete: 'off' });
     ta.value = c.drafts[cv.id] || '';
     var count = h('div', { class: 'small muted count', hidden: true, 'aria-live': 'off' });
+    var emojiBtn = h('button', { class: 'btn ghost gif-btn emoji-btn', type: 'button', 'aria-label': 'Add an emoji', text: '\u{1F60A}', onclick: function () {
+      emojiPicker(c, cv, null, function (e) {
+        var a = ta.selectionStart == null ? ta.value.length : ta.selectionStart, b = ta.selectionEnd == null ? a : ta.selectionEnd;
+        if (ta.maxLength > 0 && ta.value.length - (b - a) + e.length > ta.maxLength) return;
+        ta.value = ta.value.slice(0, a) + e + ta.value.slice(b); ta.selectionStart = ta.selectionEnd = a + e.length;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    } });
     var gifBtn = h('button', { class: 'btn ghost gif-btn', type: 'button', 'aria-label': 'Choose a GIF or sticker', text: 'GIF', onclick: function () { gifPicker(c, function (media, caption) { sendText(c, cv, caption, reply ? reply.$id : '', media); setReply(null); }); } });
     var send = h('button', { class: 'btn ghost send-btn', type: 'submit', 'aria-label': 'Send message' }, icon('send'));
     function grow() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; var n = ta.value.length; count.hidden = n < c.limits.body - 150; count.textContent = n + ' / ' + c.limits.body; c.drafts[cv.id] = ta.value; send.disabled = !ta.value.trim(); }
@@ -961,7 +969,7 @@
       ev.preventDefault(); var t = ta.value.trim(); if (!t) return;
       if (t.length > c.limits.body) { toast('Messages can be up to ' + c.limits.body + ' characters.'); return; }
       sendText(c, cv, t, reply ? reply.$id : ''); ta.value = ''; c.drafts[cv.id] = ''; setReply(null); grow(); ta.focus();
-    } }, replyBar, h('div', { class: 'composer-row' }, gifBtn, ta, send), count);
+    } }, replyBar, h('div', { class: 'composer-row' }, emojiBtn, gifBtn, ta, send), count);
     wrap.appendChild(h('div', { id: 'typing-line', class: 'typing-line small', role: 'status', 'aria-live': 'polite', hidden: true }));
     wrap.appendChild(form); grow(); setTimeout(function () { paintTyping(c); }, 0);
     return wrap;
@@ -1097,13 +1105,13 @@
       return out.length <= 8 ? out : e;
     } catch (err) { return e; }
   }
-  function emojiPicker(c, cv, m) {
+  function emojiPicker(c, cv, m, onPick) {
     var body = h('div', { class: 'ep' }), grid = h('div', { class: 'ep-grid', role: 'group', 'aria-label': 'Emoji' });
-    var s = sheet('Add reaction', body), tone = lsGet('fc_chat_tone', 0), cat = 0, data = null;
+    var s = sheet(onPick ? 'Emoji' : 'Add reaction', body), tone = lsGet('fc_chat_tone', 0), cat = 0, data = null;
     var search = h('input', { type: 'search', 'aria-label': 'Search emoji', placeholder: 'Search emoji', autocomplete: 'off' });
     var tabs = h('div', { class: 'ep-tabs', role: 'group', 'aria-label': 'Emoji groups' }), tonesEl = h('div', { class: 'ep-tones', role: 'group', 'aria-label': 'Skin tone' });
     body.appendChild(h('div', { class: 'spin-line muted small', text: 'Loading emoji…' }));
-    function pick(e) { s.close(); var r = lsGet('fc_chat_recent', []).filter(function (x) { return x !== e; }); r.unshift(e); lsSet('fc_chat_recent', r.slice(0, 24)); react(c, cv, m, e); }
+    function pick(e) { if (!onPick) s.close(); var r = lsGet('fc_chat_recent', []).filter(function (x) { return x !== e; }); r.unshift(e); lsSet('fc_chat_recent', r.slice(0, 24)); if (onPick) { onPick(e); if (cat === 0 && !search.value.trim()) paint(); } else react(c, cv, m, e); }
     function parse(str) { var skin = str.charAt(0) === '~'; if (skin) str = str.slice(1); var i = str.indexOf(' '); return { e: str.slice(0, i), n: str.slice(i + 1), skin: skin }; }
     function btn(it) { var e = it.skin ? withTone(it.e, TONES[tone]) : it.e; return h('button', { class: 'ep-e', type: 'button', title: it.n, 'aria-label': it.n, text: e, onclick: function () { pick(e); } }); }
     function paint() {
