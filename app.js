@@ -916,6 +916,7 @@
         clear(box); box.className = 'media' + (vertical ? ' vertical' : '');
         var v = h('video', { src: blobUrl(blob, mime), playsinline: true, preload: 'auto', 'aria-label': 'Family video' });
         box.appendChild(v); customPlayer(v, box); applyCaptions(v, box, post);
+        var ringKind = S.ringRole && S.ringRole.get(post.authorId); if (ringKind) box.setAttribute('data-ring', ringKind); else box.removeAttribute('data-ring');   // the play button wears the poster's ring colors
         if (play !== false) { var p = v.play(); if (p && p.catch) p.catch(function () { /* the person can press play */ }); }
       }).catch(function (e) { if (token === S.nav) showButton("Couldn't load this video. " + (e.code === 401 ? 'You may not have access.' : 'Please try again.')); });
     }
@@ -2238,7 +2239,6 @@
         if (closingSheet) return;
         if (Date.now() - focusAt < 900) return;   // the phone keyboard shifts the layout and can re-deliver the tap on the comment box to whatever is now under it (the Comments button, the dimmed area); that must not close the sheet
         closingSheet = true;
-        try { toast('Comments closed by: ' + (typeof why === 'string' ? why : 'close button or comment button') + '  [debug]'); } catch (e) {}
         var sh = commentsEl, bk = backEl;
         if (!sh.classList.contains('dragged')) { sh.classList.add('closing'); if (bk) bk.classList.add('closing'); }   // slide back down, then remove
         var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2260,8 +2260,6 @@
       backEl = h('div', { class: 'sheet-backdrop', onpointerdown: function () { pressedBack = Date.now(); }, onclick: function () { var ok = pressedBack && Date.now() - pressedBack < 1500; pressedBack = 0; if (ok) toggleComments('tap on the dimmed area behind the sheet'); } });
       commentsEl.addEventListener('focusin', function (ev) { if (ev.target && /^(TEXTAREA|INPUT)$/.test(ev.target.tagName)) focusAt = Date.now(); });   // only the comment box counts, not the Close button
       card.appendChild(backEl); card.appendChild(commentsEl); paintCmt();
-      // [debug] if the page removes the sheet without going through the close code, say so
-      (function (sh) { var mo = new MutationObserver(function () { if (!sh.parentNode && !closingSheet) { try { toast('Comments removed by the page itself [debug]'); } catch (e) {} mo.disconnect(); } }); if (card.parentNode) mo.observe(card, { childList: true }); })(commentsEl);
       sheetDrag(commentsEl, function () { if (commentsEl) toggleComments('swipe down'); });
       // Keep the whole sheet, including the comment box and the Post button, inside what the phone really shows (browser bars and the keyboard change that).
       (function (sh) {

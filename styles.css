@@ -1414,3 +1414,11 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* v1.48.15 — the page draws the captions itself; never show the browser's own caption layer as well */
 video::-webkit-media-text-track-container, video::-webkit-media-text-track-display { display: none !important; }
 video::cue { opacity: 0 !important; background: transparent !important; color: transparent !important; }
+
+/* v1.48.17 — the big play button is a turning ring in the poster's ring colors (rainbow, gold for married, blue-silver for grandparents) */
+.pl-big { background: conic-gradient(from var(--ang), var(--rb)); animation: ring-turn 6s linear infinite; box-shadow: 0 4px 18px #0006; }
+.pl-big::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: rgba(12, 12, 16, .72); }
+.pl-big svg { position: relative; filter: drop-shadow(0 1px 2px #0008); }
+.media[data-ring="married"] .pl-big { --rb: #f7d774, #c98a14, #fff0b0, #b87a10, #f7d774, #ffe9a0, #c98a14, #f7d774; }
+.media[data-ring="grand"] .pl-big { --rb: #8fa7d8, #f4f8ff, #6f8fd0, #d9e4ff, #a28bdc, #f4f8ff, #8fa7d8, #8fa7d8; }
+@media (prefers-reduced-motion: reduce) { .pl-big { animation: none; } }
