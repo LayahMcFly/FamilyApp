@@ -304,9 +304,16 @@
     var el = document.documentElement;
     el.setAttribute('data-theme', prefs.mode);
     el.setAttribute('data-preset', prefs.preset);
-    ['--accent', '--accent-text', '--on-accent'].forEach(function (v) { el.style.removeProperty(v); });
+    ['--accent', '--accent-text', '--on-accent', '--bg', '--surface', '--surface-2', '--border'].forEach(function (v) { el.style.removeProperty(v); });
     if (!prefs.accent) return;
     var dark = prefs.mode === 'dark' || (prefs.mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    // Default style in light mode only: the page background takes on the chosen color (a light tint of it).
+    if (!dark && prefs.preset === 'default') {
+      el.style.setProperty('--bg', mix(prefs.accent, '#ffffff', 0.86));
+      el.style.setProperty('--surface', mix(prefs.accent, '#ffffff', 0.86));
+      el.style.setProperty('--surface-2', mix(prefs.accent, '#ffffff', 0.74));
+      el.style.setProperty('--border', mix(prefs.accent, '#ffffff', 0.58));
+    }
     var surface = (getComputedStyle(el).getPropertyValue('--surface') || (dark ? '#131c2e' : '#ffffff')).trim();
     if (!/^#[0-9a-f]{6}$/i.test(surface)) surface = dark ? '#131c2e' : '#ffffff';
     var text = prefs.accent, n = 0;
