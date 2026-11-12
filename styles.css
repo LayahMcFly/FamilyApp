@@ -1541,3 +1541,7 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
 .main > .links-section { margin-top: 14px; }
 .link-row { padding-inline: 2px; }
 dialog form input[type="text"][inputmode="url"] { width: 100%; }
+
+/* v1.50.21: library chips ("Saved for later" ...) keep the page margin; room for the selected ring */
+.main > .chips { margin-left: 12px !important; margin-right: 12px !important; padding: 4px 4px 10px !important; box-sizing: border-box; max-width: calc(100% - 24px); }
+.main > .chips .chip[aria-pressed="true"] { outline: 0; box-shadow: none; }
