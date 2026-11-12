@@ -2328,7 +2328,7 @@
       if (post.body) {
         var bp = h('p', { class: 'post-body' }, (isReel || isTile) ? null : h('strong', { class: 'cap-name', text: name }), (isReel || isTile) ? '' : ' ');
         bp.appendChild(richText(post.body)); bodyHolder.appendChild(bp);
-        if (!isReel && !isTile) { var lc = linkCard(post.body); if (lc) bodyHolder.appendChild(lc); }   // same preview card as in chat
+        if (!isReel && !isTile) { var lc = ytCard(post.body) || linkCard(post.body); if (lc) bodyHolder.appendChild(lc); }   // same preview card as in chat
       }
       if (isTile && post.body && post.body.length > 200) bodyHolder.appendChild(h('a', { class: 'tile-more', href: '#/post/' + post.$id, text: 'more' })); }
     showBody();
@@ -2876,7 +2876,7 @@
 
   VIEWS.create = function (main) {
     var kind = 'text', file = null, draft = '', previewUrl = null;
-    var KINDS = [{ id: 'text', label: 'Text' }, { id: 'photo', label: 'Photo' }, { id: 'video', label: 'Video' }, { id: 'short', label: 'Short' }];
+    var KINDS = [{ id: 'text', label: 'Text' }, { id: 'photo', label: 'Photo' }, { id: 'video', label: 'Video' }, { id: 'short', label: 'Short' }, { id: 'link', label: 'Video link' }];
     var holder = h('div');
     main.appendChild(h('h1', { text: 'Create a post' }));
     main.appendChild(holder);
@@ -2890,6 +2890,7 @@
       }));
       var ta = h('textarea', { id: 'body', maxlength: L.bodyMax || 2000, rows: 5, placeholder: kind === 'text' ? "What's on your mind?" : 'Add a caption (optional)' });
       ta.value = draft;
+      var linkIn = kind === 'link' ? h('input', { id: 'vlink', type: 'url', inputmode: 'url', autocomplete: 'off', placeholder: 'Paste a YouTube link', 'aria-label': 'Video link' }) : null;
       var msg = h('div'), info = h('div', { class: 'hint' }), prev = h('div', { class: 'preview' }), limitsBox = h('div', { class: 'limits' });
       var bar = h('progress', { max: 100, value: 0, hidden: true, 'aria-label': 'Upload progress' });
       var fileInput = null;
@@ -2913,7 +2914,7 @@
           h('p', { class: 'hint', text: 'English only. Made on your phone before posting, so it adds a minute or so. The first time, it downloads a speech model (about 80 MB, once). Not perfect, so watch the captions once.' }));
       }
 
-      if (kind !== 'text') {
+      if (kind !== 'text' && kind !== 'link') {
         var accept = kind === 'photo' ? 'image/jpeg,image/png,image/webp,image/heic,image/heif' : 'video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm';
         fileInput = h('input', { id: 'file', type: 'file', accept: accept });
         renderUsage(limitsBox, true);
@@ -2977,9 +2978,14 @@
       } });
       var form = h('form', { novalidate: true, class: 'card', onsubmit: function (ev) {
         ev.preventDefault();
-        var text = ta.value.trim(), uid = S.user.$id;
+        var text = ta.value.trim(), uid = S.user.$id, wireKind = kind;
+        if (kind === 'link') {   // a shared link is an ordinary text post whose body holds the address; the feed turns a YouTube address into a player
+          var lu = linkIn.value.trim();
+          if (!/^https?:\/\/[^\s]+$/i.test(lu)) return showAlert(msg, 'error', 'Paste a full link that starts with https://');
+          text = (text ? text + '\n' : '') + lu; wireKind = 'text';
+        }
         if (kind === 'text' && !text) return showAlert(msg, 'error', 'Write something first.');
-        if (kind !== 'text' && !file) return showAlert(msg, 'error', 'Please choose a ' + (kind === 'photo' ? 'photo' : 'video') + ' first.');
+        if (kind !== 'text' && kind !== 'link' && !file) return showAlert(msg, 'error', 'Please choose a ' + (kind === 'photo' ? 'photo' : 'video') + ' first.');
         if ((kind === 'video' || kind === 'short') && file.size > (L.videoMaxMB || 15) * 1048576) return showAlert(msg, 'error', 'This video is ' + fmtMB(file.size) + ', over the ' + (L.videoMaxMB || 15) + ' MB limit, so it cannot be posted. Edit it smaller or cut it shorter.');
         if (text.length > (L.bodyMax || 2000)) return showAlert(msg, 'error', 'That is too long. The limit is ' + (L.bodyMax || 2000) + ' characters.');
         showAlert(msg, 'error', '');
@@ -2989,7 +2995,7 @@
           var uploaded = null;
           function chk() { if (cancelled) throw new Error('__cancelled'); }
           try {
-            var payload = { familyId: fid, kind: kind, body: text };
+            var payload = { familyId: fid, kind: wireKind, body: text };
             function onProg(p) { bar.hidden = false; bar.value = Math.round(p.progress || 0); }
             if (kind === 'photo') {
               btn.textContent = 'Preparing photo…';
@@ -3026,6 +3032,7 @@
           }
         }, 'Posting…');
       } },
+        kind === 'link' ? h('div', null, h('label', { for: 'vlink', text: 'Link' }), linkIn, h('div', { class: 'hint', text: 'YouTube links play right in the post. Other links show a preview card.' })) : null,
         h('label', { for: 'body', text: kind === 'text' ? 'Your note' : 'Caption' }), ta,
         fileInput ? h('div', null, h('label', { for: 'file', text: kind === 'photo' ? 'Photo' : kind === 'short' ? 'Short video' : 'Video' }), fileInput, info, limitsBox, prev) : null,
         ccRow, giftRow, bar, msg, h('div', { class: 'stack' }, btn, cancelBtn));
@@ -3810,6 +3817,35 @@
   }
   // Links in posts: clickable (opens a new tab) and, for the first link, a preview card like the one in chat.
   function richText(text) { return window.FCChat && window.FCChat.linkify ? window.FCChat.linkify(text) : document.createTextNode(String(text || '')); }
+  // A YouTube address in a post becomes a picture with a play button. The player (YouTube's privacy-friendly address) loads only after a tap.
+  function ytIdOf(u) {
+    try {
+      var x = new URL(u), host = x.hostname.replace(/^www\.|^m\./, ''), id = '';
+      if (host === 'youtu.be') id = x.pathname.slice(1).split('/')[0];
+      else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+        var m = /^\/(?:shorts|embed|live)\/([^/?#]+)/.exec(x.pathname);
+        id = m ? m[1] : (x.pathname === '/watch' ? x.searchParams.get('v') || '' : '');
+      }
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : '';
+    } catch (e) { return ''; }
+  }
+  function ytCard(text) {
+    var urls = String(text || '').match(/https?:\/\/[^\s<>"']+/g) || [], id = '', src = '';
+    for (var i = 0; i < urls.length && !id; i++) { id = ytIdOf(urls[i]); src = urls[i]; }
+    if (!id) return null;
+    var box = h('div', { class: 'yt-card' });
+    var play = h('button', { class: 'yt-play', type: 'button', 'aria-label': 'Play the YouTube video' },
+      h('img', { src: 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg', alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }),
+      h('span', { class: 'yt-btn', 'aria-hidden': 'true', text: '\u25B6' }));
+    play.addEventListener('click', function () {
+      clear(box);
+      box.appendChild(h('iframe', { class: 'yt-frame', src: 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&playsinline=1', title: 'YouTube video', allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen', allowfullscreen: 'true', referrerpolicy: 'strict-origin-when-cross-origin' }));
+      wrap.appendChild(h('a', { class: 'small yt-open', href: src, target: '_blank', rel: 'noopener noreferrer', text: 'Open on YouTube' }));
+    });
+    box.appendChild(play);
+    var wrap = h('div', { class: 'yt-wrap' }, box);
+    return wrap;
+  }
   function linkCard(text) { try { return window.FCChat && window.FCChat.linkCardFor ? window.FCChat.linkCardFor(text) : null; } catch (e) { return null; } }
   function personFor(tree, uid) { return tree ? tree.people.filter(function (p) { return p.userId === uid; })[0] || null : null; }
 
