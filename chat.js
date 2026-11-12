@@ -345,19 +345,26 @@
     if (C === c && c.cur === cv) paintMessages('prepend');
   }
   /** After a dropped connection or a long pause: fetch the newest page and merge it by id (no duplicates). */
+  function convSig(cv) {
+    var parts = cv.msgs.map(function (m) { return m.$id + '|' + (m.editedAt || '') + '|' + (m._status || ''); });
+    cv.react.forEach(function (byEmoji, mid) { byEmoji.forEach(function (set, e) { parts.push(mid + e + set.size); }); });
+    return parts.join(',');
+  }
   async function catchUp(c) {
     var cv = c.cur; if (!cv || !cv.ready) return;
     try {
       var rows = await fetchPage(cv, null);
       if (C !== c || c.cur !== cv) return;
       var atBottom = nearBottom();
+      var sig0 = convSig(cv);
       var ids = {}; rows.forEach(function (r) { ids[r.$id] = true; });
       rows.slice().reverse().forEach(function (r) { upsert(cv, r); });
       // messages that were deleted while I was offline
       var oldest = rows.length === PAGE ? rows[rows.length - 1].$createdAt : '';
       cv.msgs = cv.msgs.filter(function (m) { return m._local || ids[m.$id] || (oldest && m.$createdAt < oldest); });
       await fetchReactions(cv, rows.map(function (r) { return r.$id; }));
-      paintMessages(atBottom ? 'bottom' : 'keep'); maybeMarkRead(c);
+      if (convSig(cv) !== sig0) paintMessages(atBottom || c.kbd ? 'bottom' : 'keep');   // nothing new: leave the screen alone
+      maybeMarkRead(c);
     } catch (e) { /* offline: the banner explains it, and the next wake-up tries again */ }
   }
 
@@ -592,6 +599,7 @@
     var jump = h('button', { class: 'btn small jump', id: 'chat-jump', type: 'button', hidden: true, onclick: function () { cv.newCount = 0; scrollBottom(); paintJump(); maybeMarkRead(c); } });
     pane.appendChild(jump);
     pane.appendChild(buildComposer(c, cv, ch, dm));
+    list.addEventListener('scroll', function () { c.stick = nearBottom(); }, { passive: true });
     var st = null; list.addEventListener('scroll', function () { if (st) return; st = setTimeout(function () { st = null; paintJump(); if (nearBottom()) { cv.newCount = 0; maybeMarkRead(c); } if (list.scrollTop < 60 && cv.hasMore && cv.ready) loadOlder(c, cv); }, 120); });
     paintBanner();
     paintMessages(cv.ready ? (cv.stickToDivider ? 'divider' : 'bottom') : 'keep');
@@ -800,7 +808,8 @@
   /** Redraws the message list. mode: keep (stay where you are), bottom (go to newest), prepend (older messages were added above), divider (open at the "New messages" line). */
   function paintMessages(mode) {
     var c = C, cv = c && c.cur, list = listScroller(); if (!cv || !list) return;
-    var prevH = list.scrollHeight, prevTop = list.scrollTop, wasBottom = nearBottom();
+    var prevH = list.scrollHeight, prevTop = list.scrollTop, wasBottom = nearBottom() || (mode === 'keep' && (c.kbd || c.stick === true && prevH - prevTop - list.clientHeight < 400));
+    if (c.ro) { try { c.ro.disconnect(); } catch (e) { /* ok */ } c.ro = null; }
     clear(list);
     if (cv.err) { list.appendChild(h('div', { class: 'chat-empty' }, X.alertBox('error', cv.err.code === 404 || cv.err.code === 401 ? 'You do not have access to this conversation.' : msgOf(cv.err)), h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { cv.err = null; cv.ready = false; openConv(c, cv.kind, cv.id); } }))); return; }
     if (!cv.ready) { list.appendChild(h('div', { class: 'chat-empty' }, X.spinnerLine('Loading messages…', 'site'))); return; }
@@ -823,7 +832,14 @@
       var grouped = !!prev && !newDay && !afterDivider && prev.authorId === m.authorId && !m.replyToId && (new Date(m.$createdAt) - new Date(prev.$createdAt)) < GROUP_MS;
       list.appendChild(messageNode(c, cv, m, grouped)); prev = m;
     });
-    if (mode === 'bottom' || (mode === 'keep' && wasBottom)) list.scrollTop = list.scrollHeight;
+    var pinBottom = mode === 'bottom' || (mode === 'keep' && wasBottom);
+    if (pinBottom) { c.stick = true; list.scrollTop = list.scrollHeight; }
+    // Pictures, link cards and GIFs grow after they are drawn. While you are at the bottom (or typing), keep the bottom in view.
+    if (window.ResizeObserver) {
+      c.ro = new ResizeObserver(function () { if ((c.stick || c.kbd) && C === c && c.cur === cv) { var l = listScroller(); if (l) l.scrollTop = l.scrollHeight; } });
+      [].slice.call(list.querySelectorAll('.msg')).slice(-40).forEach(function (n) { c.ro.observe(n); });
+    }
+    if (pinBottom) { /* done above */ }
     else if (mode === 'divider') { if (dividerNode) list.scrollTop = Math.max(0, dividerNode.offsetTop - 60); else list.scrollTop = list.scrollHeight; }
     else if (mode === 'prepend') list.scrollTop = list.scrollHeight - prevH + prevTop;
     else list.scrollTop = prevTop;
@@ -886,6 +902,11 @@
     function setReply(m) { reply = m; replyBar.hidden = !m; clear(replyBar); if (m) { replyBar.appendChild(h('span', { class: 'clamp' }, 'Replying to ', h('strong', { text: realName(m.authorId) }), ': ' + m.body)); replyBar.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Cancel reply', text: '×', onclick: function () { setReply(null); ta.focus(); } })); ta.focus(); } }
     cv.setReply = setReply;
     ta.addEventListener('input', grow);
+    // Keyboard mode: while the message box has focus the newest messages stay in view, until the keyboard is closed.
+    function toBottom() { var l = listScroller(); if (l) l.scrollTop = l.scrollHeight; }
+    ta.addEventListener('focus', function () { c.kbd = true; c.stick = true; toBottom(); setTimeout(toBottom, 120); setTimeout(toBottom, 350); setTimeout(toBottom, 700); });
+    ta.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ta) c.kbd = false; }, 150); });
+    ta.addEventListener('input', function () { if (c.kbd) toBottom(); });
     ta.addEventListener('input', function () { pingTyping(c, cv, ta); });
     ta.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && isFine()) { ev.preventDefault(); form.requestSubmit(); } });
     var form = h('form', { class: 'composer', onsubmit: function (ev) {
@@ -1283,7 +1304,7 @@
     var vv = window.visualViewport; if (!vv) return;
     var set = function () { document.documentElement.style.setProperty('--vvh', Math.round(vv.height) + 'px'); document.documentElement.style.setProperty('--vvt', Math.round(vv.offsetTop) + 'px'); };
     set();
-    if (C && !C.vv) { C.vv = true; listen(C, vv, 'resize', function () { set(); if (nearBottom()) scrollBottom(); }); listen(C, vv, 'scroll', set); }
+    if (C && !C.vv) { C.vv = true; listen(C, vv, 'resize', function () { set(); if (C.kbd || nearBottom()) { scrollBottom(); setTimeout(scrollBottom, 120); setTimeout(scrollBottom, 350); } }); listen(C, vv, 'scroll', set); }
   }
   async function startConv(c) {
     var r = c.route, kind = r.mode === 'dms' ? 'dm' : 'channel', cv = null;
