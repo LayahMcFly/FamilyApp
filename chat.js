@@ -588,6 +588,7 @@
       closed.forEach(function (d) { var on = c.cur && c.cur.id === d.id; cd.appendChild(h('a', { class: 'side-item dim' + (on ? ' on' : ''), href: '#/dms/' + d.id, 'aria-current': on ? 'page' : null }, avatar(d.otherId, 'sm'), h('span', { class: 'grow', text: realName(d.otherId) }))); });
       sc.appendChild(cd);
     }
+    side.appendChild(h('div', { class: 'side-version small muted', text: ((window.FAMILY_CONFIG && window.FAMILY_CONFIG.appName) || 'Family Circle') + ' v' + ((window.FAMILY_CONFIG && window.FAMILY_CONFIG.version) || '') }));   // only in the list, never in the conversation
     return side;
   }
 

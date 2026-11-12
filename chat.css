@@ -477,3 +477,6 @@ body.call-open { overflow: hidden; }
 
 /* v1.50.22: in a chat the in-call bar sits above the message box instead of on top of it */
 body.chat-mode .call-pill { bottom: calc(env(safe-area-inset-bottom) + 78px); }
+
+/* v1.50.23: version number at the bottom of the channels / people list */
+.side-version { flex: none; padding: 8px 14px calc(10px + env(safe-area-inset-bottom)); text-align: center; border-top: 1px solid var(--border); font-size: .75rem; }
