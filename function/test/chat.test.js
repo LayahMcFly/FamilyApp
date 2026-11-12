@@ -445,6 +445,12 @@ test('calls: pass only for people in the conversation, signed, and a call row fo
     await w.ok('ann', 'callLeave', { familyId: 'famA', kind: 'channel', convId: ch.general });
     assert.ok(rows()[0].until < before, 'leaving expires the banner row at once');
     await w.fail('zed', 'callJoin', { familyId: 'famA', kind: 'channel', convId: ch.general }, 403);
+    // the first join leaves one "started a call" card; a second person joining the running call adds none
+    const cards = () => [...w.world.tables.chatMessages.values()].filter((x) => x.body === '[call]' && x.convId === ch.general);
+    assert.equal(cards().length, 1);
+    await w.ok('ann', 'callJoin', { familyId: 'famA', kind: 'channel', convId: ch.general });
+    await w.ok('bob', 'callJoin', { familyId: 'famA', kind: 'channel', convId: ch.general });
+    assert.equal(cards().length, 2, 'Ann left and rejoined = a new call; Bob joining her call adds nothing');
   } finally { delete EXTRA_CFG.livekit; }
   const off = await setup();
   await off.w.fail('ann', 'callJoin', { familyId: 'famA', kind: 'channel', convId: off.ch.general }, 400);

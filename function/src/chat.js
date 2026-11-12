@@ -414,6 +414,16 @@ export function createChat(c) {
       }
       if (!lk.url || !lk.key || !lk.secret) throw bad('Calls are not turned on yet. The family owner needs to finish the call setup (see CHAT-GUIDE.md, "Calls").');
       if (!softLimit('call', user.$id, 20, 60)) throw tooMany('starting calls');
+      // The first person to join starts the call: leave a "started a call" card in the conversation so everyone can join from there.
+      try {
+        const live = await listRows(T.typing, [Query.equal('convId', [`call:${conv.row.$id}`]), Query.limit(50)]);
+        const someoneIn = (live.rows || []).some((r) => Date.parse(r.until || '') > now() && r.userId !== user.$id);
+        const mineLive = (live.rows || []).some((r) => Date.parse(r.until || '') > now() && r.userId === user.$id);
+        if (!someoneIn && !mineLive) {
+          const row = await createRow(T.messages, ID.unique(), { familyId: ctx.familyId, convId: conv.row.$id, kind: conv.kind, authorId: user.$id, body: '[call]', clientId: `call${now()}`, sendKey: `${user.$id}_call${now()}` }, conv.perms);
+          if (conv.kind === 'dm') { try { await updateRow(T.dms, conv.row.$id, { lastAt: row.$createdAt }); } catch (e) { /* ordering hint only */ } }
+        }
+      } catch (e) { /* the call itself must still start */ }
       await markCall(ctx.familyId, conv, user.$id, true);
       const room = `fc_${conv.row.$id}`;
       const token = livekitToken(lk.key, lk.secret, { room, identity: user.$id, ttlSec: 3600 });

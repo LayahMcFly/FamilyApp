@@ -800,7 +800,20 @@
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { node.addEventListener(n, cancel); });
     node.addEventListener('contextmenu', function (ev) { if (ev.target.closest && ev.target.closest('a')) return; ev.preventDefault(); cancel(); if (!fired) fn(); fired = false; });
   }
+  // "Leia started a call": a card in the history. The Join button is on the newest call card, and only while the call is running.
+  function callCard(c, cv, m) {
+    var lastCall = null; cv.msgs.forEach(function (x) { if (x.body === '[call]') lastCall = x; });
+    var live = callIds(c, cv.id).length > 0 && lastCall && lastCall.$id === m.$id;
+    var mine = window.FCCalls && window.FCCalls.inCall(cv.id);
+    var who = m.authorId === c.uid ? 'You' : realName(m.authorId);
+    var card = h('div', { class: 'call-card' + (live ? ' live' : ''), 'data-mid': m.$id },
+      h('span', { class: 'cc-ic', 'aria-hidden': 'true' }, icon('phone')),
+      h('div', { class: 'grow' }, h('strong', { text: who + ' started a call' }), h('div', { class: 'small muted', text: timeText(m.$createdAt) + (live ? (mine ? ' · you are in this call' : ' · happening now') : ' · ended') })),
+      live && !mine ? h('button', { class: 'btn small call-join', type: 'button', text: 'Join call', onclick: function () { startCall(c, cv, false); } }) : null);
+    return card;
+  }
   function messageNode(c, cv, m, grouped) {
+    if (m.body === '[call]' && !m.media) return callCard(c, cv, m);
     var mine = m.authorId === c.uid;
     var node = h('div', { class: 'msg' + (mine ? ' mine' : '') + (grouped ? ' grouped' : '') + (m._local ? ' local' : ''), 'data-mid': m.$id });
     node.appendChild(grouped ? h('span', { class: 'av-spacer', 'aria-hidden': 'true' }) : avWrap(C, m.authorId, 'sm'));
@@ -885,6 +898,7 @@
       try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) { /* ok */ }
     }
     paintCallBanner(c); paintList();
+    if (c.cur && c.cur.id === convId) paintMessages('keep');   // the call card's Join button follows the call
   }
   async function loadCalls(c) {
     try {
