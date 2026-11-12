@@ -2928,13 +2928,7 @@
       if (!p.userId && S.isOwner) {   // someone in the tree who has no account yet (for example a parent): invite them from here
         if (p.inviteMembershipId) panel.appendChild(h('p', { class: 'small muted', text: 'An invitation is waiting for ' + p.name + '. When they accept it, this entry becomes their own. Manage invitations in Settings \u2192 Family.' }));
         else panel.appendChild(h('div', { class: 'row' }, h('button', { class: 'btn small', type: 'button', text: 'Invite ' + p.name + ' by email', onclick: function () {
-          textDialog('Invite ' + p.name, '', 'Send invitation', { type: 'email', max: 120, aria: 'Email address', placeholder: 'name@example.com',
-            hint: 'They get an email link. When they accept, this tree entry becomes theirs, and the family you drew around it stays connected.' }, async function (e) {
-            if (!emailOk(e)) throw new Error('Please enter a valid email address.');
-            var mem = await teams.createMembership({ teamId: S.familyId, roles: ['member'], email: e, name: p.name, url: baseUrl() + '?action=invite' });
-            await api('treeEditPerson', { familyId: S.familyId, personId: p.$id, inviteMembershipId: mem.$id });
-            S.tree = null; toast('Invitation sent to ' + e + '.'); route(false);
-          });
+          inviteTreePerson(p);
         } })));
       }
       if (editing && canEditTree()) {
@@ -3298,6 +3292,18 @@
         busy(ok, async function () { try { await onSubmit(inp.value.trim()); done(true); } catch (e) { showAlert(msg, 'error', errText(e)); } }, 'Saving…');
       } }, h('h2', { id: 'dlg-title', text: title }), opts.hint ? h('p', { class: 'hint', text: opts.hint }) : null, inp, msg, h('div', { class: 'row' }, cancel, ok)));
       document.body.appendChild(dlg); dlg.showModal(); inp.focus();
+    });
+  }
+
+  // Invite someone who is already in the tree but has no account yet (for example a parent). The entry becomes theirs when they accept.
+  function inviteTreePerson(p, after) {
+    return textDialog('Invite ' + p.name, '', 'Send invitation', { type: 'email', max: 120, aria: 'Email address', placeholder: 'name@example.com',
+      hint: 'They get an email link. When they accept, this tree entry becomes theirs, and the family you drew around it stays connected.' }, async function (e) {
+      if (!emailOk(e)) throw new Error('Please enter a valid email address.');
+      var mem = await teams.createMembership({ teamId: S.familyId, roles: ['member'], email: e, name: p.name, url: baseUrl() + '?action=invite' });
+      await api('treeEditPerson', { familyId: S.familyId, personId: p.$id, inviteMembershipId: mem.$id });
+      S.tree = null; toast('Invitation sent to ' + e + '.');
+      if (after) after(); else route(false);
     });
   }
 
@@ -4238,6 +4244,8 @@
             (edit && people.length > 1 && !hasParents(p) && !partners.length && !(kids[p.$id] || []).length) ? h('div', { class: 'small', text: 'Not connected to anyone yet. Tap Edit to choose their parents or partner.' }) : null),
           h('div', { class: 'tnode-actions' },
             prof ? h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Profile' }) : null,
+            (!p.userId && S.isOwner && !p.inviteMembershipId) ? h('button', { class: 'link-btn small', type: 'button', text: 'Invite', 'aria-label': 'Invite ' + p.name + ' by email', onclick: function () { inviteTreePerson(p); } }) : null,
+            (!p.userId && p.inviteMembershipId) ? h('span', { class: 'small muted', text: 'Invitation sent' }) : null,
             (edit || p.userId === me) ? h('button', { class: 'link-btn small', type: 'button', text: 'Edit', 'aria-label': 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (id) { draw(id, true); }); } })
                  : h('button', { class: 'link-btn small', type: 'button', text: 'Suggest', 'aria-label': 'Suggest a change about ' + p.name, onclick: function () { sendSuggestion(p.$id).then(function (ok) { if (ok) draw(p.$id, true); }); } })));
         return el;
