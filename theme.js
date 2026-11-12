@@ -20,7 +20,7 @@
     { id: 'default', name: 'Default', note: 'The familiar FamilyCircle look', def: { mode: 'system', accent: '' } },
     { id: 'bubbly', name: 'Bubbly', note: 'Soft, round and playful', def: { mode: 'light', accent: '#8b5cf6' } },
     { id: 'cartoon', name: 'Cartoon', note: 'Bold outlines and sticker shadows', def: { mode: 'light', accent: '#e8472b' } },
-    { id: 'classic', name: 'Classic Social', note: 'Familiar, tidy and structured', def: { mode: 'light', accent: '#1b6fe0' } },
+    { id: 'classic', name: 'Classic Social', note: 'Tidy and structured. Used to be the old theme, before the current one', def: { mode: 'light', accent: '#1b6fe0' } },
     { id: 'cozy', name: 'Cozy', note: 'Warm, calm and welcoming', def: { mode: 'light', accent: '#587a5f' } }
   ];
 
