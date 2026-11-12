@@ -865,6 +865,7 @@ test('page style is stored when valid and refused when not', async () => {
   assert.equal((await save(['bg:g2', 'border:#aa00ff', 'bstyle:dashed', 'bwidth:3', 'font:serif', 'round:lg', 'accent:#112233', 'fa:#ff6bb5', 'fb:#ffb347', 'fc:#5ad1ff'])).status, 200);
   assert.equal((await save(['bstyle:wavy'])).status, 400);
   assert.equal((await save(['bstyle:zigzag', 'border:#2c5282', 'border2:#f6e7c8'])).status, 200);
+  assert.equal((await save(['bstyle:baroque'])).status, 200);
   assert.equal((await save(['bg:red'])).status, 400);
   assert.equal((await save(['bwidth:9'])).status, 400);
   assert.equal((await save(['font:serif', 'font:mono'])).status, 400);

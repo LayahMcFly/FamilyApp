@@ -4060,7 +4060,8 @@
     g4: ['Night', 'linear-gradient(135deg,#0f2027,#2c5364)'], g5: ['Candy', 'linear-gradient(135deg,#a18cd1,#fbc2eb)'], g6: ['Graphite', 'linear-gradient(135deg,#232526,#555a5c)'] };
   var PAGE_FONTS = { sans: ['Clean', 'inherit'], serif: ['Storybook', 'Georgia, "Times New Roman", serif'], rounded: ['Rounded', 'Nunito, "Trebuchet MS", system-ui, sans-serif'], script: ['Handwritten', '"Dancing Script", "Segoe Script", cursive'], mono: ['Typewriter', 'ui-monospace, Menlo, Consolas, monospace'] };
   var PAGE_ROUND = { sm: ['Square', '6px'], md: ['Soft', '16px'], lg: ['Round', '28px'] };
-  var PAGE_BORDERS = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', double: 'Double', rainbow: 'Rainbow', stripes: 'Blanket stripes', zigzag: 'Zigzag quilt edge', checker: 'Patchwork checks', stitched: 'Stitched seam', ridge: 'Ridged frame', none: 'No border' };
+  var PAGE_BORDERS = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', double: 'Double', rainbow: 'Rainbow', stripes: 'Blanket stripes', zigzag: 'Zigzag quilt edge', checker: 'Patchwork checks', stitched: 'Stitched seam', ridge: 'Ridged frame', lace: 'Embroidered lace', quilted: 'Quilted ruffle', rope: 'Golden rope', crochet: 'Crochet scallops', floral: 'Flower wreath and fringe', baroque: 'Baroque scrolls', none: 'No border' };
+  var PAGE_ORN = { lace: ['#c9a46a', '#f6ecd6'], quilted: ['#f4b4c8', '#ffffff'], crochet: ['#b79ae0', '#efe6ff'], rope: ['#b8893a', '#7a5a22'], floral: ['#6f9bd8', '#f7efd9'], baroque: ['#7b2332', '#d4af5a'] };   // [colour, second colour] each ornate edge starts with
   var PAGE_PATTERNS = { stripes: 1, zigzag: 1, checker: 1, stitched: 1, ridge: 1 };
   function pageStyleOf(profile) {
     var c = aboutOf(profile).filter(function (x) { return x && x.key === PAGE_KEY; })[0], st = {};
@@ -4070,7 +4071,7 @@
   function pageItems(st) { return Object.keys(st).filter(function (k) { return st[k]; }).map(function (k) { return k + ':' + st[k]; }); }
   function applyPageStyle(el, st) {
     ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-border2', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--grad', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
-    ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-border', 'pg-accent', 'pg-pat', 'pg-p-stripes', 'pg-p-zigzag', 'pg-p-checker', 'pg-p-stitched', 'pg-p-ridge'].forEach(function (cl) { el.classList.remove(cl); });
+    ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-border', 'pg-accent', 'pg-pat', 'pg-p-stripes', 'pg-p-zigzag', 'pg-p-checker', 'pg-p-stitched', 'pg-p-ridge', 'pgo', 'pg-scal', 'pg-o-lace', 'pg-o-quilted', 'pg-o-rope', 'pg-o-crochet', 'pg-o-floral', 'pg-o-baroque'].forEach(function (cl) { el.classList.remove(cl); });
     if (!st || !Object.keys(st).length) return;
     el.classList.add('pg-custom');
     if (st.bg) { el.classList.add('pg-bg'); el.style.setProperty('--pg-bg', PAGE_GRADS[st.bg] ? PAGE_GRADS[st.bg][1] : st.bg); }
@@ -4079,6 +4080,7 @@
       el.classList.add('pg-border');
       el.style.setProperty('--pg-bwidth', (st.bwidth || '2') + 'px');
       if (bs === 'rainbow') el.classList.add('pg-rainbow');
+      else if (PAGE_ORN[bs]) { el.classList.add('pgo', 'pg-o-' + bs); if (bs === 'lace' || bs === 'quilted' || bs === 'crochet') el.classList.add('pg-scal'); el.style.setProperty('--pg-border', st.border || PAGE_ORN[bs][0]); el.style.setProperty('--pg-border2', st.border2 || PAGE_ORN[bs][1]); }
       else if (PAGE_PATTERNS[bs]) { el.classList.add('pg-pat', 'pg-p-' + bs); el.style.setProperty('--pg-border', st.border || '#7c5cff'); el.style.setProperty('--pg-border2', st.border2 || '#f6e7c8'); }
       else { el.style.setProperty('--pg-bstyle', bs); el.style.setProperty('--pg-border', st.border || '#7c5cff'); }
     }
@@ -4091,7 +4093,7 @@
     el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
-  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|border2:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none|stripes|zigzag|checker|stitched|ridge)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
+  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|border2:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none|stripes|zigzag|checker|stitched|ridge|lace|quilted|rope|crochet|floral|baroque)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
   function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
     var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
     return l.map(function (x) {
@@ -4184,8 +4186,9 @@
       bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Thickness' }), select('bwidth', { 1: '1 px', 2: '2 px', 3: '3 px', 4: '4 px', 5: '5 px', 6: '6 px' }, 'Border thickness', '2')));
       if (st.bstyle !== 'rainbow') {
         if (reco.length) bB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('border', reco, 'Border')));
-        bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Color' }), colorInput('border', 'Border color', '#7c5cff')));
-        if (PAGE_PATTERNS[st.bstyle]) bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Second color' }), colorInput('border2', 'Second border color', '#f6e7c8')));
+        var orn = PAGE_ORN[st.bstyle];
+        bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Color' }), colorInput('border', 'Border color', orn ? orn[0] : '#7c5cff')));
+        if (PAGE_PATTERNS[st.bstyle] || orn) bB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Second color' }), colorInput('border2', 'Second border color', orn ? orn[1] : '#f6e7c8')));
       }
       body.appendChild(bB);
       // accent
