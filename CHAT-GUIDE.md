@@ -244,6 +244,8 @@ Use two accounts, A (owner) and B (member), plus C (member who is in a different
 19. Tap and hold a message for about half a second: the menu opens. Tap **+** and react with an emoji that is not one of the six, such as a flag. It shows on the other phone. Add 21 different emoji to one message: the 21st is refused with a clear message.
 20. Send `https://example.com`: it is a link, and a card appears within a few seconds. Send `javascript:alert(1)`: it stays plain text. Send a link to a private address such as `http://192.168.0.1`: it is a link, with no card.
 21. Chat settings, Links and GIFs off: the card and any GIF turn into plain links.
+21d. Online now (needs two phones): open chat on both. Within about a minute each phone shows a small green dot on the other person's picture, and "Online now" appears in the Direct messages list. Close chat on phone A and its dot disappears from phone B in about two minutes. In Chat settings, Online status, switch it off on A and B no longer sees A as online.
+21e. Plus button: "Family chat" shows the channels. "Direct messages" shows the people list (online first), not the channels.
 21b. Typing hint (needs two phones): type in a chat on phone A. Within a second phone B shows "Name is typing…" above the message box, and it disappears about 7 seconds after A stops or as soon as A's message arrives. In Chat settings, Typing hint, change the words (for example "is cooking letters") and try again. Switch it off and phone B sees nothing.
 21c. Unread dots: leave chat on phone B and send a message from A. Within seconds the Chat button and the browser tab icon get a red dot, and the tab title starts with a number. Open the conversation and the dots go away.
 22. GIFs and stickers: see the full checklist in Part 10, step 10.
@@ -288,6 +290,10 @@ The words after a person's name are chosen in Chat settings, are saved on that d
 
 
 ---
+
+## Online status
+
+The "online now" dots reuse the `chatTyping` table (one row per person with `convId` set to `presence`, expiring after about 100 seconds), so there is no new table. After uploading the newest `family-api` zip it works with no other step. Each person can switch it off in Chat settings. Presence is only sent while chat is open and the page is visible.
 
 ## Part 10. GIFs and stickers: the full walkthrough
 

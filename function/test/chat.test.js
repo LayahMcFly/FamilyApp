@@ -417,3 +417,12 @@ test('typing hint: stores only the chosen wording, never errors, respects blocks
   await w.fail('zed', 'chatTyping', { familyId: 'famA', kind: 'channel', convId: ch.general, text: 'x' }, 403);
   await w.fail('ann', 'chatTyping', { familyId: 'famA', kind: 'dm', convId: ch.general, text: 'x' }, 404);
 });
+
+test('presence: one expiring row per person, readable by the whole family', async () => {
+  const { w } = await setup();
+  const rows = () => [...w.world.tables.chatTyping.values()].filter((r) => r.convId === 'presence');
+  await w.ok('ann', 'chatPresence', { familyId: 'famA' });
+  await w.ok('ann', 'chatPresence', { familyId: 'famA' });
+  assert.equal(rows().length, 1); assert.ok(Date.parse(rows()[0].until) > Date.now() + 60000);
+  await w.fail('zed', 'chatPresence', { familyId: 'famA' }, 403);
+});

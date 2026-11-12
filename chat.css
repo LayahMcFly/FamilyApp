@@ -369,3 +369,13 @@ dialog.cs textarea, dialog.cs input, dialog.cs button, dialog.cs .btn { margin: 
 .gp-pre-btns { display: flex; gap: 8px; justify-content: flex-end; }
 .gp-note { min-height: 1.2em; }
 .gp-list[hidden], .gp-pre[hidden] { display: none !important; }
+
+/* online status */
+.av-wrap { position: relative; display: inline-flex; flex: none; }
+.online-dot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #2e9e4f; border: 2px solid var(--surface-2, #fff); box-sizing: border-box; z-index: 2; }
+.rail-av { position: relative; }
+.rail-av .online-dot { right: 2px; bottom: 2px; }
+.online-badge { color: #1f7a3a; }
+.side-h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 16px 4px; font-weight: 600; }
+.side-note { margin: 8px 16px; }
+.side-item .av-wrap { margin-right: 2px; }

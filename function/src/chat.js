@@ -364,6 +364,22 @@ export function createChat(c) {
       return { ok: true, shown: true };
     },
 
+    /** "Online now": one row per person (convId "presence"), refreshed by a heartbeat while the chat is open and visible.
+     *  The row expires on its own (about 100 seconds), so nothing needs cleaning up. Everyone in the family can read it. */
+    async chatPresence({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      if (!softLimit('presence', user.$id, 6, 60)) return { ok: true, shown: false };
+      const typingKey = `p_${ctx.familyId}_${user.$id}`;
+      const until = iso(now() + 100000);
+      const ex = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]);
+      if (ex) await updateRow(T.typing, ex.$id, { until });
+      else {
+        try { await createRow(T.typing, ID.unique(), { familyId: ctx.familyId, convId: 'presence', userId: user.$id, typingKey, text: '', until }, channelPerms(ctx.familyId)); }
+        catch (e) { if (sdkCode(e) !== 409) throw e; const again = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]); if (again) await updateRow(T.typing, again.$id, { until }); }
+      }
+      return { ok: true, shown: true };
+    },
+
     async chatEdit({ user, body }) {
       const ctx = await requireMember(user, body.familyId);
       const id = idOf(body.messageId, 'message');

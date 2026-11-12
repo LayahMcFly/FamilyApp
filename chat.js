@@ -192,7 +192,7 @@
     if (C && C.famId === famId() && C.uid === me()) return C;
     stop();
     C = { gen: GEN, famId: famId(), uid: me(), loaded: false, error: null, role: 'member', channels: [], dms: [], unread: {}, blocked: [], allowDms: true, limits: { body: 1000 }, reactions: ['👍', '❤️', '😂', '😮', '😢', '🙏'],
-      convs: {}, typing: {}, cur: null, route: { mode: 'channels', id: '' }, drafts: {}, listeners: [], timers: {}, sub: null, rt: null, loading: null, online: navigator.onLine !== false };
+      convs: {}, typing: {}, here: {}, cur: null, route: { mode: 'channels', id: '' }, drafts: {}, listeners: [], timers: {}, sub: null, rt: null, loading: null, online: navigator.onLine !== false };
     return C;
   }
 
@@ -496,9 +496,9 @@
     var list = h('div', { class: 'rail-dms' });
     railPeople(c).forEach(function (it) {
       var n = it.dm ? ((c.unread[it.dm.id] || {}).n || 0) : 0, on = !!(it.dm && c.cur && c.cur.id === it.dm.id), nm = it.p.displayName || 'Family member';
-      list.appendChild(h('button', { class: 'rail-av' + (on ? ' on' : ''), type: 'button', title: nm, 'aria-label': 'Message ' + nm + (n ? ', ' + n + ' unread' : ''), 'aria-current': on ? 'true' : null,
+      list.appendChild(h('button', { class: 'rail-av' + (on ? ' on' : ''), type: 'button', title: nm + (isHere(c, it.p.userId) ? ' (online)' : ''), 'aria-label': 'Message ' + nm + (isHere(c, it.p.userId) ? ', online' : '') + (n ? ', ' + n + ' unread' : ''), 'aria-current': on ? 'true' : null,
         onclick: function () { if (it.dm) location.hash = '#/dms/' + it.dm.id; else startDm(c, it.p.userId).catch(function (e) { toast(msgOf(e)); }); } },
-        avatar(it.p.userId, 'sm'), n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
+        avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId), n ? h('span', { class: 'rail-badge', 'aria-hidden': 'true', text: n > 9 ? '9+' : String(n) }) : null));
     });
     rail.appendChild(list);
     return rail;
@@ -549,7 +549,20 @@
       h('button', { class: 'fam-btn', type: 'button', 'aria-label': 'Family: ' + famLabel() + (multi ? '. Switch family' : ''), disabled: multi ? null : true, onclick: familySheet }, h('strong', { text: famLabel() }), multi ? icon('more') : null),
       h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Chat settings', onclick: function () { settingsSheet(c); } }, icon('gear'))));
     var sc = h('div', { class: 'side-scroll' }); side.appendChild(sc);
-    {
+    if (c.route.mode === 'dms') {
+      var ppl = railPeople(c), onl = ppl.filter(function (it) { return isHere(c, it.p.userId); }), off = ppl.filter(function (it) { return !isHere(c, it.p.userId); });
+      var personRow = function (it) {
+        var n = it.dm ? ((c.unread[it.dm.id] || {}).n || 0) : 0, on = !!(it.dm && c.cur && c.cur.id === it.dm.id);
+        return h('a', { class: 'side-item' + (on ? ' on' : '') + (n ? ' has-unread' : ''), href: it.dm ? '#/dms/' + it.dm.id : '#/dms', 'aria-current': on ? 'page' : null,
+          onclick: it.dm ? null : function (ev) { ev.preventDefault(); startDm(c, it.p.userId).catch(function (e) { toast(msgOf(e)); }); } },
+          h('span', { class: 'av-wrap' }, avatar(it.p.userId, 'sm'), onlineDot(c, it.p.userId)), h('span', { class: 'grow', text: it.p.displayName || 'Family member' }), unreadPill(n));
+      };
+      sc.appendChild(h('h2', { class: 'side-h', text: 'Direct messages' }));
+      if (!ppl.length) sc.appendChild(h('p', { class: 'muted small side-note', text: 'No one else is in this family yet. Invite people from Settings, then message them here.' }));
+      if (onl.length) { sc.appendChild(h('h3', { class: 'side-h2', text: 'Online now (' + onl.length + ')' })); onl.forEach(function (it) { sc.appendChild(personRow(it)); }); }
+      if (off.length) { sc.appendChild(h('h3', { class: 'side-h2', text: onl.length ? 'Offline' : 'Family members' })); off.forEach(function (it) { sc.appendChild(personRow(it)); }); }
+      sc.appendChild(h('div', { class: 'row side-actions' }, h('a', { class: 'btn secondary small', href: '#/chat', text: 'Family channels' })));
+    } else {
       sc.appendChild(h('h2', { class: 'side-h', text: 'Text channels' }));
       var active = c.channels.filter(function (x) { return !x.archived; }), arch = c.channels.filter(function (x) { return x.archived; });
       active.forEach(function (ch) {
@@ -562,7 +575,7 @@
         arch.forEach(function (ch) { var on = c.cur && c.cur.id === ch.id; det.appendChild(h('a', { class: 'side-item dim' + (on ? ' on' : ''), href: '#/chat/' + ch.id, 'aria-current': on ? 'page' : null }, h('span', { class: 'hash', 'aria-hidden': 'true', text: '#' }), h('span', { class: 'grow', text: ch.name }))); });
         sc.appendChild(det);
       }
-      sc.appendChild(h('div', { class: 'row side-actions' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Family members', onclick: function () { membersSheet(c); } }), isManager(c) ? h('button', { class: 'btn secondary small', type: 'button', text: 'Manage channels', onclick: function () { channelsSheet(c); } }) : null));
+      sc.appendChild(h('div', { class: 'row side-actions' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Family members' + (hereCount(c) > 0 ? ' · ' + hereCount(c) + ' online' : ''), onclick: function () { membersSheet(c); } }), isManager(c) ? h('button', { class: 'btn secondary small', type: 'button', text: 'Manage channels', onclick: function () { channelsSheet(c); } }) : null));
     }
     // People are in the rail on the left. Only conversations with someone who left the family are listed here, read-only.
     var closed = c.dms.filter(function (d) { return d.status !== 'open'; });
@@ -847,11 +860,44 @@
   }
 
 
+  /* ---------- "online now" (a heartbeat while the chat is open and the page is visible; it expires by itself) ---------- */
+  function presenceOn() { return lsGet('fc_chat_presence', true) !== false; }
+  function isHere(c, uid) { if (uid === c.uid) return presenceOn(); var u = c.here[uid]; return !!u && u > Date.now(); }
+  function hereCount(c) { return memberList(c).filter(function (p) { return p.userId !== c.uid && isHere(c, p.userId); }).length + (presenceOn() ? 1 : 0); }
+  function onPresenceEvent(c, kind, row) {
+    if (row.userId === c.uid) return;
+    if (kind === 'delete') delete c.here[row.userId];
+    else { var u = Date.parse(row.until || ''); if (u > Date.now()) c.here[row.userId] = u; else delete c.here[row.userId]; }
+    repaintHere(c);
+  }
+  function repaintHere(c) { if (C === c) { paintList(); var sd = host && host.querySelector('.chat-side'); if (sd && c.route.mode === 'dms') sd.replaceWith(buildSide(c)); } }
+  async function loadPresence(c) {
+    try {
+      var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.equal('convId', ['presence']), X.Query.limit(100)] });
+      (r.rows || r.documents || []).forEach(function (row) { if (row.familyId === c.famId && row.userId !== c.uid) { var u = Date.parse(row.until || ''); if (u > Date.now()) c.here[row.userId] = u; } });
+      repaintHere(c);
+    } catch (e) { /* the dots simply stay off until the next event */ }
+  }
+  function beat(c) {
+    if (C !== c || document.hidden || !presenceOn() || c.online === false) return;
+    if (Date.now() - (c.beatAt || 0) < 30000) return; c.beatAt = Date.now();
+    api('chatPresence', {}).catch(function () { /* silent: presence is a nicety */ });
+  }
+  function startPresence(c) {
+    if (c.presenceOn) return; c.presenceOn = true;
+    loadPresence(c); beat(c);
+    c.timers.beat = setInterval(function () { beat(c); }, 45000);
+    c.timers.expire = setInterval(function () { if (C === c && !document.hidden) repaintHere(c); }, 30000);
+    listen(c, document, 'visibilitychange', function () { if (!document.hidden) { beat(c); loadPresence(c); } });
+  }
+  function onlineDot(c, uid) { return isHere(c, uid) ? h('span', { class: 'online-dot', title: 'Online now', 'aria-label': 'online now' }) : null; }
+
   /* ---------- "is typing" (what others see while you type; wording is yours to choose) ---------- */
   var TYPING_DEFAULT = 'is typing';
   function typingOn() { return lsGet('fc_chat_typing', true) !== false; }
   function typingWords() { var v = lsGet('fc_chat_typing_text', ''); v = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 40) : ''; return v || TYPING_DEFAULT; }
   function onTypingEvent(c, kind, row) {
+    if (row.convId === 'presence') return onPresenceEvent(c, kind, row);
     if (kind === 'delete' || row.userId === c.uid) return;
     var until = Date.parse(row.until || ''); if (!(until > Date.now())) return;
     var byConv = c.typing[row.convId] || (c.typing[row.convId] = {});
@@ -1128,7 +1174,7 @@
     body.appendChild(h('p', { class: 'small muted', text: 'Everyone here can read the family channels. Roles only matter for chat: the family owner and chat admins manage channels, post in read-only channels and can remove messages from shared channels. They cannot read direct messages.' }));
     memberList(c).forEach(function (p) {
       var isMe = p.userId === c.uid, role = own[p.userId] ? 'Owner' : (p.chatAdmin === true ? 'Chat admin' : '');
-      var row = h('div', { class: 'cs-member' }, avatar(p.userId, 'sm'), h('div', { class: 'grow' }, h('strong', { text: p.displayName + (isMe ? ' (you)' : '') }), role ? h('span', { class: 'badge', text: ' ' + role }) : null));
+      var row = h('div', { class: 'cs-member' }, h('span', { class: 'av-wrap' }, avatar(p.userId, 'sm'), onlineDot(c, p.userId)), h('div', { class: 'grow' }, h('strong', { text: p.displayName + (isMe ? ' (you)' : '') }), isHere(c, p.userId) ? h('span', { class: 'badge online-badge', text: ' Online' }) : null, role ? h('span', { class: 'badge', text: ' ' + role }) : null));
       if (!isMe) row.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Message ' + p.displayName, text: 'Message', onclick: function () { s.close(); startDm(c, p.userId); } }));
       if (c.role === 'owner' && !own[p.userId]) row.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: p.chatAdmin === true ? 'Remove chat admin' : 'Make chat admin', onclick: async function (ev) {
         var b = ev.currentTarget; b.disabled = true;
@@ -1200,6 +1246,11 @@
     body.appendChild(h('h3', { text: 'Links and GIFs' }));
     body.appendChild(h('label', { class: 'check' }, pv, ' Show link previews and GIFs on this device'));
     body.appendChild(h('p', { class: 'small muted', text: 'A preview is made by the family server visiting the link, so your device never contacts that website. GIFs load straight from GIPHY, which can see your internet address. Turn this off to see plain links only.' }));
+    body.appendChild(h('h3', { text: 'Online status' }));
+    var pOn = h('input', { type: 'checkbox' }); pOn.checked = presenceOn();
+    pOn.addEventListener('change', function () { lsSet('fc_chat_presence', pOn.checked); if (pOn.checked) { c.beatAt = 0; beat(c); } repaintHere(c); toast(pOn.checked ? 'Others can see when you are online.' : 'Others will see you as offline within about two minutes.'); });
+    body.appendChild(h('label', { class: 'check' }, pOn, ' Show family when I am online'));
+    body.appendChild(h('p', { class: 'small muted', text: 'While chat is open on your device, a small signal tells the family server you are here. It expires after about 100 seconds and nothing is kept.' }));
     body.appendChild(h('h3', { text: 'Typing hint' }));
     var tOn = h('input', { type: 'checkbox' }); tOn.checked = typingOn();
     tOn.addEventListener('change', function () { lsSet('fc_chat_typing', tOn.checked); });
@@ -1345,6 +1396,7 @@
       connect(c);
     }
     if (token !== X.S.nav) return;
+    startPresence(c);
     startConv(c);
     // stale overview? refresh counts and channel list quietly
     if (Date.now() - (c.at || 0) > 60000) reloadOverview(c);
