@@ -3553,12 +3553,41 @@
     return null;
   }
   // The banner picture or colour as an element (null when the person has none). A GIF loops because it is an ordinary image.
-  function bannerEl(profile, cls) {
-    var b = profile ? bannerValue(profile) : null; if (!b) return null;
+  function bannersOn() { try { return localStorage.getItem('fc_banners') !== 'off'; } catch (e) { return true; } }
+  function bannerEl(profile, cls, force) {
+    var b = profile && (force || bannersOn()) ? bannerValue(profile) : null; if (!b) return null;
     var el = h('div', { class: 'banner ' + (cls || ''), role: 'img', 'aria-label': 'Profile banner' });
     if (b.type === 'color') el.style.setProperty('background-color', b.color);
     else avatarUrl(b.id).then(function (u) { el.appendChild(h('img', { src: u, alt: '' })); }).catch(function () { el.classList.add('banner-missing'); });
     return el;
+  }
+  // Suggested banner colours taken from a picture: the most common distinct colours, favouring the more vivid ones.
+  function paletteFrom(url) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var cv = document.createElement('canvas'); cv.width = cv.height = 64; var cx = cv.getContext('2d', { willReadFrequently: true });
+          cx.drawImage(img, 0, 0, 64, 64); var d = cx.getImageData(0, 0, 64, 64).data, bk = {};
+          for (var i = 0; i < d.length; i += 4) {
+            if (d[i + 3] < 128) continue;
+            var r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+            if (mx > 245 && mn > 235) continue;                       // plain white
+            var key = (r >> 4) + ',' + (g >> 4) + ',' + (b >> 4), e = bk[key] || (bk[key] = { n: 0, w: 0, r: 0, g: 0, b: 0 });
+            e.n++; e.w += 1 + 2 * ((mx - mn) / (mx || 1)); e.r += r; e.g += g; e.b += b;
+          }
+          var list = Object.keys(bk).map(function (k) { var e = bk[k]; return { w: e.w, c: [Math.round(e.r / e.n), Math.round(e.g / e.n), Math.round(e.b / e.n)] }; }).sort(function (x, y) { return y.w - x.w; });
+          var out = [];
+          list.forEach(function (it) {
+            if (out.length >= 6) return;
+            if (out.every(function (o) { return Math.hypot(o[0] - it.c[0], o[1] - it.c[1], o[2] - it.c[2]) > 70; })) out.push(it.c);
+          });
+          resolve(out.map(function (c) { return '#' + c.map(function (v) { return ('0' + v.toString(16)).slice(-2); }).join(''); }));
+        } catch (e) { resolve([]); }
+      };
+      img.onerror = function () { resolve([]); };
+      img.src = url;
+    });
   }
   async function bannerFile(file) {
     if (file.type === 'image/gif') {
@@ -4062,8 +4091,21 @@
     var banBox = h('div', { class: 'ban-edit' }), banFile = h('input', { id: 'newBanner', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a banner picture' });
     var banColor = h('input', { type: 'color', id: 'banColor', 'aria-label': 'Banner colour' }); banColor.value = (bannerValue(S.profile) && bannerValue(S.profile).color) || '#7c5cff';
     var banRemove = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove banner' });
+    var banReco = h('div', { class: 'ban-reco', role: 'group', 'aria-label': 'Colours from your picture' });
+    if (S.profile.avatarFileId) avatarUrl(S.profile.avatarFileId).then(paletteFrom).then(function (cols) {
+      if (!cols.length) return;
+      banReco.appendChild(h('span', { class: 'small muted', text: 'From your picture:' }));
+      cols.forEach(function (col) {
+        var sw = h('button', { class: 'ban-sw', type: 'button', 'aria-label': 'Use the colour ' + col + ' for the banner', title: col });
+        sw.style.setProperty('background-color', col);
+        sw.addEventListener('click', function () { banColor.value = col; busy(sw, async function () { try { await saveBanner('color:' + col); toast('Banner saved.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); } }); });
+        banReco.appendChild(sw);
+      });
+    }).catch(function () { /* no suggestions */ });
+    var banShow = h('input', { type: 'checkbox', id: 'ban-show' }); banShow.checked = bannersOn();
+    banShow.addEventListener('change', function () { try { localStorage.setItem('fc_banners', banShow.checked ? 'on' : 'off'); } catch (e) { /* not saved */ } toast(banShow.checked ? 'Banners are on.' : 'Banners are hidden for you.'); });
     var banUseColor = h('button', { class: 'btn secondary small', type: 'button', text: 'Use this colour' });
-    function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page') || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
+    function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page', true) || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
     paintBanner();
     async function saveBanner(item) {
       var list = visibleAbout(S.profile).concat(ringCat(S.profile), addrCat(S.profile), item ? [{ key: BANNER_KEY, title: 'Banner', items: [item] }] : []);
@@ -4132,9 +4174,10 @@
       h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), file, h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
       h('div', { class: 'stack' }, removeAv),
       h('div', { class: 'ban-section' }, h('label', { for: 'newBanner', text: 'Banner' }), banBox,
-        h('div', { class: 'row' }, banColor, banUseColor), banFile,
+        banReco, h('div', { class: 'row' }, banColor, banUseColor), banFile,
         h('div', { class: 'hint', text: 'A colour, a picture or a looping GIF (GIFs up to 3 MB). It shows on your profile and your profile card.' }),
-        h('div', { class: 'stack' }, banRemove)),
+        h('div', { class: 'stack' }, banRemove),
+        h('label', { class: 'check', for: 'ban-show' }, banShow, ' Show banners on profiles (this device)')),
       form));
     var aboutCard = h('section', { class: 'card', id: 'about-editor', 'aria-label': 'About me' }, h('h2', { text: 'About me' }),
       h('p', { class: 'small muted', text: 'Add as many categories as you like and several answers to each. All of it is optional.' }), ed.el, whoCanSee());
