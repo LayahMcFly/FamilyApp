@@ -4428,9 +4428,13 @@
         var ring = h('span', { class: 'lib-ring', 'aria-hidden': 'true' }, h('span', { class: 'lib-hole' }));
         ring.style.setProperty('background', 'conic-gradient(from 0deg, ' + ringStops(cols) + ')');
         var use = h('button', { class: 'lib-use', type: 'button', 'aria-label': 'Use saved circle ' + (li + 1) + ': ' + cols.join(', '), onclick: function () { picks = cols.slice(); recoSlot = 0; paintRing(); paintControls(); } }, ring);
-        var del = h('button', { class: 'lib-del', type: 'button', 'aria-label': 'Remove saved circle ' + (li + 1), text: '\u2715', onclick: function (ev) { busy(ev.currentTarget, async function () {
-          try { await saveLib(libOf().filter(function (x, k) { return k !== li; })); paintControls(); } catch (e) { showAlert(ringMsg, 'error', errText(e)); }
-        }); } });
+        var del = h('button', { class: 'lib-del', type: 'button', 'aria-label': 'Remove saved circle ' + (li + 1), text: '\u2715', onclick: async function (ev) {
+          var btn = ev.currentTarget;
+          if (!(await confirmDialog('Remove this saved circle?', 'It will be taken out of your library. This cannot be undone.', 'Remove'))) return;
+          busy(btn, async function () {
+            try { await saveLib(libOf().filter(function (x, k) { return k !== li; })); paintControls(); } catch (e) { showAlert(ringMsg, 'error', errText(e)); }
+          });
+        } });
         libGrid.appendChild(h('div', { class: 'lib-item', role: 'listitem' }, use, del));
       });
       controls.appendChild(h('div', { class: 'lib-box' }, libHead, lib.length ? libGrid : h('p', { class: 'small muted', text: 'Nothing saved yet. Make a circle you like and press Save these colors. Tap a saved circle to use it.' })));
