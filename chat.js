@@ -870,7 +870,7 @@
   /* ---------- calls: the "call in progress" banner and the start buttons (the call screen itself is calls.js) ---------- */
   function callIds(c, convId) {
     var m = c.calls[convId] || {}, now = Date.now(), out = [];
-    Object.keys(m).forEach(function (uid) { if (m[uid] > now && uid !== c.uid) out.push(uid); });
+    Object.keys(m).forEach(function (uid) { if (m[uid] > now) out.push(uid); });   // includes me, so a call I started on another device can be rejoined here
     return out;
   }
   function callsAvailable() { return !!window.FCCalls; }
@@ -906,7 +906,7 @@
     var ids = callIds(c, c.cur.id), mine = window.FCCalls && window.FCCalls.inCall(c.cur.id);
     el.hidden = !ids.length || !!mine; if (el.hidden) return;
     clear(el);
-    el.appendChild(h('span', { class: 'grow', text: ids.map(function (u) { return realName(u); }).join(', ') + (ids.length > 1 ? ' are' : ' is') + ' in a call' }));
+    el.appendChild(h('span', { class: 'grow', text: ids.map(function (u) { return u === c.uid ? 'You' : realName(u); }).join(', ') + (ids.length > 1 || ids[0] === c.uid ? ' are' : ' is') + ' in a call' + (ids.length === 1 && ids[0] === c.uid ? ' on another device' : '') }));
     el.appendChild(h('button', { class: 'btn small call-join', type: 'button', text: 'Join call', onclick: function () { startCall(c, c.cur, false); } }));
     el.appendChild(h('button', { class: 'btn small secondary call-join', type: 'button', text: 'Join with video', onclick: function () { startCall(c, c.cur, true); } }));
   }

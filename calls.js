@@ -75,7 +75,8 @@
       h('header', { class: 'call-head' }, h('div', { class: 'grow ct' }, h('strong', { class: 'clamp', text: o.title }), h('div', { class: 'small' }, timerEl, ' · ', statusEl)), btnMin),
       people, grid, fxPanel, h('div', { class: 'call-bar' }, btnMic, btnCam, btnFx, btnFlip, btnEnd), audioHost);
     var pillMic = h('button', { class: 'btn small', type: 'button', 'aria-label': 'Mute or unmute microphone' }, svg('mic', 18));
-    var pillTxt = h('span', { class: 'grow clamp' });
+    var pillTime = h('strong', { class: 'pill-time' }), pillWho = h('span', { class: 'pill-who clamp' });
+    var pillTxt = h('span', { class: 'grow pill-txt' }, h('span', { class: 'pill-top' }, 'In call · ', pillTime), pillWho);
     var pill = h('div', { class: 'call-pill', hidden: true, role: 'region', 'aria-label': 'Call in progress' }, pillTxt, pillMic,
       h('button', { class: 'btn small', type: 'button', text: 'Open', onclick: function () { call.expand(); } }),
       h('button', { class: 'btn small danger', type: 'button', text: 'Leave', onclick: function () { call.leave(); } }));
@@ -94,7 +95,7 @@
     }
     function tick() {
       var s = Math.round((Date.now() - call.startedAt) / 1000); timerEl.textContent = clock(s);
-      pillTxt.textContent = 'In call · ' + clock(s) + ' · ' + who();
+      pillTime.textContent = clock(s); pillWho.textContent = who();
     }
     call.timers.tick = setInterval(tick, 1000); tick();
 
