@@ -3025,6 +3025,7 @@
     var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
     if (token !== S.nav) return;
     await loadProfiles();
+    try { if (!S.tree) await loadTree(true); } catch (e) { /* only used to fill in names and pictures */ }
     if (token !== S.nav) return;
     var joined = res.memberships.filter(function (m) { return m.confirm; });
     var me = joined.filter(function (m) { return m.userId === S.user.$id; })[0];
@@ -3125,9 +3126,12 @@
         clear(memberBox); memberBox.appendChild(h('h2', { text: 'Invitations and members' }));
         res.memberships.forEach(function (m) {
           var self = m.userId === S.user.$id;
-          var label = m.userName || m.userEmail || 'Family member';
+          var tp0 = ((S.tree && S.tree.people) || []).filter(function (x) { return x.userId === m.userId || (x.inviteMembershipId && x.inviteMembershipId === m.$id); })[0] || null;
+          var prof0 = S.profiles.get(m.userId) || (tp0 && tp0.userId ? S.profiles.get(tp0.userId) : null) || null;
+          var label = (prof0 && prof0.displayName) || m.userName || (tp0 && tp0.name) || m.userEmail || 'Family member';
           var isOwnerRow = m.roles.indexOf('owner') >= 0;
-          memberBox.appendChild(h('div', { class: 'member' },
+          memberBox.appendChild(h('div', { class: 'member mem-row' },
+            avatarEl(prof0 || { displayName: label }),
             h('div', { class: 'grow' }, h('strong', { text: label }),
               h('div', { class: 'small muted', text: (m.userEmail && m.userName ? m.userEmail + ' · ' : '') + (m.confirm ? 'Joined' : 'Invited, not accepted yet') + (isOwnerRow ? ' · Owner' : '') })),
             (m.confirm && !isOwnerRow) ? h('button', { class: 'btn secondary small', type: 'button', text: 'Make owner', 'aria-label': 'Make ' + label + ' an owner', onclick: async function () {
