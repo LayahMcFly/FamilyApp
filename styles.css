@@ -1422,3 +1422,6 @@ video::cue { opacity: 0 !important; background: transparent !important; color: t
 .media[data-ring="married"] .pl-big { --rb: #f7d774, #c98a14, #fff0b0, #b87a10, #f7d774, #ffe9a0, #c98a14, #f7d774; }
 .media[data-ring="grand"] .pl-big { --rb: #8fa7d8, #f4f8ff, #6f8fd0, #d9e4ff, #a28bdc, #f4f8ff, #8fa7d8, #8fa7d8; }
 @media (prefers-reduced-motion: reduce) { .pl-big { animation: none; } }
+
+.tree-loose { margin: 10px 0; padding: 12px 14px; }
+.tree-loose .rel-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }

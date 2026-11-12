@@ -2837,6 +2837,18 @@
     holder.appendChild(h('p', { class: 'hint', text: 'Drag to move around. Pinch or use + and − to zoom. Tap a person to centre the tree on them and see their parents, partners and children.' + (mine ? ' Lost? Press “Me” to come back to yourself.' : '') }));
     var panel = h('section', { class: 'card tree-panel', 'aria-live': 'polite', 'aria-label': 'Selected person' });
     holder.appendChild(panel);
+    // People with no parent, partner or child link never appear around anyone else, so list them where they can be seen and tapped.
+    var loose = people.filter(function (p) {
+      return !(p.parentIds || []).some(function (x) { return byId[x]; }) && !(p.partnerIds || []).some(function (x) { return byId[x]; }) && !people.some(function (c) { return (c.parentIds || []).indexOf(p.$id) !== -1; });
+    });
+    if (loose.length && loose.length < people.length || loose.length > 1) {
+      holder.insertBefore(h('div', { class: 'card tree-loose' },
+        h('strong', { text: 'Not connected to the tree yet' }),
+        h('p', { class: 'small muted', text: 'These people have no parent, partner or child linked, so the picture cannot place them. ' + (canEditTree() ? 'Tap one, then the pencil, to link them.' : 'Ask an owner or tree admin to link them.') }),
+        h('div', { class: 'rel-list' }, loose.map(function (p) {
+          return h('button', { class: 'chip', type: 'button', onclick: function () { if (ctl) ctl.focus(p.$id); select(p.$id); } }, p.name);
+        }))), count);
+    }
 
     function relatives(id) {
       var p = byId[id], kinds = kindsOf(p);
