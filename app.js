@@ -2241,7 +2241,16 @@
     setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 1900);
   }
   // The big heart that pops up where you double-tapped.
+  function heartGradient() {   // one shared red-to-orange fill for every double-tap heart
+    if (document.getElementById('fc-heart-grad')) return;
+    var NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg'), defs = document.createElementNS(NS, 'defs'), g = document.createElementNS(NS, 'linearGradient');
+    svg.setAttribute('width', '0'); svg.setAttribute('height', '0'); svg.setAttribute('aria-hidden', 'true'); svg.style.setProperty('position', 'absolute');
+    g.setAttribute('id', 'fc-heart-grad'); g.setAttribute('x1', '0'); g.setAttribute('y1', '0'); g.setAttribute('x2', '1'); g.setAttribute('y2', '1');
+    [['0', '#ff2d55'], ['0.6', '#ff3b30'], ['1', '#ff8a1f']].forEach(function (st) { var s = document.createElementNS(NS, 'stop'); s.setAttribute('offset', st[0]); s.setAttribute('stop-color', st[1]); g.appendChild(s); });
+    defs.appendChild(g); svg.appendChild(defs); document.body.appendChild(svg);
+  }
   function heartBurst(box, x, y) {
+    heartGradient();
     var b = h('div', { class: 'heart-burst', 'aria-hidden': 'true' }, icon('heart'));
     b.style.left = x + 'px'; b.style.top = y + 'px';
     box.appendChild(b); setTimeout(function () { if (b.parentNode) b.parentNode.removeChild(b); }, 850);

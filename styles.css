@@ -798,7 +798,7 @@ label:first-child { margin-top: 0; }
 .reel-info .post-body { font-size: .92rem; line-height: 1.35; margin-right: 64px; }
 .reel-comment { min-height: 44px; padding: 0 18px; background: #26262ccc; border: 1px solid #ffffff1f; color: #cfcfd4; font-size: .92rem; }
 .heart-burst { position: absolute; z-index: 8; width: 110px; height: 110px; margin: -55px 0 0 -55px; pointer-events: none; color: #ff3040; filter: drop-shadow(0 6px 14px #0008); animation: burst .8s ease-out forwards; }
-.heart-burst svg { width: 100%; height: 100%; fill: currentColor; stroke: none; }
+.heart-burst svg { width: 100%; height: 100%; fill: #ff3b30; fill: url(#fc-heart-grad) #ff3b30; stroke: none; }
 @keyframes burst { 0% { transform: scale(.3) rotate(-12deg); opacity: 0; } 18% { transform: scale(1.15) rotate(-6deg); opacity: 1; } 35% { transform: scale(.95) rotate(-6deg); } 70% { transform: scale(1) rotate(-6deg) translateY(-6px); opacity: 1; } 100% { transform: scale(1.1) rotate(-6deg) translateY(-30px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .heart-burst { animation: none; opacity: 1; } }
 .media { position: relative; }
