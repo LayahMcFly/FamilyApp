@@ -14,6 +14,7 @@
 
 /* ---- Bubbly: soft, round, playful ---- */
 [data-style="bubbly"] {
+  --ic-w: 2.6; --ic-fill: color-mix(in srgb, var(--accent) 26%, transparent); --ic-filter: none;
   --bg:#f7f2ff; --surface:#ffffff; --surface-2:#efe6ff; --text:#2d2540; --muted:#665a80; --border:#e0d2f7; --danger:#b42318; --on-danger:#ffffff; --ok:#146c43;
   --c-bg: var(--surface); --c-radius: 28px; --c-border: 1.5px solid var(--border); --c-shadow: 0 10px 26px -14px color-mix(in srgb, var(--accent) 55%, transparent), 0 2px 6px -2px rgba(80,50,140,.10);
   --b-radius: 999px; --b-border: 0 solid transparent; --b-border-sec: 1.5px solid var(--border); --b-weight: 700; --b-min: 46px; --b-min-sm: 38px;
@@ -36,6 +37,7 @@
 
 /* ---- Cartoon: bold outlines, sticker shadows ---- */
 [data-style="cartoon"] {
+  --ic-w: 3; --ic-fill: color-mix(in srgb, var(--accent) 45%, var(--surface)); --ic-filter: drop-shadow(1.5px 1.5px 0 var(--ink-shadow));
   --ink:#1b1b2f; --ink-shadow:#1b1b2f;
   --bg:#fff4d6; --surface:#ffffff; --surface-2:#ffe08a; --text:#1b1b2f; --muted:#4a4a63; --border:#1b1b2f; --danger:#b42318; --on-danger:#ffffff; --ok:#146c43;
   --c-bg: var(--surface); --c-radius: 16px; --c-border: 2.5px solid var(--ink); --c-shadow: 5px 5px 0 var(--ink-shadow);
@@ -59,6 +61,7 @@
 
 /* ---- Classic Social: familiar, tidy, structured ---- */
 [data-style="classic"] {
+  --ic-w: 1.9; --ic-fill: none; --ic-filter: none;
   --bg:#f0f2f5; --surface:#ffffff; --surface-2:#e4e6eb; --text:#1c1e21; --muted:#55585d; --border:#ced0d4; --danger:#b42318; --on-danger:#ffffff; --ok:#146c43;
   --c-bg: var(--surface); --c-radius: 8px; --c-border: 1px solid var(--border); --c-shadow: 0 1px 2px rgba(0,0,0,.18);
   --b-radius: 6px; --b-border: 1px solid transparent; --b-border-sec: 1px solid transparent; --b-weight: 600; --b-min: 38px; --b-min-sm: 32px;
@@ -78,6 +81,7 @@
 
 /* ---- Cozy: warm, calm, welcoming ---- */
 [data-style="cozy"] {
+  --ic-w: 1.6; --ic-fill: color-mix(in srgb, currentColor 9%, transparent); --ic-filter: none;
   --bg:#f6efe3; --surface:#fffaf0; --surface-2:#efe4d0; --text:#3b3128; --muted:#645646; --border:#dccdb2; --danger:#a82a1c; --on-danger:#ffffff; --ok:#2f6b3d;
   --c-bg: var(--surface); --c-radius: 18px; --c-border: 1px solid var(--border); --c-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 8px 18px -12px rgba(90,60,25,.38);
   --b-radius: 12px; --b-border: 1px solid transparent; --b-border-sec: 1px solid var(--border); --b-weight: 600; --b-min: 44px; --b-min-sm: 36px;
@@ -98,7 +102,7 @@
 }
 
 /* ---- Default (previews only: the real page uses styles.css; these values mirror it so the theme card can show the Default shapes) ---- */
-.mini-theme[data-style="default"] { --bg:#ffffff; --surface:#ffffff; --surface-2:#efefef; --text:#262626; --muted:#737373; --border:#dbdbdb;
+.mini-theme[data-style="default"] { --ic-w: 2; --ic-fill: none; --ic-filter: none; --bg:#ffffff; --surface:#ffffff; --surface-2:#efefef; --text:#262626; --muted:#737373; --border:#dbdbdb;
   --c-bg: var(--surface-2); --c-radius: 22px; --c-border: 0 solid transparent; --c-shadow: none; --b-radius: 999px; --b-border: 0 solid transparent; --b-border-sec: 0 solid transparent; --b-shadow: none; --b-shadow-sec: none;
   --i-radius: 14px; --i-border: 1px solid var(--border); --i-bg: var(--surface-2); --i-inset: none; }
 .mini-theme[data-style="default"][data-theme="dark"] { --bg:#0c1014; --surface:#0c1014; --surface-2:#1c2227; --text:#f3f5f7; --muted:#9aa5ae; --border:#222a31; }
@@ -314,3 +318,16 @@
 .swatch.none[aria-pressed="true"]::after { content: "\2713"; }
 .swatches input[type="color"] { width: 40px; height: 40px; min-height: 0; padding: 0; border: 2px solid var(--border); border-radius: 50%; background: none; box-shadow: none; cursor: pointer; overflow: hidden; }
 .swatches input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; } .swatches input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+
+/* ===================== 5. ICONS: each theme draws its own icon style ===================== */
+/* Tokens (--ic-w stroke weight, --ic-fill fill for closed shapes, --ic-filter shadow) come from the theme blocks above, so theme cards can preview them too.
+   Default is not touched on the real page: these rules never match it. */
+:root:not([data-style="default"]) svg.ic, .mini-theme svg.ic { stroke-width: var(--ic-w, 2); filter: var(--ic-filter, none); stroke-linecap: round; stroke-linejoin: round; }
+:root:not([data-style="default"]) svg.ic .ic-closed, .mini-theme svg.ic .ic-closed { fill: var(--ic-fill, none); }
+:root:not([data-style="default"]) :is(.act, .tab, .chip, .bell, .lp-ico, .side-item, .nav a)[aria-pressed="true"] svg.ic .ic-closed, :root:not([data-style="default"]) :is(.nav a, .side-item)[aria-current="page"] svg.ic .ic-closed, :root:not([data-style="default"]) .side-item.on svg.ic .ic-closed, .mini-theme [aria-pressed="true"] svg.ic .ic-closed { fill: currentColor; }
+/* Cartoon icons are thick, rounded and a little blocky: squarer joins, sticker shadow */
+[data-style="cartoon"] svg.ic { stroke-linejoin: round; }
+/* Classic Social icons are lean outlines that turn solid when selected; Cozy icons are thin and soft; Bubbly icons are plump with a tinted center */
+.lp-icons { gap: 14px; } .lp-ico { display: inline-grid; place-items: center; width: 44px; height: 44px; color: var(--text); } .lp-ico svg { width: 26px; height: 26px; }
+.lp-ico[aria-pressed="true"] { color: var(--accent-text); }
+.mini-theme .m-icons { justify-content: space-between; color: var(--text); } .mini-theme .m-icons svg { width: 18px; height: 18px; } .mini-theme .m-ico { display: inline-grid; color: var(--accent-text); }

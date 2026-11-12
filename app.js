@@ -110,9 +110,11 @@
     s.setAttribute('stroke-linecap', 'round');
     s.setAttribute('stroke-linejoin', 'round');
     s.setAttribute('aria-hidden', 'true');
+    s.setAttribute('class', 'ic');                       // lets each theme restyle icons (themes.css section 5)
     (ICONS[name] || []).forEach(function (d) {
       var p = document.createElementNS(SVG_NS, 'path');
       p.setAttribute('d', d);
+      if (/z\s*$/i.test(d)) p.setAttribute('class', 'ic-closed');   // closed shapes can take a theme's fill style
       s.appendChild(p);
     });
     return s;
@@ -3962,6 +3964,7 @@
       var el = h('div', { class: 'mini-theme', 'data-style': t.id, 'data-theme': dark ? 'dark' : 'light', 'aria-hidden': 'true' },
         h('div', { class: 'm-card' }, h('div', { class: 'm-row' }, h('span', { class: 'lp-av m-av' }), h('div', { class: 'm-lines' }, h('span', { class: 'm-line' }), h('span', { class: 'm-line s' }))), h('span', { class: 'm-line' })),
         h('div', { class: 'm-row' }, h('span', { class: 'm-btn' }), h('span', { class: 'm-btn sec' })),
+        h('div', { class: 'm-row m-icons' }, icon('home'), h('span', { 'aria-pressed': 'true', class: 'm-ico' }, icon('heart')), icon('comment'), icon('bell')),
         h('div', { class: 'm-row' }, h('span', { class: 'm-in' })));
       el.style.setProperty('--accent', col.fill); el.style.setProperty('--on-accent', col.on); el.style.setProperty('--accent-text', col.text);
       return el;
@@ -3975,7 +3978,8 @@
       var inp = h('input', { type: 'text', 'aria-label': 'Sample input', placeholder: 'Sample input field' });
       var btns = h('div', { class: 'lp-row' }, h('button', { class: 'btn', type: 'button', text: 'Primary' }), h('button', { class: 'btn secondary', type: 'button', text: 'Secondary' }),
         h('button', { class: 'btn secondary lp-iconbtn', type: 'button', 'aria-label': 'Sample icon button' }, icon('heart')), h('button', { class: 'btn danger', type: 'button', text: 'Delete' }), h('button', { class: 'btn', type: 'button', disabled: true, text: 'Disabled' }));
-      return h('div', { class: 'live-preview', 'aria-label': 'Live preview with sample content' }, card, tabs, inp, btns);
+      var icons = h('div', { class: 'lp-row lp-icons', 'aria-label': 'Sample icons' }, ['home', 'heart', 'comment', 'bell', 'bookmark', 'phone'].map(function (n, i) { return h('span', { class: 'lp-ico', 'aria-pressed': i === 1 ? 'true' : 'false' }, icon(n)); }));
+      return h('div', { class: 'live-preview', 'aria-label': 'Live preview with sample content' }, card, tabs, inp, btns, h('div', null, h('div', { class: 'small muted', text: 'Icons (the second one is shown as selected)' }), icons));
     }
     function paintLook() {
       var sc = document.scrollingElement || document.documentElement, keepY = sc.scrollTop;   // rebuilding the screen must not send you back to the top
