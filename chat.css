@@ -656,3 +656,19 @@ img.zoomable { cursor: zoom-in; }
 .gal-posts { display: grid; gap: 10px; }
 .gal-text { display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: var(--surface-2, #f3f3f5); color: inherit; text-decoration: none; }
 .gal-text-body { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+
+/* About me prompt picker: three drop-down sections */
+.prompt-sections { gap: 10px; max-height: 60vh; }
+.ps-card { border-radius: 16px; background: var(--surface-2); overflow: hidden; }
+.ps-card.open { box-shadow: inset 0 0 0 2px var(--accent); }
+.ps-head { box-shadow: none; filter: none; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 16px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.ps-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; font-size: 1.4rem; flex: none; background: var(--accent-soft, color-mix(in srgb, var(--accent) 18%, transparent)); }
+.ps-kid .ps-icon { background: color-mix(in srgb, #ffb703 30%, transparent); }
+.ps-more .ps-icon { background: color-mix(in srgb, #9b5de5 24%, transparent); }
+.ps-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ps-text .small { color: var(--muted); }
+.ps-chev { width: 10px; height: 10px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(45deg); margin: 0 6px 4px 0; flex: none; transition: transform .2s; }
+.ps-head[aria-expanded="true"] .ps-chev { transform: rotate(-135deg); margin-bottom: -4px; }
+.ps-panel { display: grid; gap: 6px; padding: 0 10px 12px; }
+.ps-panel[hidden] { display: none; }
+.ps-panel .lib-row { background: var(--surface); }

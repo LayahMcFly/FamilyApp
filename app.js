@@ -3509,14 +3509,15 @@
 
   var AB = { cats: 10, items: 12, title: 32, item: 40 };
   var ABOUT_PROMPTS = [
-    { key: 'movies', ask: 'My favorite movies', title: 'Favorite movies' },
-    { key: 'colors', ask: 'My favorite colors', title: 'Favorite colors' },
-    { key: 'foods', ask: 'My favorite foods', title: 'Favorite foods' },
-    { key: 'shows', ask: 'My favorite shows', title: 'Favorite shows' },
-    { key: 'music', ask: 'My favorite songs or artists', title: 'Favorite songs and artists' },
-    { key: 'hobbies', ask: 'My hobbies', title: 'Hobbies' },
-    { key: 'loves', ask: 'Things I love', title: 'Things I love' },
-    { key: 'fears', ask: 'Things I’m afraid of', title: 'Things I’m afraid of' },
+    { key: 'movies', ask: 'My favorite movies', title: 'Favorite movies', sec: 'ent' },
+    { key: 'shows', ask: 'My favorite shows', title: 'Favorite shows', sec: 'ent' },
+    { key: 'games', ask: 'My favorite games', title: 'Favorite games', sec: 'ent' },
+    { key: 'music', ask: 'My favorite songs or artists', title: 'Favorite songs and artists', sec: 'ent' },
+    { key: 'hobbies', ask: 'My hobbies', title: 'Hobbies', sec: 'ent' },
+    { key: 'colors', ask: 'My favorite colors', title: 'Favorite colors', sec: 'more' },
+    { key: 'foods', ask: 'My favorite foods', title: 'Favorite foods', sec: 'more' },
+    { key: 'loves', ask: 'Things I love', title: 'Things I love', sec: 'more' },
+    { key: 'fears', ask: 'Things I’m afraid of', title: 'Things I’m afraid of', sec: 'more' },
     // Memories from childhood (the heading above them in the list says so)
     { key: 'kidshows', ask: 'Shows and cartoons I watched as a kid', title: 'Shows I watched as a kid', kid: true },
     { key: 'kidmovies', ask: 'Movies I watched over and over as a kid', title: 'Movies I watched as a kid', kid: true },
@@ -3675,22 +3676,41 @@
     var dlg = h('dialog', { class: 'sheet-dialog', 'aria-labelledby': 'dlg-title' });
     function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
-    var list = h('div', { class: 'lib-list' });
-    var kidHeading = false;
-    ABOUT_PROMPTS.forEach(function (p) {
-      if (p.kid && !kidHeading) { kidHeading = true; list.appendChild(h('h3', { class: 'lib-heading', text: 'When I was a kid' })); }
+    var list = h('div', { class: 'lib-list prompt-sections' });
+    var SECTIONS = [
+      { id: 'ent', icon: '\uD83C\uDFAC', label: 'Entertainment', hint: 'Movies, shows, games, music and hobbies' },
+      { id: 'kid', icon: '\uD83E\uDDF8', label: 'When I was a kid', hint: 'What I used to watch, play and do' },
+      { id: 'more', icon: '\u2728', label: 'More', hint: 'Colors, foods, things I love and fear' }
+    ];
+    var panels = [];
+    function row(p) {
       var has = taken.indexOf(p.key) !== -1;
-      list.appendChild(h('button', { class: 'lib-row', type: 'button', disabled: has, onclick: function () { close(); onPick({ key: p.key, title: p.title, items: [] }); } },
-        h('span', { text: p.ask }), has ? h('span', { class: 'lib-here', text: 'Added' }) : null));
-    });
-    list.appendChild(h('button', { class: 'lib-row', type: 'button', onclick: function () {
-      close();
-      textDialog('Custom prompt', '', 'Add', { max: AB.title, placeholder: 'For example: My dream trip', aria: 'Name of your custom category' }, async function (v) {
-        if (!v) throw new Error('Give the category a name.');
-        if (v.length > AB.title) throw new Error('Category names can be up to ' + AB.title + ' characters.');
-        onPick({ key: 'x' + Math.random().toString(36).slice(2, 10), title: v, items: [] });
+      return h('button', { class: 'lib-row', type: 'button', disabled: has, onclick: function () { close(); onPick({ key: p.key, title: p.title, items: [] }); } },
+        h('span', { text: p.ask }), has ? h('span', { class: 'lib-here', text: 'Added' }) : null);
+    }
+    SECTIONS.forEach(function (sc, si) {
+      var items = ABOUT_PROMPTS.filter(function (p) { return (p.kid ? 'kid' : p.sec) === sc.id; });
+      var pid = 'ps-' + sc.id, panel = h('div', { class: 'ps-panel', id: pid, role: 'region', hidden: true, 'aria-label': sc.label }, items.map(row));
+      if (sc.id === 'more') panel.appendChild(h('button', { class: 'lib-row', type: 'button', onclick: function () {
+        close();
+        textDialog('Custom prompt', '', 'Add', { max: AB.title, placeholder: 'For example: My dream trip', aria: 'Name of your custom category' }, async function (v) {
+          if (!v) throw new Error('Give the category a name.');
+          if (v.length > AB.title) throw new Error('Category names can be up to ' + AB.title + ' characters.');
+          onPick({ key: 'x' + Math.random().toString(36).slice(2, 10), title: v, items: [] });
+        });
+      } }, h('span', { text: 'A custom prompt\u2026' })));
+      var head = h('button', { class: 'ps-head ps-' + sc.id, type: 'button', 'aria-expanded': 'false', 'aria-controls': pid },
+        h('span', { class: 'ps-icon', 'aria-hidden': 'true', text: sc.icon }),
+        h('span', { class: 'ps-text' }, h('strong', { text: sc.label }), h('span', { class: 'small', text: sc.hint })),
+        h('span', { class: 'ps-chev', 'aria-hidden': 'true' }));
+      head.addEventListener('click', function () {   // one section open at a time keeps the sheet short
+        var open = head.getAttribute('aria-expanded') !== 'true';
+        panels.forEach(function (x) { x.head.setAttribute('aria-expanded', 'false'); x.panel.hidden = true; x.head.parentNode.classList.remove('open'); });
+        head.setAttribute('aria-expanded', open ? 'true' : 'false'); panel.hidden = !open; head.parentNode.classList.toggle('open', open);
       });
-    } }, h('span', { text: 'A custom prompt…' })));
+      panels.push({ head: head, panel: panel });
+      list.appendChild(h('div', { class: 'ps-card' }, head, panel));
+    });
     dlg.appendChild(h('h2', { id: 'dlg-title', text: 'Add something about me' }));
     dlg.appendChild(list);
     dlg.appendChild(h('button', { class: 'btn secondary block', type: 'button', text: 'Cancel', onclick: close }));
