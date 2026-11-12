@@ -102,7 +102,12 @@
     el.removeAttribute('data-preset');
     VARS.forEach(function (v) { el.style.removeProperty(v); });
     if (!eff.accent) return;
-    if (eff.theme === 'default' && !dark) {                      // Default, light: the page takes a light tint of the accent (as before)
+    if (eff.theme === 'default' && dark) {                       // Default, dark: the page takes a dark tint of the accent
+      var db = mix('#0c1014', eff.accent, 0.16), ds = mix('#0c1014', eff.accent, 0.12);
+      el.style.setProperty('--bg', db); el.style.setProperty('--surface', ds);
+      el.style.setProperty('--surface-2', mix('#1c2227', eff.accent, 0.18)); el.style.setProperty('--border', mix('#222a31', eff.accent, 0.22));
+      surf = { bg: db, surface: ds };
+    } else if (eff.theme === 'default' && !dark) {                      // Default, light: the page takes a light tint of the accent (as before)
       el.style.setProperty('--bg', mix(eff.accent, '#ffffff', 0.86)); el.style.setProperty('--surface', mix(eff.accent, '#ffffff', 0.86));
       el.style.setProperty('--surface-2', mix(eff.accent, '#ffffff', 0.74)); el.style.setProperty('--border', mix(eff.accent, '#ffffff', 0.58));
       surf = { bg: mix(eff.accent, '#ffffff', 0.86), surface: mix(eff.accent, '#ffffff', 0.86) };
