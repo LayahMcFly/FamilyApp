@@ -877,11 +877,20 @@
           Array.prototype.forEach.call(document.querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"]'), function (l) { l.parentNode.removeChild(l); });
           link = document.createElement('link'); link.rel = 'icon'; link.type = 'image/png'; document.head.appendChild(link);
         }
+        if (window.FC_UNREAD > 0) {   // red dot for unread chat messages
+          cx.beginPath(); cx.arc(48, 16, 15, 0, 6.2832); cx.fillStyle = '#fff'; cx.fill();
+          cx.beginPath(); cx.arc(48, 16, 11.5, 0, 6.2832); cx.fillStyle = '#e5173f'; cx.fill();
+        }
         link.href = cv.toDataURL('image/png');
         a += 0.05;   // a full turn takes about 15 seconds
       }
       function run() { if (timer || document.hidden) return; frame(); timer = setInterval(frame, 120); }
       function stop() { clearInterval(timer); timer = null; }
+      document.addEventListener('fc-chat-unread', function () {
+        frame();   // repaint once, even in a background tab
+        document.title = document.title.replace(/^\(\d+\+?\) /, '');
+        var n = window.FC_UNREAD || 0; if (n > 0) document.title = '(' + (n > 99 ? '99+' : n) + ') ' + document.title;
+      });
       document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else run(); });
       run();
     } catch (e) {}
@@ -1141,7 +1150,7 @@
       (CFG.tagline ? h('p', { class: 'tagline', text: CFG.tagline }) : null),
       takeNotice(),
       body));
-    document.title = title + ' · ' + (CFG.appName || 'Family Circle');
+    document.title = ((window.FC_UNREAD > 0) ? '(' + (window.FC_UNREAD > 99 ? '99+' : window.FC_UNREAD) + ') ' : '') + title + ' · ' + (CFG.appName || 'Family Circle');
     return body;
   }
 
@@ -1457,7 +1466,7 @@
       if (a.getAttribute('data-route') === navName) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
-    document.title = (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
+    document.title = ((window.FC_UNREAD > 0) ? '(' + (window.FC_UNREAD > 99 ? '99+' : window.FC_UNREAD) + ') ' : '') + (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
     Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2, param3); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });

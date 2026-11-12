@@ -410,3 +410,17 @@ test('family chat picture: owner and chat admins only, stored for the whole fami
   await w.ok('owner', 'chatPicture', { familyId: 'famA', fileId: '' });
   assert.equal((await w.ok('bob', 'chatOpen', { familyId: 'famA' })).picture, '');
 });
+
+test('typing hint: stores only the chosen wording, never errors, respects blocks and archived channels', async () => {
+  const { w, ch } = await setup();
+  const rows = () => [...w.world.tables.chatTyping.values()];
+  const r1 = await w.ok('ann', 'chatTyping', { familyId: 'famA', kind: 'channel', convId: ch.general, text: '  is  cooking <b>letters</b>\n' + 'x'.repeat(100) });
+  assert.equal(r1.shown, true); assert.equal(rows().length, 1);
+  assert.ok(rows()[0].text.length <= 40 && !/[<>\n]/.test(rows()[0].text) && rows()[0].text.startsWith('is cooking'));
+  await w.ok('ann', 'chatTyping', { familyId: 'famA', kind: 'channel', convId: ch.general, text: 'is typing' });
+  assert.equal(rows().length, 1, 'the same person and conversation reuse one row'); assert.equal(rows()[0].text, 'is typing');
+  await w.ok('ann', 'chatTyping', { familyId: 'famA', kind: 'channel', convId: ch.general, text: 5 });
+  assert.equal(rows()[0].text, '');
+  await w.fail('zed', 'chatTyping', { familyId: 'famA', kind: 'channel', convId: ch.general, text: 'x' }, 403);
+  await w.fail('ann', 'chatTyping', { familyId: 'famA', kind: 'dm', convId: ch.general, text: 'x' }, 404);
+});

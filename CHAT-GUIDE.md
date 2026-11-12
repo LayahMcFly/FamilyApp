@@ -30,7 +30,7 @@ Version 1.47.0. Channels and direct messages for each family, opened from the sm
 
 | Not in this version (no buttons exist for these) | Why |
 |---|---|
-| Typing indicators, photo or file attachments, pinned messages, push notifications | Each needs its own storage or permission design. |
+| Photo or file attachments, pinned messages, push notifications | Each needs its own storage or permission design. |
 | Private or restricted channels | Needs per-channel membership rules that are not built or tested. All channels are visible to all current members. |
 | Search inside messages | Appwrite search needs extra indexes. Later. |
 | Reopening a closed DM when someone rejoins | A closed DM stays closed. |
@@ -133,6 +133,7 @@ Database `family`. Every new table has **no table-level permissions** and **Row 
 | `chatMessages` | familyId (36), convId (36), kind (8: `channel` or `dm`), authorId (36), body (2000), replyToId (36, optional), clientId (36), sendKey (80), editedAt (32, optional) | key `idx_convId`; key `idx_conv_author` (convId, authorId); key `idx_authorId`; key `idx_familyId`; **unique** `uniq_sendKey` | channel: `team:<familyId>`. DM: `user:<a>` and `user:<b>` |
 | `chatReactions` | familyId (36), convId (36), messageId (36), userId (36), emoji (8), reactionKey (100) | key `idx_messageId`, `idx_convId`, `idx_userId`, `idx_familyId`; **unique** `uniq_reactionKey` | same as the message it belongs to |
 | `chatDms` | familyId (36), userA (36), userB (36), dmKey (120), status (8: `open` or `closed`), lastAt (40, optional), closedFor (36, optional), pending (boolean) | key `idx_familyId`, `idx_userA`, `idx_userB`, `idx_status`; **unique** `uniq_dmKey` | `user:<a>` and `user:<b>`; after closing, only the person who stayed |
+| `chatTyping` | familyId (36), convId (36), userId (36), typingKey (80, required), text (60, default empty), until (40) | key `idx_convId`, key `idx_familyId`, **unique** `uniq_typingKey` | Only the people in that conversation (same as its messages) |
 | `chatReads` | familyId (36), userId (36), convId (36), readKey (80), lastReadAt (40) | key `idx_user_family` (userId, familyId), `idx_familyId`; **unique** `uniq_readKey` | **none** (function only) |
 | `chatBlocks` | familyId (36), blockerId (36), blockedId (36, `*` means everyone), blockKey (120) | key `idx_familyId`, `idx_blockerId`, `idx_blockedId`; **unique** `uniq_blockKey` | **none** (function only) |
 | `chatMod` | familyId (36), actorId (36), action (32), convId (36, optional), targetUserId (36, optional) | key `idx_familyId` | **none** (function only; owners and chat admins read it through the function) |
@@ -146,7 +147,7 @@ How the unique keys prevent duplicates:
 
 Function scopes: the ones `family-api` already has (`users.read`, `users.write`, `teams.read`, `teams.write`, `rows.read`, `rows.write`, `files.read`, `files.write`) are enough. Nothing new.
 
-Realtime: nothing to configure in Appwrite. The app subscribes to `tablesdb.family.tables.<table>.rows` for `chatMessages`, `chatReactions`, `chatChannels` and `chatDms`. Appwrite only delivers an event to a connection whose signed-in person has read permission on that row. The app also ignores events that carry another family's id.
+Realtime: nothing to configure in Appwrite. The app subscribes to `tablesdb.family.tables.<table>.rows` for `chatMessages`, `chatReactions`, `chatChannels`, `chatDms` and `chatTyping`. Appwrite only delivers an event to a connection whose signed-in person has read permission on that row. The app also ignores events that carry another family's id.
 
 ---
 
@@ -249,6 +250,8 @@ Use two accounts, A (owner) and B (member), plus C (member who is in a different
 19. Tap and hold a message for about half a second: the menu opens. Tap **+** and react with an emoji that is not one of the six, such as a flag. It shows on the other phone. Add 21 different emoji to one message: the 21st is refused with a clear message.
 20. Send `https://example.com`: it is a link, and a card appears within a few seconds. Send `javascript:alert(1)`: it stays plain text. Send a link to a private address such as `http://192.168.0.1`: it is a link, with no card.
 21. Chat settings, Links and GIFs off: the card and any GIF turn into plain links.
+21b. Typing hint (needs two phones): type in a chat on phone A. Within a second phone B shows "Name is typing…" above the message box, and it disappears about 7 seconds after A stops or as soon as A's message arrives. In Chat settings, Typing hint, change the words (for example "is cooking letters") and try again. Switch it off and phone B sees nothing.
+21c. Unread dots: leave chat on phone B and send a message from A. Within seconds the Chat button and the browser tab icon get a red dot, and the tab title starts with a number. Open the conversation and the dots go away.
 22. With a GIPHY key set (step 5b): tap **GIF**, search "cat", tap a result. It sends as a picture. Try the Stickers tab and **Load more**.
 23. Keyboard only: Tab to the handle, Enter, arrow keys inside the panel, Escape. Reduced motion (phone setting Reduce Motion) removes the panel animation. On a phone, tap the message box: the box stays above the keyboard.
 
@@ -276,3 +279,12 @@ Checked in a browser with a fake backend: panel gestures and keyboard use, scree
 **Not yet checked against live Appwrite:** the real Realtime service, real permissions, real index behavior and the real event trigger. Steps 3 (self-check), 10 and 11 exist to check exactly those. Two things to watch in the live test: how quickly an already-open connection stops receiving a channel after someone is removed (the app also re-checks membership every 5 minutes and when the tab wakes), and whether Appwrite's `total` and `or` queries behave as expected on your plan.
 
 Sources: Appwrite Realtime documentation (channels and the `Realtime` subscribe API, [subscribe](https://appwrite.io/docs/apis/realtime/subscribe), [channels](https://appwrite.io/docs/apis/realtime/channels)) and the type definitions shipped in the Web SDK 29.2.0 package used by this site.
+
+
+---
+
+## Typing hint: one extra step after updating
+
+The typing hint stores a few-second note in a new table, `chatTyping`. After uploading the new `family-api` zip, run the GitHub workflow **Add the Family Chat tables (one-time)** again (it needs the API key from step 2, and you delete the key afterwards, as before). It only adds what is missing and leaves your chats alone. Until then chat works as usual and the typing hint simply does not appear.
+
+The words after a person's name are chosen in Chat settings, are saved on that device, and are limited to 40 characters. The server removes control characters and `<` `>`, and the app shows them as plain text.

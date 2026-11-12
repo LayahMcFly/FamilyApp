@@ -23,6 +23,7 @@ export const CHAT_TABLES = {
   reactions: 'chatReactions',
   dms: 'chatDms',
   reads: 'chatReads',
+  typing: 'chatTyping',
   blocks: 'chatBlocks',
   mod: 'chatMod'
 };
@@ -221,7 +222,7 @@ export function createChat(c) {
   /* ---------- family deletion ---------- */
   async function purgeFamily(familyId, deleteWhere, deadline) {
     const by = [Query.equal('familyId', [familyId])];
-    for (const t of [T.reactions, T.messages, T.reads, T.blocks, T.mod, T.dms, T.channels]) {
+    for (const t of [T.typing, T.reactions, T.messages, T.reads, T.blocks, T.mod, T.dms, T.channels]) {
       try { if (!(await deleteWhere(t, by, deadline))) return false; } catch (e) { if (sdkCode(e) !== 404) throw e; }   // 404 = chat tables not installed
     }
     return true;
@@ -323,6 +324,31 @@ export function createChat(c) {
       }
       if (conv.kind === 'dm') { try { await updateRow(T.dms, conv.row.$id, { lastAt: row.$createdAt }); } catch (e) { /* ordering hint only */ } }
       return { message: pubMessage(row) };
+    },
+
+    /** "Someone is typing". A small row per person and conversation that members of that conversation can read, so it reaches them by realtime.
+     *  It only holds the wording the person chose (at most 40 characters of plain text) and a time about 7 seconds ahead. Never the message itself.
+     *  Everything that is not allowed (archived, blocked, read-only, too often) quietly does nothing: typing hints must never show an error. */
+    async chatTyping({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      const conv = await resolveConv(user, ctx.familyId, body.kind, body.convId);
+      if (!conv.open) return { ok: true, shown: false };
+      if (conv.kind === 'channel' && conv.row.readOnly === true && (await chatRole(user, ctx)) === 'member') return { ok: true, shown: false };
+      if (conv.kind === 'dm') {
+        if (!(await isMemberOf(ctx.familyId, conv.other))) return { ok: true, shown: false };
+        if (await blockedBetween(ctx.familyId, user.$id, conv.other)) return { ok: true, shown: false };
+      }
+      if (!softLimit('typing', user.$id, 20, 60)) return { ok: true, shown: false };
+      const text = typeof body.text === 'string' ? body.text.replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+      const typingKey = `${conv.row.$id}_${user.$id}`;
+      const until = iso(now() + 7000);
+      const ex = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]);
+      if (ex) await updateRow(T.typing, ex.$id, { until, text });
+      else {
+        try { await createRow(T.typing, ID.unique(), { familyId: ctx.familyId, convId: conv.row.$id, userId: user.$id, typingKey, text, until }, conv.perms); }
+        catch (e) { if (sdkCode(e) !== 409) throw e; const again = await firstRow(T.typing, [Query.equal('typingKey', [typingKey])]); if (again) await updateRow(T.typing, again.$id, { until, text }); }
+      }
+      return { ok: true, shown: true };
     },
 
     async chatEdit({ user, body }) {

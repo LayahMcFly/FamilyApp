@@ -124,6 +124,7 @@
     function set(id, n) { var el = document.getElementById(id); if (!el) return; el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n || ''); el.setAttribute('aria-label', n + ' unread'); }
     set('pp-b1', TOTALS.ch); set('pp-b2', TOTALS.dm);
     var dot = handle && handle.querySelector('.handle-dot'); if (dot) dot.hidden = !(TOTALS.ch + TOTALS.dm);
+    var tot = TOTALS.ch + TOTALS.dm; if (window.FC_UNREAD !== tot) { window.FC_UNREAD = tot; try { document.dispatchEvent(new Event('fc-chat-unread')); } catch (e) { /* old browser */ } }   // the tab icon and title follow
   }
   function globalListeners() {
     document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && panelOpen) { ev.preventDefault(); closePanel(true); } });
@@ -161,7 +162,7 @@
     TOTALS.ch = ch; TOTALS.dm = dm; paintBadges();
   }
   function startPeek() {
-    setInterval(function () { if (!document.hidden) refreshTotals(false); }, 120000);
+    setInterval(function () { if (!document.hidden) refreshTotals(false); }, 45000);
     setTimeout(function () { refreshTotals(true); }, 4000);
   }
 
@@ -190,7 +191,7 @@
     if (C && C.famId === famId() && C.uid === me()) return C;
     stop();
     C = { gen: GEN, famId: famId(), uid: me(), loaded: false, error: null, role: 'member', channels: [], dms: [], unread: {}, blocked: [], allowDms: true, limits: { body: 1000 }, reactions: ['👍', '❤️', '😂', '😮', '😢', '🙏'],
-      convs: {}, cur: null, route: { mode: 'channels', id: '' }, drafts: {}, listeners: [], timers: {}, sub: null, rt: null, loading: null, online: navigator.onLine !== false };
+      convs: {}, typing: {}, cur: null, route: { mode: 'channels', id: '' }, drafts: {}, listeners: [], timers: {}, sub: null, rt: null, loading: null, online: navigator.onLine !== false };
     return C;
   }
 
@@ -210,7 +211,7 @@
   /* ---------- realtime ---------- */
   async function connect(c) {
     var A = window.Appwrite, base = 'tablesdb.' + dbId() + '.tables.';
-    var chans = [base + 'chatMessages.rows', base + 'chatReactions.rows', base + 'chatChannels.rows', base + 'chatDms.rows'];
+    var chans = [base + 'chatMessages.rows', base + 'chatReactions.rows', base + 'chatChannels.rows', base + 'chatDms.rows', base + 'chatTyping.rows'];
     try {
       if (A && A.Realtime) { c.rt = new A.Realtime(X.client); var sub = await c.rt.subscribe(chans, function (ev) { if (C === c) onEvent(c, ev); }); if (C !== c) { try { sub.unsubscribe(); } catch (e) { /* ok */ } return; } c.sub = sub; }
       else if (X.client && X.client.subscribe) c.sub = X.client.subscribe(chans, function (ev) { if (C === c) onEvent(c, ev); });
@@ -237,6 +238,7 @@
   function onEvent(c, ev) {
     var p = ev.payload || {}, evs = (ev.events || []).join(' '), kind = eventKind(ev);
     if (!kind || p.familyId !== c.famId) return;                // another family's event is never used
+    if (evs.indexOf('.chatTyping.') >= 0) return onTypingEvent(c, kind, p);
     if (evs.indexOf('.chatMessages.') >= 0) return onMessageEvent(c, kind, p);
     if (evs.indexOf('.chatReactions.') >= 0) return onReactionEvent(c, kind, p);
     if (evs.indexOf('.chatChannels.') >= 0 || evs.indexOf('.chatDms.') >= 0) later(c, 'overview', 600, function () { reloadOverview(c); });
@@ -247,6 +249,7 @@
   function onMessageEvent(c, kind, row) {
     var cv = c.convs[row.convId];
     if (kind === 'create') {
+      if (c.typing && c.typing[row.convId]) { delete c.typing[row.convId][row.authorId]; paintTyping(c); }   // their message arrived, so they are no longer typing
       if (row.kind === 'dm') { touchDm(c, row.convId, row.$createdAt); paintList(); }
       if (row.authorId !== c.uid && (!c.cur || c.cur.id !== row.convId || document.hidden)) {
         var u = c.unread[row.convId] || (c.unread[row.convId] = { n: 0, readAt: '', dm: row.kind === 'dm' }); u.n = Math.min(10, (u.n || 0) + 1);
@@ -780,6 +783,42 @@
     paintJump();
   }
 
+
+  /* ---------- "is typing" (what others see while you type; wording is yours to choose) ---------- */
+  var TYPING_DEFAULT = 'is typing';
+  function typingOn() { return lsGet('fc_chat_typing', true) !== false; }
+  function typingWords() { var v = lsGet('fc_chat_typing_text', ''); v = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 40) : ''; return v || TYPING_DEFAULT; }
+  function onTypingEvent(c, kind, row) {
+    if (kind === 'delete' || row.userId === c.uid) return;
+    var until = Date.parse(row.until || ''); if (!(until > Date.now())) return;
+    var byConv = c.typing[row.convId] || (c.typing[row.convId] = {});
+    byConv[row.userId] = { text: String(row.text || '').slice(0, 40) || TYPING_DEFAULT, until: until };
+    paintTyping(c);
+    clearTimeout(c.typingTimer); c.typingTimer = setTimeout(function () { paintTyping(c); }, Math.max(300, until - Date.now() + 100));
+  }
+  function typingLine(c) {
+    if (!c.cur) return '';
+    var byConv = c.typing[c.cur.id] || {}, now = Date.now(), out = [];
+    Object.keys(byConv).forEach(function (uid) {
+      var e = byConv[uid]; if (e.until <= now) { delete byConv[uid]; return; }
+      if (c.blocked.indexOf(uid) >= 0) return;
+      out.push({ name: realName(uid), text: e.text });
+    });
+    if (!out.length) return '';
+    if (out.length > 3) return out.length + ' people are typing…';
+    return out.map(function (o) { return o.name + ' ' + o.text; }).join(' · ') + '…';
+  }
+  function paintTyping(c) {
+    var el = document.getElementById('typing-line'); if (!el) return;
+    var s = typingLine(c); el.textContent = s; el.hidden = !s;
+  }
+  /** Tells the server I am typing, at most every 4 seconds, and only while someone could see it (realtime is on). */
+  function pingTyping(c, cv, ta) {
+    if (!typingOn() || !c.live || !ta.value.trim() || /^\s*\//.test(ta.value)) return;
+    var now = Date.now(); if (now - (c.typingSentAt || 0) < 4000) return; c.typingSentAt = now;
+    api('chatTyping', { kind: cv.kind, convId: cv.id, text: typingWords() === TYPING_DEFAULT ? '' : typingWords() }).catch(function () { /* a typing hint never shows an error */ });
+  }
+
   /* ----- composer ----- */
   function buildComposer(c, cv, ch, dm) {
     var wrap = h('div', { class: 'composer-wrap' });
@@ -800,13 +839,15 @@
     function setReply(m) { reply = m; replyBar.hidden = !m; clear(replyBar); if (m) { replyBar.appendChild(h('span', { class: 'clamp' }, 'Replying to ', h('strong', { text: realName(m.authorId) }), ': ' + m.body)); replyBar.appendChild(h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Cancel reply', text: '×', onclick: function () { setReply(null); ta.focus(); } })); ta.focus(); } }
     cv.setReply = setReply;
     ta.addEventListener('input', grow);
+    ta.addEventListener('input', function () { pingTyping(c, cv, ta); });
     ta.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && isFine()) { ev.preventDefault(); form.requestSubmit(); } });
     var form = h('form', { class: 'composer', onsubmit: function (ev) {
       ev.preventDefault(); var t = ta.value.trim(); if (!t) return;
       if (t.length > c.limits.body) { toast('Messages can be up to ' + c.limits.body + ' characters.'); return; }
       sendText(c, cv, t, reply ? reply.$id : ''); ta.value = ''; c.drafts[cv.id] = ''; setReply(null); grow(); ta.focus();
     } }, replyBar, h('div', { class: 'composer-row' }, gifBtn, ta, send), count);
-    wrap.appendChild(form); grow();
+    wrap.appendChild(h('div', { id: 'typing-line', class: 'typing-line small', role: 'status', 'aria-live': 'polite', hidden: true }));
+    wrap.appendChild(form); grow(); setTimeout(function () { paintTyping(c); }, 0);
     return wrap;
   }
 
@@ -1035,6 +1076,23 @@
     body.appendChild(h('h3', { text: 'Links and GIFs' }));
     body.appendChild(h('label', { class: 'check' }, pv, ' Show link previews and GIFs on this device'));
     body.appendChild(h('p', { class: 'small muted', text: 'A preview is made by the family server visiting the link, so your device never contacts that website. GIFs load straight from GIPHY, which can see your internet address. Turn this off to see plain links only.' }));
+    body.appendChild(h('h3', { text: 'Typing hint' }));
+    var tOn = h('input', { type: 'checkbox' }); tOn.checked = typingOn();
+    tOn.addEventListener('change', function () { lsSet('fc_chat_typing', tOn.checked); });
+    body.appendChild(h('label', { class: 'check' }, tOn, ' Let others see when I am typing'));
+    var tTxt = h('input', { type: 'text', maxlength: 40, class: 'typing-words', 'aria-label': 'Words others see after your name while you type', placeholder: TYPING_DEFAULT });
+    tTxt.value = typingWords() === TYPING_DEFAULT ? '' : typingWords();
+    var tPrev = h('p', { class: 'small muted' });
+    function showPrev() { tPrev.textContent = 'Others will see: ' + (profileOf(c.uid) ? profileOf(c.uid).displayName : 'You') + ' ' + (tTxt.value.replace(/[<>]/g, '').trim() || TYPING_DEFAULT) + '…'; }
+    tTxt.addEventListener('input', function () { lsSet('fc_chat_typing_text', tTxt.value.replace(/[<>]/g, '').slice(0, 40)); showPrev(); });
+    showPrev();
+    body.appendChild(h('label', { class: 'small', text: 'Your words (after your name)' })); body.appendChild(tTxt);
+    var presets = h('div', { class: 'row typing-presets' });
+    ['is typing', 'is cooking letters', 'is writing a novel', 'is plotting something', 'is summoning words'].forEach(function (w) {
+      presets.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: w, onclick: function () { tTxt.value = w; lsSet('fc_chat_typing_text', w); showPrev(); } }));
+    });
+    body.appendChild(presets);
+    body.appendChild(h('p', { class: 'small muted', text: 'This is the wording other family members see on their device while you type. It is saved on this device and sent with each typing hint. Nothing is stored after a few seconds.' }));
     body.appendChild(h('h3', { text: 'People you blocked' }));
     if (!c.blocked.length) body.appendChild(h('p', { class: 'small muted', text: 'No one.' }));
     c.blocked.forEach(function (uid) { body.appendChild(h('div', { class: 'cs-member' }, avatar(uid, 'sm'), h('span', { class: 'grow', text: realName(uid) }), h('button', { class: 'btn secondary small', type: 'button', text: 'Unblock', 'aria-label': 'Unblock ' + realName(uid), onclick: function () { s.close(); setBlock(c, uid, false); } }))); });

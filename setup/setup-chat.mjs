@@ -43,6 +43,10 @@ const schema = {
     columns: [S('familyId', 36, true), S('userId', 36, true), S('convId', 36, true), S('readKey', 80, true), S('lastReadAt', 40, true)],
     indexes: [['idx_user_family', 'key', ['userId', 'familyId']], ['idx_familyId', 'key', ['familyId']], ['uniq_readKey', 'unique', ['readKey']]]
   },
+  chatTyping: {
+    columns: [S('familyId', 36, true), S('convId', 36, true), S('userId', 36, true), S('typingKey', 80, true), S('text', 60, false, ''), S('until', 40, true)],
+    indexes: [['idx_convId', 'key', ['convId']], ['idx_familyId', 'key', ['familyId']], ['uniq_typingKey', 'unique', ['typingKey']]]
+  },
   chatBlocks: {
     columns: [S('familyId', 36, true), S('blockerId', 36, true), S('blockedId', 36, true), S('blockKey', 120, true)],
     indexes: [['idx_familyId', 'key', ['familyId']], ['idx_blockerId', 'key', ['blockerId']], ['idx_blockedId', 'key', ['blockedId']], ['uniq_blockKey', 'unique', ['blockKey']]]
@@ -128,6 +132,7 @@ const checks = [
   ['chatDms', [Query.equal('dmKey', [probe]), Query.limit(1)]],
   ['chatReads', [Query.equal('userId', [probe]), Query.equal('familyId', [probe]), Query.limit(100)]],
   ['chatReads', [Query.equal('readKey', [probe]), Query.limit(1)]],
+  ['chatTyping', [Query.equal('typingKey', [probe]), Query.limit(1)]],
   ['chatBlocks', [Query.equal('familyId', [probe]), Query.equal('blockerId', [probe]), Query.equal('blockedId', [probe, '*']), Query.limit(1)]],
   ['chatBlocks', [Query.equal('blockKey', [probe]), Query.limit(1)]],
   ['chatMod', [Query.equal('familyId', [probe]), Query.orderDesc('$createdAt'), Query.limit(50)]],
