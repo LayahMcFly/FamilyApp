@@ -605,7 +605,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       // The look of the person's own page: a few allowed "name:value" settings (background, border, accent, font, corners).
       const pg = clean.find((c) => c.key === 'pagestyle');
       if (pg) {
-        const okItem = (x) => /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/.test(x);
+        const okItem = (x) => /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|border2:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none|stripes|zigzag|checker|stitched|ridge)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/.test(x);
         const names = pg.items.map((x) => x.split(':')[0]);
         if (!pg.items.every(okItem) || new Set(names).size !== names.length) throw bad('That page style is not valid.');
       }

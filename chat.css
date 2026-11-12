@@ -742,3 +742,12 @@ dialog.cs[open]::backdrop { animation: csFade .3s ease backwards; }
 @keyframes csFade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { dialog.cs[open], dialog.cs[open]::backdrop { animation: none; } }
 .reel-info .pf-open { pointer-events: auto; }
+
+/* Old-time quilt and blanket edges for "Border around my posts". Two colours, thicker bands than a plain line. */
+.pg-pat .card, .pg-pat .gal-tab, .pg-pat .gal-sort { --bw: calc(var(--pg-bwidth, 2px) * 3); --c1: var(--pg-border, #7c5cff); --c2: var(--pg-border2, #f6e7c8); }
+.pg-p-stripes .card, .pg-p-stripes .gal-tab, .pg-p-stripes .gal-sort { border: var(--bw) solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, repeating-linear-gradient(45deg, var(--c1) 0 7px, var(--c2) 7px 14px) border-box; }
+.pg-p-zigzag .card, .pg-p-zigzag .gal-tab, .pg-p-zigzag .gal-sort { border: var(--bw) solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, linear-gradient(135deg, var(--c1) 25%, transparent 25%) -7px 0 / 14px 14px border-box, linear-gradient(225deg, var(--c1) 25%, transparent 25%) -7px 0 / 14px 14px border-box, linear-gradient(315deg, var(--c1) 25%, transparent 25%) 0 0 / 14px 14px border-box, linear-gradient(45deg, var(--c1) 25%, var(--c2) 25%) 0 0 / 14px 14px border-box; }
+.pg-p-checker .card, .pg-p-checker .gal-tab, .pg-p-checker .gal-sort { border: var(--bw) solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, conic-gradient(var(--c1) 25%, var(--c2) 0 50%, var(--c1) 0 75%, var(--c2) 0) 0 0 / 16px 16px border-box; }
+.pg-p-stitched .card, .pg-p-stitched .gal-tab, .pg-p-stitched .gal-sort { border: calc(var(--bw) * .7) solid var(--c1); outline: 2px dashed var(--c2); outline-offset: calc(var(--bw) * -.5); }
+.pg-p-ridge .card, .pg-p-ridge .gal-tab, .pg-p-ridge .gal-sort { border: var(--bw) ridge var(--c1); }
+.pg-p-stripes .gal-tab, .pg-p-zigzag .gal-tab, .pg-p-checker .gal-tab { margin: 0 0 8px; }
