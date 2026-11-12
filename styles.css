@@ -1436,3 +1436,10 @@ video::cue { opacity: 0 !important; background: transparent !important; color: t
 .tree-bar { align-items: flex-end; gap: 10px; }
 .tree-bar .tree-add { margin: 0 !important; min-height: 44px; white-space: nowrap; }
 @media (min-width: 700px) { .tree-addrel { grid-template-columns: repeat(4, auto); justify-content: start; } .tree-addrel .tree-addrel-title { grid-column: auto; } }
+
+/* Jump to + Add person: same height, same bottom line */
+.tree-bar { display: flex !important; align-items: flex-end !important; gap: 10px !important; }
+.tree-bar > .grow { flex: 1 1 auto; min-width: 0; }
+.tree-bar select, .tree-bar .tree-add { height: 48px !important; min-height: 48px !important; margin: 0 !important; box-sizing: border-box; }
+.tree-bar .tree-add { flex: none; padding-top: 0 !important; padding-bottom: 0 !important; display: inline-flex; align-items: center; transform: none !important; }
+.tree-bar > .grow > * { margin-bottom: 0 !important; }
