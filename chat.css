@@ -771,3 +771,64 @@ dialog.cs[open]::backdrop { animation: csFade .3s ease backwards; }
 
 
 
+
+/* ---------- Button borders (profile pages) ----------
+   Simple frames are CSS. Decorated frames are small SVG pictures cut into corners and sides (see borders.js).
+   Only buttons that carry the class "bb-t" inside a ".pb-on" page take a border, so Like, Share and the rest of the app are untouched. */
+.pb-on .bb-t { box-shadow: none !important; position: relative; }
+.pb-classic .bb-t, .pb-bold .bb-t, .pb-dotted .bb-t, .pb-dashed .bb-t, .pb-double .bb-t { border: var(--bb-w) solid var(--bb-c) !important; }
+.pb-dashed .bb-t { border-style: dashed !important; }
+.pb-dotted .bb-t { border-style: dotted !important; }
+.pb-double .bb-t { border-style: double !important; }
+.pb-inset .bb-t { border: var(--bb-w) inset color-mix(in srgb, var(--bb-c) 45%, var(--surface-2)) !important; }
+.pb-beveled .bb-t { border: var(--bb-w) solid !important; border-color: color-mix(in srgb, var(--bb-c) 55%, #fff) color-mix(in srgb, var(--bb-c) 60%, #000) color-mix(in srgb, var(--bb-c) 60%, #000) color-mix(in srgb, var(--bb-c) 55%, #fff) !important; }
+.pb-gradient .bb-t { border: var(--bb-w) solid transparent !important; background: linear-gradient(var(--surface-2), var(--surface-2)) padding-box, linear-gradient(135deg, var(--fun-a, #ff6bb5), var(--fun-b, #ffb347), var(--fun-c, #5ad1ff)) border-box !important; }
+.pb-stitched .bb-t { border: 2px solid var(--bb-c) !important; }
+.pb-stitched .bb-t::before { content: ""; position: absolute; inset: 4px; border: var(--bb-w) dashed var(--bb-c) !important; border-radius: inherit !important; pointer-events: none; }
+.pb-svg .bb-t { border: var(--bb-ow) solid transparent !important; border-image: var(--bb-img) 30 / var(--bb-ow) round !important; background-clip: padding-box !important; border-radius: 0 !important; min-height: 44px; margin-block: 2px !important; }
+.pb-svg .gal-tab.bb-t { border-width: min(var(--bb-ow), 14px) !important; border-image-width: min(var(--bb-ow), 14px) !important; margin: 0 !important; }
+.pb-on .bb-t:focus-visible { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 3px; }
+
+/* the picker */
+dialog.bb-dialog { max-width: 640px; width: min(640px, calc(100vw - 24px)); }
+dialog.bb-dialog[open] { display: flex; flex-direction: column; gap: 8px; max-height: 92vh; max-height: 92dvh; overflow: hidden; }
+dialog.bb-dialog h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; letter-spacing: .01em; }
+.bb-hint { margin: 0; }
+.bb-live { display: grid; gap: 4px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
+.bb-live-scope { display: block; }
+.bb-selected { margin: 0; text-align: center; font-size: .9rem; }
+.bb-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.bb-tab { flex: 1 1 auto; min-height: 40px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+.bb-tab[aria-current="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.bb-tab:focus-visible, .bb-scroll:focus-visible { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 2px; }
+.bb-scroll { flex: 1 1 auto; min-height: 220px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 0 10px 8px; border-radius: 12px; }
+.bb-sec { display: block; }
+.bb-h { position: sticky; top: 0; z-index: 2; margin: 0 0 8px; padding: 8px 4px 6px; background: var(--surface, var(--bg)); font-family: Georgia, "Times New Roman", serif; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; }
+.bb-h::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+.bb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; margin-bottom: 14px; padding-top: 10px; }
+@media (max-width: 339px) { .bb-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 700px) { .bb-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } dialog.bb-dialog { max-width: 760px; width: min(760px, calc(100vw - 48px)); } }
+.bb-tile { position: relative; display: grid; gap: 8px; align-content: start; padding: 12px 10px 10px; border-radius: 14px; border: 2px solid var(--border); background: linear-gradient(180deg, var(--surface-2), var(--surface, var(--surface-2))); cursor: pointer; min-width: 0; }
+.bb-tile:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.bb-tile:focus-within { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 2px; }
+.bb-tile.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+.bb-scope { display: block; pointer-events: none; }
+.bb-demo { pointer-events: none; font-size: .85rem; white-space: normal; text-align: center; }
+.bb-tile .bb-demo { font-size: .8rem; padding: 8px 2px; min-height: 40px; }
+.bb-live .bb-demo { padding-inline: 8px; }
+.bb-name { text-align: center; font-size: .85rem; font-weight: 700; overflow-wrap: anywhere; }
+.bb-tile.on .bb-name::before { content: "Selected \00b7  "; font-weight: 400; }
+.bb-check { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: none; align-items: center; justify-content: center; font-size: .9rem; font-weight: 800; }
+.bb-tile.on .bb-check { display: flex; }
+.bb-ctl { display: grid; gap: 6px; }
+.bb-ctl .bb-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) 4.5em; gap: 8px; align-items: center; }
+.bb-ctl .bb-row input[type="color"] { justify-self: start; height: 34px; }
+.bb-ctl p { margin: 0; }
+.bb-ctl input[type="range"] { width: 100%; min-width: 0; }
+.bb-msg:empty { display: none; }
+.bb-msg.error { color: var(--danger); }
+.bb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bb-actions { flex-wrap: nowrap; align-items: stretch; }
+.bb-actions .btn { flex: 1 1 0; min-width: 0; min-height: 48px; padding-inline: 8px; font-size: .9rem; }
+@media (max-height: 760px) { .bb-hint { display: none; } }
+@media (prefers-reduced-motion: reduce) { .bb-tile, .bb-tab { transition: none; } .bb-scroll { scroll-behavior: auto; } }

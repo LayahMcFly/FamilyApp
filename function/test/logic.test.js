@@ -866,6 +866,13 @@ test('page style is stored when valid and refused when not', async () => {
   assert.equal((await save(['bstyle:wavy'])).status, 400);
   assert.equal((await save(['bstyle:zigzag', 'border:#2c5282', 'border2:#f6e7c8'])).status, 200);
   assert.equal((await save(['bstyle:baroque'])).status, 200);
+  assert.equal((await save(['btn:lace', 'btnc:#c9a46a', 'btns:3'])).status, 200);
+  assert.equal((await save(['btn:classic', 'btnc:#112233', 'btnw:6'])).status, 200);
+  assert.equal((await save(['btn:fringe'])).status, 200);
+  assert.equal((await save(['btn:sparkly'])).status, 400);
+  assert.equal((await save(['btn:lace', 'btns:4'])).status, 400);
+  assert.equal((await save(['btn:lace', 'btnc:url(x)'])).status, 400);
+  assert.equal((await save(['btn:lace', 'btn:hearts'])).status, 400);
   assert.equal((await save(['bg:red'])).status, 400);
   assert.equal((await save(['bwidth:9'])).status, 400);
   assert.equal((await save(['font:serif', 'font:mono'])).status, 400);

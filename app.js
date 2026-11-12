@@ -4067,6 +4067,7 @@
   }
   function pageItems(st) { return Object.keys(st).filter(function (k) { return st[k]; }).map(function (k) { return k + ':' + st[k]; }); }
   function applyPageStyle(el, st) {
+    if (window.FCBorders) window.FCBorders.apply(el, window.FCBorders.read(st));   // button borders (clears them when none is chosen)
     ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--grad', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
     ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-accent'].forEach(function (cl) { el.classList.remove(cl); });
     if (!st || !Object.keys(st).length) return;
@@ -4081,7 +4082,7 @@
     el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
-  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|border2:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none|lace|quilted|rope|crochet|floral|baroque)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
+  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
   function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
     var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
     return l.map(function (x) {
@@ -4100,9 +4101,9 @@
     // A small copy of the page that always stays in view, so every change can be seen without closing this window.
     var prev = h('div', { class: 'profile-page pd-preview', 'aria-hidden': 'true' },
       h('div', { class: 'pd-pv-head' }, avatarEl(S.profile, 'sm'), h('strong', { text: (S.profile && S.profile.displayName) || 'You' }), h('span', { class: 'small muted', text: 'Preview' })),
-      h('div', { class: 'gal-bar' }, h('div', { class: 'gal-tabs' }, ['Videos 3', 'Pictures 8', 'Posts 12'].map(function (t, i) { return h('button', { class: 'gal-tab', type: 'button', tabindex: '-1', 'aria-selected': i === 0 ? 'true' : 'false', text: t }); }))),
+      h('div', { class: 'gal-bar' }, h('div', { class: 'gal-tabs' }, ['Videos 3', 'Pictures 8', 'Posts 12'].map(function (t, i) { return h('button', { class: 'gal-tab bb-t', type: 'button', tabindex: '-1', 'aria-selected': i === 0 ? 'true' : 'false', text: t }); }))),
       h('div', { class: 'card' }, h('h2', { text: 'A card on my page' }), h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', tabindex: '-1', text: 'Like' }), h('button', { class: 'btn secondary', type: 'button', tabindex: '-1', text: 'Share' }))),
-      h('button', { class: 'btn secondary block', type: 'button', tabindex: '-1', text: 'Edit profile' }));
+      h('button', { class: 'btn secondary block bb-t', type: 'button', tabindex: '-1', text: 'Edit profile' }));
     function live() { applyPageStyle(page, st); applyPageStyle(prev, st); }
     function setKey(k, v) { if (v) st[k] = v; else delete st[k]; live(); paint(); }
     function swatches(key, list, label) {
@@ -4186,6 +4187,11 @@
       rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Middle' }), colorInput('fb', 'Rainbow middle color', '#ffb347')));
       rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Right' }), colorInput('fc', 'Rainbow right color', '#5ad1ff'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { delete st.fa; delete st.fb; delete st.fc; live(); paint(); } })));
       body.appendChild(rB);
+      // button borders: opens the gallery
+      var bbB = block('Button borders', 'A frame for Edit profile and the other wide buttons on your page.'), bbNow = window.FCBorders ? window.FCBorders.read(st) : null;
+      bbB.appendChild(h('div', { class: 'pd-line' }, h('span', null, 'Now: ', h('strong', { text: window.FCBorders ? window.FCBorders.nameOf(bbNow) : 'Default (no border)' })),
+        h('button', { class: 'btn secondary small', type: 'button', text: 'Choose a border', onclick: function () { openBorders(); } })));
+      body.appendChild(bbB);
       // font + corners
       var fB = block('Text and corners');
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Font' }), select('font', PAGE_FONTS, 'Font', 'sans')));
@@ -4194,6 +4200,18 @@
       body.scrollTop = keepTop;
     }
     if (prof.avatarFileId) avatarUrl(prof.avatarFileId).then(paletteFrom).then(function (c) { cols = c; if (!done) paint(); }).catch(function () { /* no suggestions */ });
+    function openBorders() {
+      if (!window.FCBorders) return;
+      var FB = window.FCBorders;
+      FB.picker({ saved: FB.read(st), label: 'Your Button',
+        onLive: function (cfg) { FB.write(st, cfg); live(); },
+        onSave: async function (cfg) {   // saves only the border choice; other unsaved changes in this window stay unsaved
+          var next = Object.assign({}, saved); FB.write(next, cfg);
+          await save(pageItems(next)); saved = next; FB.write(st, cfg); live();
+          toast('Button border saved.');
+        },
+        onClose: function () { paint(); } });
+    }
     async function save(items) {
       var list = visibleAbout(S.profile).concat(hiddenCats(S.profile, [PAGE_KEY]), items.length ? [{ key: PAGE_KEY, title: 'Page', items: items }] : []);
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
@@ -4253,7 +4271,7 @@
       if (!cur) cur = (tabs.filter(function (t) { return t.list.length; })[0] || tabs[0]).id;
       var bar = h('div', { class: 'gal-tabs', role: 'tablist', 'aria-label': 'Kinds of posts' });
       tabs.forEach(function (t) {
-        bar.appendChild(h('button', { class: 'gal-tab', type: 'button', role: 'tab', 'aria-selected': t.id === cur ? 'true' : 'false', text: t.label + ' ' + t.list.length, onclick: function () { cur = t.id; paint(); } }));
+        bar.appendChild(h('button', { class: 'gal-tab bb-t', type: 'button', role: 'tab', 'aria-selected': t.id === cur ? 'true' : 'false', text: t.label + ' ' + t.list.length, onclick: function () { cur = t.id; paint(); } }));
       });
       var sel = h('select', { class: 'gal-sort', 'aria-label': 'Sort posts' });
       Object.keys(SORTS).forEach(function (k) { sel.appendChild(h('option', { value: k, text: SORTS[k] })); });
@@ -4324,10 +4342,10 @@
       h('div', { class: 'profile-avatar' }, avatarEl(prof, 'lg')),
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
-    if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block', href: '#/profile/edit', text: 'Edit profile' }));
-    if (mine) main.appendChild(h('button', { class: 'btn secondary block', type: 'button', text: 'Customize my page', onclick: function () { pageDesigner(S.profile, main); } }));
-    if (mine) main.appendChild(h('a', { class: 'btn secondary block', href: '#/settings/privacy', text: 'My address (private)' }));
-    if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block', href: '#/orders', text: 'My orders', onclick: function () { S.ordersFrom = '#/profile'; } }));
+    if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/profile/edit', text: 'Edit profile' }));
+    if (mine) main.appendChild(h('button', { class: 'btn secondary block bb-t', type: 'button', text: 'Customize my page', onclick: function () { pageDesigner(S.profile, main); } }));
+    if (mine) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/settings/privacy', text: 'My address (private)' }));
+    if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/orders', text: 'My orders', onclick: function () { S.ordersFrom = '#/profile'; } }));
     if (!own && !preview) { var addrHolder = h('div'); main.appendChild(addrHolder); addressOnProfile(addrHolder, token, uid); }
     // Switching families (or starting another one) lives here, not in the top bar.
     if (mine) main.appendChild(h('section', { class: 'card profile-fam', 'aria-label': 'Family' }, h('h2', { text: 'Family' }), h('p', { class: 'muted small', text: 'You are in ' + famName() + '.' + (S.families.length > 1 || S.canCreateFamily ? ' Switch to another family, or start a new one:' : '') }), familySwitcher()));
