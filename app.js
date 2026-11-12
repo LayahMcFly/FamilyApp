@@ -4293,6 +4293,8 @@
       h('p', { class: 'muted small', text: 'The circle around your profile picture is set by the family tree (gold when you have a partner, a double ring for a grandparent, rainbow for everyone else). Or choose your own two or three colors and the circle keeps the same flowing gradient look.' }));
     var saved = ringColorsOf(S.profile), mode = saved.length >= 2 ? 'custom' : 'auto', picks = saved.length >= 2 ? saved.slice() : ['#ff5ea8', '#7c4dff'];
     var stage = h('div', { class: 'ring-stage' }), ringMsg = h('div'), controls = h('div', { class: 'ring-controls' });
+    var recoCols = [], recoSlot = 0;   // colours suggested from the profile picture
+    if (S.profile.avatarFileId) avatarUrl(S.profile.avatarFileId).then(paletteFrom).then(function (cols) { recoCols = cols.slice(0, 6); if (mode === 'custom' && recoCols.length) paintControls(); }).catch(function () { /* no suggestions */ });
     function paintRing() {
       clear(stage);
       var auto = S.ringRole && S.ringRole.get(S.user.$id), av = avatarEl(Object.assign({}, S.profile, { about: '[]' }), 'lg'), wrap = h('div', { class: 'ring ring-preview' }, av);
@@ -4317,6 +4319,20 @@
         row.appendChild(h('label', { class: 'ring-color' }, inp, h('span', { class: 'small', text: 'Color ' + (i + 1) })));
       });
       controls.appendChild(row);
+      if (recoCols.length) {
+        var reco = h('div', { class: 'ban-reco', role: 'group', 'aria-label': 'Colours from your picture' }, h('span', { class: 'small muted', text: 'From your picture:' }));
+        recoCols.forEach(function (col) {
+          var sw = h('button', { class: 'ban-sw', type: 'button', 'aria-label': 'Use ' + col + ' for color ' + (recoSlot % picks.length + 1), title: col });
+          sw.style.setProperty('background-color', col);
+          sw.addEventListener('click', function () { picks[recoSlot % picks.length] = col; recoSlot++; paintRing(); paintControls(); });
+          reco.appendChild(sw);
+        });
+        reco.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Use the top ' + Math.min(3, recoCols.length > 2 ? 3 : 2) + ' together', onclick: function () {
+          var n = recoCols.length > 2 ? 3 : 2; if (recoCols.length < 2) return toast('Your picture has only one main colour.');
+          picks = recoCols.slice(0, n); paintRing(); paintControls();
+        } }));
+        controls.appendChild(reco);
+      }
       var more = h('div', { class: 'row' });
       if (picks.length < 3) more.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Add a third color', onclick: function () { picks.push('#22b8ff'); paintRing(); paintControls(); } }));
       if (picks.length > 2) more.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Remove third color', onclick: function () { picks.pop(); paintRing(); paintControls(); } }));
