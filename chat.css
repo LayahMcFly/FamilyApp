@@ -588,3 +588,11 @@ img.zoomable { cursor: zoom-in; }
 
 .pl-loop { font-size: 1.15rem; line-height: 1; }
 .pl-loop[aria-pressed="true"] { background: rgba(255,255,255,.3); border-radius: 8px; }
+
+/* Video player: the ... menu holds the speed */
+.pl-more { font-size: 1.3rem; line-height: 1; }
+.pl-menu { pointer-events: auto; position: absolute; right: 8px; bottom: 54px; z-index: 6; min-width: 150px; padding: 6px; border-radius: 12px; background: rgba(20,20,24,.94); color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+.pl-menu[hidden] { display: none; }
+.pl-menu-h { padding: 4px 10px 6px; opacity: .75; }
+.pl-opt { display: block; width: 100%; text-align: left; padding: 10px 12px; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.pl-opt:hover, .pl-opt:focus-visible { background: rgba(255,255,255,.16); }

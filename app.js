@@ -713,10 +713,18 @@
     var seek = h('input', { class: 'pl-seek', type: 'range', min: 0, max: 1000, value: 0, step: 1, 'aria-label': 'Seek' });
     var time = h('span', { class: 'pl-time', text: '0:00 / 0:00' });
     var muteBtn = h('button', { class: 'pl-btn', type: 'button', onclick: function (ev) { ev.stopPropagation(); v.muted = !v.muted; S.muted = v.muted; paintMute(); } });
-    var speed = h('button', { class: 'pl-btn pl-speed', type: 'button', 'aria-label': 'Playback speed 1x', text: '1x', onclick: function (ev) {
-      ev.stopPropagation(); var list = [1, 1.5, 2, 0.5], i = (list.indexOf(v.playbackRate) + 1) % list.length; v.playbackRate = list[i];
-      speed.textContent = list[i] + 'x'; speed.setAttribute('aria-label', 'Playback speed ' + list[i] + 'x');
-    } });
+    // Speed lives in the "..." menu so the bar stays small.
+    var moreBtn = h('button', { class: 'pl-btn pl-more', type: 'button', 'aria-label': 'More options', 'aria-haspopup': 'true', 'aria-expanded': 'false', text: '\u22EF', onclick: function (ev) { ev.stopPropagation(); setMenu(menu.hidden); } });
+    var menu = h('div', { class: 'pl-menu', role: 'menu', 'aria-label': 'Video options', hidden: true });
+    function paintMenu() {
+      clear(menu); menu.appendChild(h('div', { class: 'pl-menu-h small', text: 'Playback speed' }));
+      [0.5, 1, 1.5, 2].forEach(function (r) {
+        menu.appendChild(h('button', { class: 'pl-opt', type: 'button', role: 'menuitemradio', 'aria-checked': v.playbackRate === r ? 'true' : 'false', text: (v.playbackRate === r ? '\u2713 ' : '') + (r === 1 ? 'Normal' : r + 'x'),
+          onclick: function (ev) { ev.stopPropagation(); v.playbackRate = r; setMenu(false); } }));
+      });
+    }
+    function setMenu(on) { if (on) paintMenu(); menu.hidden = !on; moreBtn.setAttribute('aria-expanded', on ? 'true' : 'false'); }
+    box.addEventListener('click', function (ev) { if (!menu.hidden && !menu.contains(ev.target) && ev.target !== moreBtn) setMenu(false); }, true);
     var loopBtn = h('button', { class: 'pl-btn pl-loop', type: 'button', text: '\u21BB', onclick: function (ev) {
       ev.stopPropagation(); v.loop = !v.loop; try { localStorage.setItem('fc_loop', v.loop ? 'on' : 'off'); } catch (e) { /* not saved */ } paintLoop();
     } });
@@ -728,8 +736,8 @@
       if (box.requestFullscreen) box.requestFullscreen().catch(function () {});
       else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();      // iPhone plays full screen in its own player
     } }, icon('fullscreen'));
-    var bar = h('div', { class: 'pl-bar' }, playBtn, seek, time, loopBtn, speed, muteBtn, fsBtn);
-    var ui = h('div', { class: 'pl-ui' }, big, bar);
+    var bar = h('div', { class: 'pl-bar' }, playBtn, seek, time, loopBtn, muteBtn, fsBtn, moreBtn);
+    var ui = h('div', { class: 'pl-ui' }, big, bar, menu);
     box.appendChild(ui);
     var hideT = null, dragging = false;
     function toggle() { if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); } else v.pause(); wake(); }
