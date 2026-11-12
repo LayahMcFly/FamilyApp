@@ -427,6 +427,36 @@
     document.body.appendChild(dlg); sheets.push(dlg); dlg.showModal();
     return { close: close, el: dlg, body: inner };
   }
+
+  /* ---------- share something into a direct chat (used by the post Share button) ---------- */
+  function shareToDm(link, label) {
+    if (!enabled()) { toast('Chat is not available right now.'); return; }
+    var body = h('div'), list = h('div', { class: 'cs-list' }), msg = h('div'), sending = false;
+    var note = h('input', { type: 'text', maxlength: 300, autocomplete: 'off', placeholder: 'Add a message (optional)', 'aria-label': 'Message to send with the ' + (label || 'link') });
+    var q = h('input', { type: 'search', 'aria-label': 'Search family members', placeholder: 'Search members', autocomplete: 'off' });
+    var s = null;
+    function draw() {
+      clear(list); var t = q.value.trim().toLowerCase();
+      Array.from(X.S.profiles.values()).sort(function (a, b) { return String(a.displayName).localeCompare(String(b.displayName)); })
+        .filter(function (p) { return p.userId && p.userId !== me() && (!t || String(p.displayName).toLowerCase().indexOf(t) >= 0); })
+        .forEach(function (p) {
+          list.appendChild(h('button', { class: 'cs-row', type: 'button', onclick: async function () {
+            if (sending) return; sending = true;
+            try {
+              var r = await api('chatDmStart', { userId: p.userId });
+              var text = (note.value.trim() ? note.value.trim() + '\n' : '') + link;
+              await api('chatSend', { kind: 'dm', convId: r.dm.id, body: text, clientId: newClientId() });
+              s.close(); toast('Sent to ' + p.displayName + '.');
+            } catch (e) { sending = false; X.showAlert(msg, 'error', msgOf(e)); }
+          } }, avatar(p.userId, 'sm'), h('span', { class: 'grow', text: p.displayName })));
+        });
+      if (!list.firstChild) list.appendChild(h('p', { class: 'muted small', text: 'No one else in this family matches.' }));
+    }
+    q.addEventListener('input', draw);
+    body.appendChild(h('p', { class: 'small muted', text: 'Pick someone to send this to in a direct chat. Only they and you can read it.' }));
+    body.appendChild(note); body.appendChild(q); body.appendChild(msg); body.appendChild(list); draw();
+    s = sheet('Send in a direct chat', body);
+  }
   /* ---------- profile sheet (tap a person's picture or name) ---------- */
   function profileSheet(c, uid) {
     var p = profileOf(uid), me = uid === X.S.user.$id, s = null;
@@ -1703,5 +1733,5 @@
     var first = splitLinks(String(text || '')).filter(function (p) { return p.u; })[0];
     return first ? previewCard(first.u) : null;
   }
-  window.FCChat = { linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
+  window.FCChat = { shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
 })();

@@ -2284,11 +2284,12 @@
     dlg.appendChild(h('p', { class: 'hint', text: 'This link holds no photo, video or text. It opens only for people who are signed in and are members of ' + famName() + '. Anyone else sees “That post is not available.”' }));
     dlg.appendChild(field); dlg.appendChild(msg);
     dlg.appendChild(h('div', { class: 'stack' },
-      h('button', { class: 'btn block', type: 'button', text: 'Copy link', onclick: async function () {
+      (window.FCChat && window.FCChat.shareToDm && CFG.chatEnabled !== false) ? h('button', { class: 'btn block', type: 'button', text: 'Send in a direct chat', onclick: function () { close(); window.FCChat.shareToDm(link, 'post'); } }) : null,
+      h('button', { class: 'btn secondary block', type: 'button', text: 'Copy link', onclick: async function () {
         try { await navigator.clipboard.writeText(link); showAlert(msg, 'ok', 'Link copied.'); }
         catch (e) { field.focus(); field.select(); showAlert(msg, 'ok', 'Select the link above and copy it.'); }
       } }),
-      canShare ? h('button', { class: 'btn secondary block', type: 'button', text: 'Send with…', onclick: function () {
+      canShare ? h('button', { class: 'btn secondary block', type: 'button', text: 'Send with another app…', onclick: function () {
         navigator.share({ title: famName(), text: 'A post from ' + famName() + ' (family members only)', url: link }).catch(function () {});
       } }) : null,
       h('button', { class: 'btn ghost block', type: 'button', text: 'Close', onclick: close })));
