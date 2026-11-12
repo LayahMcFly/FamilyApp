@@ -1158,6 +1158,37 @@
   }
   function onlineDot(c, uid) { return isHere(c, uid) ? h('span', { class: 'online-dot', title: 'Online now', 'aria-label': 'online now' }) : null; }
 
+
+  /* ---------- who is online, shown on the circles at the top of Home (works without opening chat) ---------- */
+  var GP = { here: {}, t: null, beatAt: 0 };
+  function onlineNow(uid) {
+    if (uid === me()) return presenceOn();
+    var u = GP.here[uid] || (C && C.here && C.here[uid]) || 0; return u > Date.now();
+  }
+  function paintStoryDots(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('[data-online-uid]'), function (el) {
+      var uid = el.getAttribute('data-online-uid'), has = el.querySelector('.online-dot'), on = onlineNow(uid);
+      if (on && !has) el.appendChild(h('span', { class: 'online-dot', title: 'Online now', 'aria-label': 'online now' })); else if (!on && has) has.remove();
+    });
+  }
+  function presenceWatch(root) {
+    if (!X || !enabled() || !famId() || !root) return;
+    if (GP.t) { clearInterval(GP.t); GP.t = null; }
+    async function tick() {
+      if (!root.isConnected) { clearInterval(GP.t); GP.t = null; return; }
+      if (document.hidden) return;
+      if (presenceOn() && Date.now() - GP.beatAt > 30000) { GP.beatAt = Date.now(); api('chatPresence', {}).catch(function () { /* the next check tries again */ }); }
+      try {
+        var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.equal('convId', ['presence']), X.Query.limit(100)] });
+        var here = {};
+        (r.rows || r.documents || []).forEach(function (row) { if (row.familyId === famId() && row.userId !== me()) { var u = Date.parse(row.until || ''); if (u > Date.now()) here[row.userId] = u; } });
+        GP.here = here;
+      } catch (e) { /* the dots keep their last state until the next check */ }
+      if (root.isConnected) paintStoryDots(root);
+    }
+    paintStoryDots(root); tick(); GP.t = setInterval(tick, 20000);
+  }
+
   /* ---------- "is typing" (what others see while you type; wording is yours to choose) ---------- */
   var TYPING_DEFAULT = 'is typing';
   function typingOn() { return lsGet('fc_chat_typing', true) !== false; }
@@ -1734,5 +1765,5 @@
     var first = splitLinks(String(text || '')).filter(function (p) { return p.u; })[0];
     return first ? previewCard(first.u) : null;
   }
-  window.FCChat = { shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
+  window.FCChat = { presenceWatch: presenceWatch, shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
 })();

@@ -2020,9 +2020,10 @@
     if (people.length) {
       main.appendChild(h('div', { class: 'stories', role: 'list', 'aria-label': 'Family members' }, people.map(function (p) {
         var first = String(p.displayName || '').split(' ')[0];
-        return h('a', { class: 'story', role: 'listitem', href: '#/profile/' + p.userId, 'aria-label': 'Open ' + (p.userId === S.user.$id ? 'your' : first + '\u2019s') + ' profile' }, h('div', { class: 'ring' }, avatarEl(p, 'lg')), h('span', { text: p.userId === S.user.$id ? 'You' : first }));
+        return h('a', { class: 'story', role: 'listitem', href: '#/profile/' + p.userId, 'aria-label': 'Open ' + (p.userId === S.user.$id ? 'your' : first + '\u2019s') + ' profile' }, h('div', { class: 'ring', 'data-online-uid': p.userId }, avatarEl(p, 'lg')), h('span', { text: p.userId === S.user.$id ? 'You' : first }));
       })));
     }
+    if (window.FCChat && window.FCChat.presenceWatch) window.FCChat.presenceWatch(main.querySelector('.stories'));   // green dots on whoever is online now
     append(main, trendingStrip(trend));
     return pagedFeed(token, main, function (c) { return fetchPostsPage(null, c); }, {
       textRows: true,

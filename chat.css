@@ -635,3 +635,7 @@ img.zoomable { cursor: zoom-in; }
 .lib-ring { display: block; position: relative; width: 56px; height: 56px; border-radius: 50%; }
 .lib-hole { position: absolute; inset: 7px; border-radius: 50%; background: var(--surface, #fff); }
 .lib-del { position: absolute; top: -4px; right: -6px; width: 24px; height: 24px; min-height: 24px; padding: 0; border-radius: 50%; border: 1px solid var(--border, #ccc); background: var(--surface, #fff); color: var(--text); font-size: .7rem; cursor: pointer; }
+
+/* Online dots on the circles at the top of Home */
+.story .ring { position: relative; }
+.story .online-dot { display: block; margin: 0; right: 4px; bottom: 4px; width: 16px; height: 16px; border-color: var(--bg, #fff); }
