@@ -464,11 +464,11 @@
     if (!me && X.relationFor) X.relationFor(uid).then(function (t) { if (t) rel.textContent = t; });   // for example: Your older sister
     var ban = X.bannerFor ? X.bannerFor(uid) : null, topWrap = body;
     if (ban) { topWrap = h('div', { class: 'profile-hero has-banner in-sheet' }, ban); body.appendChild(topWrap); }   // the banner sits behind the picture and name
-    topWrap.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, h('div', { class: 'small muted', text: isHere(c, uid) ? 'Online now' : 'Offline' }))));
+    topWrap.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, h('div', { class: 'small muted', text: onlineNow(uid) ? 'Online now' : 'Offline' }))));
     var acts = h('div', { class: 'pf-actions' });
     if (!me) {
-      acts.appendChild(h('button', { class: 'btn', type: 'button', text: 'Message', onclick: function () { s.close(); startDm(c, uid); } }));
-      if (callsAvailable()) acts.appendChild(h('button', { class: 'btn secondary', type: 'button', text: 'Call', onclick: async function () {
+      acts.appendChild(h('button', { class: 'btn', type: 'button', text: 'Message', onclick: function () { s.close(); startDm(c, uid).catch(function (e) { toast(msgOf(e)); }); } }));
+      if (callsAvailable() && !c.standalone) acts.appendChild(h('button', { class: 'btn secondary', type: 'button', text: 'Call', onclick: async function () {
         s.close(); await startDm(c, uid);
         var tries = 0, t = setInterval(function () { tries++; var cv = c.cur; if (cv && cv.kind === 'dm' && dmById(c, cv.id) && dmById(c, cv.id).otherId === uid) { clearInterval(t); startCall(c, cv, false); } else if (tries > 20) clearInterval(t); }, 250);
       } }));
@@ -1536,6 +1536,7 @@
   async function startDm(c, uid, s) {
     var r = await api('chatDmStart', { userId: uid });
     if (s) s.close();
+    if (c.standalone) { location.hash = '#/dms/' + r.dm.id; return; }   // opened from a Short, chat itself is not open yet
     if (C !== c) return;
     if (!dmById(c, r.dm.id)) c.dms.unshift(r.dm);
     location.hash = '#/dms/' + r.dm.id;
@@ -1765,5 +1766,5 @@
     var first = splitLinks(String(text || '')).filter(function (p) { return p.u; })[0];
     return first ? previewCard(first.u) : null;
   }
-  window.FCChat = { presenceWatch: presenceWatch, shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
+  window.FCChat = { profileFor: function (uid) { profileSheet(C || { uid: me(), here: GP.here, dms: [], calls: {}, blocked: [], standalone: true }, uid); }, presenceWatch: presenceWatch, shareToDm: shareToDm, linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
 })();

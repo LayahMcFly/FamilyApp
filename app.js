@@ -2351,6 +2351,12 @@
         h('div', { class: 'small muted' }, post.kind === 'repost' ? 'Reposted ' : null, h('time', { datetime: post.$createdAt, title: new Date(post.$createdAt).toLocaleString(), text: timeAgo(post.$createdAt) }), editedEl)),
       S.trend && S.trend.ids.has(post.$id) ? h('span', { class: 'badge hot' }, icon('flame'), ' Trending') : null,
       kindLabel ? h('span', { class: 'badge', text: kindLabel }) : null);
+    if (isReel && window.FCChat && FCChat.profileFor) {   // on a Short, tapping the name or picture slides up their profile (like in chat) instead of leaving the video
+      [headEl.querySelector('.avatar'), headEl.querySelector('.member-link')].forEach(function (el) {
+        if (!el) return; el.classList.add('pf-open'); el.style.setProperty('cursor', 'pointer');
+        el.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); FCChat.profileFor(post.authorId); });
+      });
+    }
     if (wrap) wrap.appendChild(headEl); else (isReel ? info : card).appendChild(headEl);
 
     // text (can be swapped for an editor)

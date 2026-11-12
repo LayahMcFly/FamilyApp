@@ -735,3 +735,10 @@ img.zoomable { cursor: zoom-in; }
 .ban-reco .ban-sw { flex: 0 1 40px; min-width: 18px; height: auto; aspect-ratio: 1; }
 .pd-reco .pd-sw { flex-wrap: nowrap; }
 .pd-reco .ban-sw { flex: 0 1 40px; min-width: 18px; height: auto; aspect-ratio: 1; }
+/* Chat sheets (profile, share, options) slide up from the bottom and the background fades in, like the comments sheet. */
+dialog.cs[open] { animation: csUp .3s cubic-bezier(.2, .85, .25, 1) backwards; }
+dialog.cs[open]::backdrop { animation: csFade .3s ease backwards; }
+@keyframes csUp { from { transform: translateY(100%); opacity: .6; } to { transform: none; opacity: 1; } }
+@keyframes csFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { dialog.cs[open], dialog.cs[open]::backdrop { animation: none; } }
+.reel-info .pf-open { pointer-events: auto; }
