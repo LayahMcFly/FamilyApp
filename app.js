@@ -66,6 +66,8 @@
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var ICONS = {
+    globe: ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0', 'M3 12h18', 'M12 3c3 3 3 15 0 18', 'M12 3c-3 3-3 15 0 18'],
+    search: ['M11 4a7 7 0 1 0 0 14a7 7 0 0 0 0-14z', 'M20 20l-4-4'],
     home: ['M3 11.5 12 4l9 7.5', 'M5.5 10v10h13V10'],
     plus: ['M12 5v14', 'M5 12h14'],
     shorts: ['M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M10.5 9.5v5l4-2.5z'],
@@ -4487,7 +4489,7 @@
     if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
       avatarBox,
-      h('button', { class: 'btn secondary block', type: 'button', text: 'Browse ideas for a profile picture and banner', onclick: browseIdeas }),
+      h('button', { class: 'bi-open', type: 'button', 'aria-label': 'Browse ideas for a profile picture and banner', title: 'Browse ideas on Pinterest', onclick: browseIdeas }, icon('globe')),
       h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), file, h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
       h('div', { class: 'stack' }, removeAv),
       h('div', { class: 'ban-section' }, h('label', { for: 'newBanner', text: 'Banner' }), banBox,

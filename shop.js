@@ -80,11 +80,17 @@
   }
   function norm(s) { return String(s || '').toLowerCase(); }
   function priceText(it) { return (it.hasRange ? 'From ' : '') + money(it.fromCents); }
+  function priceBits(it) {
+    var c = Number(it.fromCents || 0), d = Math.floor(c / 100), ct = String(c % 100).padStart(2, '0');
+    return h('span', { class: 'tt-price' }, it.hasRange ? h('em', { text: 'From ' }) : null, h('small', { text: '$' }), h('b', { text: d.toLocaleString('en-US') }), h('small', { text: '.' + ct }));
+  }
   function itemCard(it) {
     var img = it.image ? h('img', { class: 'shop-thumb', src: it.image, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : h('div', { class: 'shop-thumb ph', 'aria-hidden': 'true' });
-    var tag = it.tag ? h('span', { class: 'shop-tag', text: it.tag }) : null;
-    var avail = it.availability === 'out_of_stock' ? h('span', { class: 'small danger-text', text: 'Out of stock' }) : (it.availability === 'in_stock' ? h('span', { class: 'small ok-text', text: 'In stock' }) : null);
-    return h('a', { class: 'shop-card', href: it.href }, img, h('strong', { class: 'shop-title', text: it.title }), h('span', { class: 'shop-price', text: priceText(it) }), tag, avail);
+    var tag = it.tag ? h('span', { class: 'tt-badge', text: it.tag }) : null;
+    var avail = it.availability === 'out_of_stock' ? h('span', { class: 'tt-out', text: 'Out of stock' }) : null;
+    var title = h('strong', { class: 'shop-title' }, tag, tag ? ' ' : null, it.title);
+    return h('a', { class: 'shop-card tt-card', href: it.href }, img, title, avail,
+      h('span', { class: 'tt-foot' }, priceBits(it), h('span', { class: 'tt-add', 'aria-hidden': 'true' }, icon('cart'))));
   }
   /* Both sections feed the same list shape, so search, sort, filters and pages behave the same in each. */
   function photoItems(cat) {
@@ -187,12 +193,16 @@
     clear(main);
     var secs = (cat.sections && cat.sections.length) ? cat.sections : DEFAULT_SECTIONS;
     var familyOpen = secs.some(function (s) { return s.id === 'family-shop' && s.ready; });
-    main.appendChild(h('h1', { text: 'Shop' }));
-    main.appendChild(shopLinks());
+    main.appendChild(h('h1', { class: 'sr-only', text: 'Shop' }));
     if (cat.config.testMode) main.appendChild(X.alertBox('warn', 'Test mode: payments here are practice payments and no real order is made.'));
 
     var search = h('input', { type: 'search', class: 'shop-search', 'aria-label': 'Search this section', enterkeyhint: 'search', autocomplete: 'off' });
-    main.appendChild(h('form', { class: 'shop-search-row', role: 'search', onsubmit: function (ev) { ev.preventDefault(); search.blur(); } }, search));
+    var ttHead = h('div', { class: 'tt-head' });
+    ttHead.appendChild(h('div', { class: 'tt-bar' },
+      h('form', { class: 'shop-search-row tt-search', role: 'search', onsubmit: function (ev) { ev.preventDefault(); search.blur(); } }, icon('search'), search),
+      h('a', { class: 'tt-ic', href: '#/orders', 'aria-label': 'My orders', title: 'My orders', onclick: function () { X.S.ordersFrom = ''; } }, icon('bag')),
+      h('a', { class: 'tt-ic', href: '#/shop/cart', 'aria-label': 'Cart', title: 'Cart', onclick: function (ev) { if (st().section === 'family-shop') { ev.preventDefault(); location.hash = '#/shop/cart/family'; } } }, icon('cart'))));
+    main.appendChild(ttHead);
     var panelHost = h('div', { role: 'tabpanel', id: 'shop-panel', 'aria-live': 'polite' });
     var tabBtns = [];
     var photoItemsAll = photoItems(cat), famState = { fam: null, error: '', loading: false };
@@ -209,14 +219,14 @@
     }
     var tabbar = h('div', { class: 'shop-tabs', role: 'tablist', 'aria-label': 'Shop sections' }, secs.map(function (sec) {
       var b = h('button', { class: 'shop-tab', type: 'button', role: 'tab', id: 'shop-tab-' + sec.id, 'data-section': sec.id, 'aria-controls': 'shop-panel', onclick: function () { pickSection(sec.id); } },
-        h('strong', { text: sec.title }), sec.ready === false ? h('span', { class: 'soon-badge small', text: 'Coming soon' }) : null, h('span', { class: 'small muted', text: sec.blurb }));
+        h('strong', { text: sec.title }), sec.ready === false ? h('span', { class: 'soon-badge small', text: 'Soon' }) : null);
       b.addEventListener('keydown', function (ev) {
         if (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return;
         ev.preventDefault(); var i = tabBtns.indexOf(b); pickSection(tabBtns[(i + (ev.key === 'ArrowRight' ? 1 : tabBtns.length - 1)) % tabBtns.length].getAttribute('data-section'), true);
       });
       tabBtns.push(b); return b;
     }));
-    main.appendChild(tabbar); main.appendChild(panelHost);
+    ttHead.appendChild(tabbar); main.appendChild(panelHost);
     var typing = null;
     search.addEventListener('input', function () { clearTimeout(typing); typing = setTimeout(function () { var f = filtersFor(st().section); f.q = search.value; f.page = 1; drawPanel(); }, 180); });
 
@@ -247,23 +257,23 @@
       var f = filtersFor(id);
       if (f.cat !== 'all' && !cats.some(function (c) { return c.id === f.cat; })) f.cat = 'all';
       var sec = secs.filter(function (s) { return s.id === id; })[0] || {};
-      panelHost.appendChild(h('p', { class: 'muted', text: id === 'photo-gifts' ? 'Turn your memories into personalized gifts. You choose the photo and the crop, and you see a layout preview before you pay.' : 'Shop useful finds for family life and gatherings. Delivery cost is worked out from your address before you pay.' }));
       if (!items.length) {
         panelHost.appendChild(h('div', { class: 'empty' }, h('p', { text: id === 'photo-gifts' ? 'No products are switched on yet.' : 'The Family Shop has no products yet.' }),
           cat.isAdmin ? h('a', { class: 'btn secondary', href: id === 'photo-gifts' ? '#/shop/admin' : '#/shop/admin/cj', text: 'Manage products' }) : h('p', { class: 'small muted', text: 'Check back soon.' })));
         if (cat.isAdmin) panelHost.appendChild(adminLink());
         return;
       }
-      // Departments: only categories that really hold products, with real counts.
-      if (cats.length > 1 && !isFiltered(f)) {
-        panelHost.appendChild(h('h2', { class: 'shop-section', text: 'Shop by department' }));
-        panelHost.appendChild(h('div', { class: 'dept-grid' }, cats.map(function (c) {
-          return h('button', { class: 'dept-card', type: 'button', onclick: function () { f.cat = c.id; f.page = 1; drawPanel(); var r = document.getElementById('shop-results'); if (r) r.scrollIntoView({ block: 'start' }); } }, h('strong', { text: c.title }), h('span', { class: 'small muted', text: c.count + (c.count === 1 ? ' item' : ' items') }));
-        })));
+      // Departments as a row of tabs (All first), like the TikTok Shop top menu.
+      if (cats.length > 1) {
+        var catRow = h('div', { class: 'tt-cats', role: 'group', 'aria-label': 'Departments' });
+        [{ id: 'all', title: 'All' }].concat(cats).forEach(function (c) {
+          catRow.appendChild(h('button', { class: 'tt-cat', type: 'button', 'aria-pressed': f.cat === c.id ? 'true' : 'false', text: c.title, onclick: function () { f.cat = c.id; f.page = 1; drawPanel(); } }));
+        });
+        panelHost.appendChild(catRow);
       }
       var feat = items.filter(function (it) { return it.featured; }).slice(0, 8);
       if (feat.length && !isFiltered(f)) {
-        panelHost.appendChild(h('h2', { class: 'shop-section', text: 'Picked by the shop owner' }));
+        panelHost.appendChild(h('h2', { class: 'shop-section', text: 'Picks for you' }));
         panelHost.appendChild(h('div', { class: 'feat-row' }, feat.map(itemCard)));
       }
       var anyStock = items.some(function (it) { return it.availability === 'in_stock' || it.availability === 'out_of_stock'; });
@@ -295,7 +305,7 @@
           h('button', { class: 'btn secondary small', type: 'button', text: 'Next', disabled: f.page >= pages, onclick: function () { f.page++; drawPanel(); results.scrollIntoView({ block: 'start' }); } })));
       }
       panelHost.appendChild(results);
-      panelHost.appendChild(h('div', { class: 'card inner' }, h('h2', { text: 'How it works' }), h('ol', { class: 'steps' }, id === 'photo-gifts' ? [
+      panelHost.appendChild(h('details', { class: 'card inner tt-how' }, h('summary', { text: 'How it works' }), h('ol', { class: 'steps' }, id === 'photo-gifts' ? [
         h('li', { text: 'Pick a product and a photo. Only photos whose owner allowed gifts can be used.' }), h('li', { text: 'Crop and place the photo. You see what will be cut off.' }),
         h('li', { text: 'Check the total, with shipping, before paying on Square’s secure page.' }), h('li', { text: 'After payment is confirmed, the photo is sent to Printify to be made and shipped. You can follow it in My orders.' })
       ] : [

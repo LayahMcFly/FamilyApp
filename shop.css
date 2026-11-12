@@ -164,3 +164,45 @@
 .filter-opt input { width: 20px; height: 20px; flex: none; }
 .price-range { gap: 8px; align-items: center; margin-top: 6px; }
 .price-range input { width: 88px; }
+
+/* ===== Shop look: orange top bar, tab rows, two-column product cards (same layout idea as TikTok Shop, own colours and words) ===== */
+.tt-head { --tt-a: #ffa24a; --tt-b: #ff8a1f; background: linear-gradient(135deg, var(--tt-a), var(--tt-b)); border-radius: 20px; padding: 10px 10px 0; margin-top: 8px; color: #1b1b1b; }
+.tt-bar { display: flex; align-items: center; gap: 6px; }
+.tt-search { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; margin: 0 !important; padding: 0 14px; height: 44px; border-radius: 999px; background: #fff; color: #1b1b1b; }
+.tt-search svg { width: 20px; height: 20px; flex: none; }
+.tt-search .shop-search { flex: 1; min-width: 0; min-height: 0; height: 100%; padding: 0; border: 0 !important; background: none !important; box-shadow: none !important; color: #1b1b1b; font-size: 1rem; }
+.tt-search .shop-search::placeholder { color: #777; }
+.tt-ic { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: #1b1b1b; flex: none; }
+.tt-ic svg { width: 24px; height: 24px; }
+.tt-head .shop-tabs { display: flex !important; gap: 4px; margin: 6px 0 0; padding: 0 !important; background: none !important; border-radius: 0 !important; overflow-x: auto; scrollbar-width: none; }
+.tt-head .shop-tabs::-webkit-scrollbar { display: none; }
+.tt-head .shop-tab { flex: none; flex-direction: row; align-items: center; gap: 6px; padding: 10px 14px 9px !important; background: none !important; border: 0 !important; border-bottom: 3px solid transparent !important; border-radius: 0 !important; box-shadow: none !important; color: #5a3200; }
+.tt-head .shop-tab strong { font-size: 1.05rem; }
+.tt-head .shop-tab.on { color: #1b1b1b; border-bottom-color: #1b1b1b !important; }
+.tt-head .soon-badge { background: #fff8; border: 0; color: #5a3200; padding: 1px 8px; }
+
+.tt-cats { display: flex; gap: 8px; overflow-x: auto; padding: 12px 2px 4px; scrollbar-width: none; }
+.tt-cats::-webkit-scrollbar { display: none; }
+.tt-cat { flex: none; min-height: 36px; padding: 6px 14px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--text); font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer; }
+.tt-cat[aria-pressed="true"] { background: #1b1b1b; color: #fff; }
+.shop-section { margin: 14px 0 4px; font-size: 1.05rem; }
+
+.shop-grid, .skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+.shop-card.tt-card { padding: 0; gap: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; min-height: 0; }
+.tt-card .shop-thumb { aspect-ratio: 1; object-fit: cover; border-radius: 14px; background: var(--surface-2); }
+.tt-card .shop-title { font-size: .95rem; font-weight: 500; padding: 0 2px; }
+.tt-badge { display: inline-block; padding: 1px 7px; border-radius: 4px; background: #ff2d55; color: #fff; font-size: .72rem; font-weight: 800; letter-spacing: .01em; text-transform: uppercase; vertical-align: 1px; }
+.tt-out { padding: 0 2px; color: var(--danger); font-size: .8rem; }
+.tt-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; }
+.tt-price { color: var(--text); white-space: nowrap; }
+.tt-price b { font-size: 1.35rem; font-weight: 800; }
+.tt-price small { font-size: .85rem; font-weight: 600; }
+.tt-price em { font-style: normal; font-size: .8rem; color: var(--muted); margin-right: 2px; }
+.tt-add { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); color: var(--text); flex: none; }
+.tt-add svg { width: 19px; height: 19px; }
+.feat-row .shop-card.tt-card { flex: 0 0 150px; }
+.tt-how { padding: 12px 16px; }
+.tt-how summary { cursor: pointer; font-weight: 700; }
+.shop-toolbar { margin: 10px 0 2px; }
+.shop-toolbar .btn.small { min-height: 34px; padding: 4px 14px; }
+.shop-count { display: none; }

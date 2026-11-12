@@ -719,3 +719,7 @@ img.zoomable { cursor: zoom-in; }
 /* A chosen accent colour also tints the grey buttons on the page (Edit profile, Customize my page...). */
 .profile-page.pg-accent .btn.secondary { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--text); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 .body-open { position: relative; touch-action: manipulation; }
+/* Small round globe button that opens the Pinterest ideas helper (next to the profile picture). */
+.bi-open { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1.5px solid var(--border); border-radius: 50%; background: var(--surface-2); color: var(--text); cursor: pointer; justify-self: start; }
+.bi-open svg { width: 22px; height: 22px; }
+.bi-open:hover, .bi-open:focus-visible { border-color: var(--accent); color: var(--accent); }
