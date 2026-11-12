@@ -323,7 +323,7 @@
      It never turns anything on by itself. Products gone from Printify or CJ are removed, as with the manual buttons. */
   var autoRunning = false, AUTO_KEY = 'fc_shop_autosync', AUTO_EVERY = 10 * 60 * 1000, lastAuto = '';
   function autoStatus(token, text, withButton) {
-    var host = document.querySelector('.shop-search-row'); if (!host || !host.parentNode) return;
+    var host = document.querySelector('.tt-head') || document.querySelector('.shop-search-row'); if (!host || !host.parentNode) return;   // under the top bar, never inside it
     var old = document.getElementById('auto-sync-note'); if (old) old.parentNode.removeChild(old);
     var note = h('p', { id: 'auto-sync-note', class: 'small muted', role: 'status' }, text + ' ');
     if (withButton) note.appendChild(h('button', { class: 'link-btn', type: 'button', text: 'Update now', onclick: function () { autoSync(token, true); } }));

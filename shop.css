@@ -206,3 +206,4 @@
 .shop-toolbar { margin: 10px 0 2px; }
 .shop-toolbar .btn.small { min-height: 34px; padding: 4px 14px; }
 .shop-count { display: none; }
+#auto-sync-note { margin: 8px 4px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
