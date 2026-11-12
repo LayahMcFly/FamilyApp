@@ -59,6 +59,14 @@
     raised: { first: ['adoptive', 'guardian', 'foster', 'step'], rest: ['birth'] }
   };
 
+  /* ---------- sibling order: youngest on the left, oldest on the right; no birthday goes last ---------- */
+  function bornKey(b) { b = String(b || ''); if (/^\d{4}$/.test(b)) return b + '-07-01'; return /^\d{4}-\d{2}-\d{2}/.test(b) ? b.slice(0, 10) : ''; }
+  function youngerFirst(a, b) {
+    var x = bornKey(a && a.data && a.data.birthday), y = bornKey(b && b.data && b.data.birthday);
+    if (x === y) return 0; if (!x) return 1; if (!y) return -1;
+    return x < y ? 1 : -1;
+  }
+
   /* ---------- people -> library data ---------- */
   // Returns { data, byId, hiddenParents, hiddenKids } . `people` are Appwrite rows (use $id).
   function toChartData(people, lens) {
@@ -203,7 +211,8 @@
         .setCardXSpacing(190).setCardYSpacing(110)
         .setOrientationVertical()
         .setSingleParentEmptyCard(false)
-        .setShowSiblingsOfMain(true);
+        .setShowSiblingsOfMain(true)
+        .setSortChildrenFunction(youngerFirst);
       card = chart.setCardHtml()
         .setStyle('default')
         .setMiniTree(false)
