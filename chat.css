@@ -682,10 +682,6 @@ img.zoomable { cursor: zoom-in; }
 .profile-page.pg-bg { background: var(--pg-bg); padding: 12px; }
 .pg-bg .profile-head, .pg-bg .profile-top, .pg-bg .preview-bar { background: var(--surface); border-radius: var(--pg-radius, 16px); padding: 12px; margin-bottom: 10px; }
 .pg-bg .profile-hero .profile-head { background: none; padding: 0; }
-.pg-border .card, .pg-border .gal-tab, .pg-border .gal-sort { border: var(--pg-bwidth, 2px) var(--pg-bstyle, solid) var(--pg-border, #7c5cff); }
-.pg-border .gal-tab { border-radius: var(--pg-radius, 16px); margin: 0 0 8px; }
-.pg-border .gal-bar { border-bottom: 0; }
-.pg-rainbow .card, .pg-rainbow .gal-tab, .pg-rainbow .gal-sort { border: var(--pg-bwidth, 2px) solid transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, conic-gradient(from var(--ang, 0deg), var(--rb)) border-box; }
 .pg-accent .gal-tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 .designer { max-width: 520px; }
 .designer .pd-body { max-height: 52vh; overflow-y: auto; display: grid; gap: 12px; padding: 2px; }
@@ -775,8 +771,3 @@ dialog.cs[open]::backdrop { animation: csFade .3s ease backwards; }
 
 
 
-/* Ornate edges: the band is a picture (see ornSvg in app.js). Only the wide buttons (Edit profile...), cards and the Videos / Pictures / Posts buttons get it, never the small Like / Share buttons. */
-.pgo2 :is(.card, .gal-tab, .gal-sort, .btn.block) { border: var(--ow, 14px) solid transparent !important; border-image: var(--pg-bimg) 30 / var(--ow, 14px) round !important; background-clip: padding-box !important; border-radius: 0 !important; box-shadow: none !important; }
-.pgo2 .gal-tab { margin: 0 0 8px; padding: 6px 12px; }
-.pgo2 .btn.block { margin-top: 6px; margin-bottom: 6px; }
-.pd-mini.pgo2 .card { border-width: 8px !important; border-image: var(--pg-bimg) 30 / 8px round !important; }
