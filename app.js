@@ -4035,7 +4035,7 @@
   }
   function pageItems(st) { return Object.keys(st).filter(function (k) { return st[k]; }).map(function (k) { return k + ':' + st[k]; }); }
   function applyPageStyle(el, st) {
-    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-font', '--pg-radius', '--accent', '--on-accent'].forEach(function (v) { el.style.removeProperty(v); });
+    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
     ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-border', 'pg-accent'].forEach(function (cl) { el.classList.remove(cl); });
     if (!st || !Object.keys(st).length) return;
     el.classList.add('pg-custom');
@@ -4050,9 +4050,11 @@
       el.classList.add('pg-accent'); el.style.setProperty('--accent', st.accent);
       var rgb = rgbOf(st.accent), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0; el.style.setProperty('--on-accent', lum > 170 ? '#1b1230' : '#fff');
     }
+    ['fa', 'fb', 'fc'].forEach(function (k, i) { if (/^#[0-9a-f]{6}$/i.test(st[k] || '')) el.style.setProperty(['--fun-a', '--fun-b', '--fun-c'][i], st[k]); });   // the rainbow ribbon, button glow and corner tints
     if (st.font && PAGE_FONTS[st.font]) el.style.setProperty('--pg-font', PAGE_FONTS[st.font][1]);
     el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
   }
+  var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
   function pageDesigner(prof, page) {
     var saved = pageStyleOf(prof), st = Object.assign({}, saved), done = false, cols = [];
     var dlg = h('dialog', { class: 'sheet-dialog designer', 'aria-labelledby': 'pd-title' }), msg = h('div');
@@ -4110,6 +4112,18 @@
       if (reco.length) aB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('accent', reco, 'Accent')));
       aB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Any color' }), colorInput('accent', 'Accent color', '#0b84f3'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('accent', ''); } })));
       body.appendChild(aB);
+      // rainbow ribbon colours
+      var rB = block('Rainbow colors', 'The colored line on top of your cards, the glow under buttons and the soft tint in the corners.'), rRow = h('div', { class: 'pd-sw', role: 'group', 'aria-label': 'Rainbow presets' });
+      Object.keys(PAGE_RAINBOWS).forEach(function (k) {
+        var r = PAGE_RAINBOWS[k], on = st.fa === r[1] && st.fb === r[2] && st.fc === r[3];
+        var b = h('button', { class: 'ban-sw', type: 'button', 'aria-pressed': on ? 'true' : 'false', 'aria-label': r[0] + ' rainbow', title: r[0], onclick: function () { st.fa = r[1]; st.fb = r[2]; st.fc = r[3]; live(); paint(); } });
+        b.style.setProperty('background-image', 'linear-gradient(90deg,' + r[1] + ',' + r[2] + ',' + r[3] + ')'); rRow.appendChild(b);
+      });
+      rB.appendChild(rRow);
+      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Left' }), colorInput('fa', 'Rainbow left color', '#ff6bb5')));
+      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Middle' }), colorInput('fb', 'Rainbow middle color', '#ffb347')));
+      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Right' }), colorInput('fc', 'Rainbow right color', '#5ad1ff'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { delete st.fa; delete st.fb; delete st.fc; live(); paint(); } })));
+      body.appendChild(rB);
       // font + corners
       var fB = block('Text and corners');
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Font' }), select('font', PAGE_FONTS, 'Font', 'sans')));

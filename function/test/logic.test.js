@@ -862,7 +862,7 @@ test('page style is stored when valid and refused when not', async () => {
   const s = await setup();
   await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
   const save = (items) => s.call(s.alice, { action: 'saveAbout', familyId: 'famA', about: [{ key: 'pagestyle', title: 'Page', items }] });
-  assert.equal((await save(['bg:g2', 'border:#aa00ff', 'bstyle:dashed', 'bwidth:3', 'font:serif', 'round:lg', 'accent:#112233'])).status, 200);
+  assert.equal((await save(['bg:g2', 'border:#aa00ff', 'bstyle:dashed', 'bwidth:3', 'font:serif', 'round:lg', 'accent:#112233', 'fa:#ff6bb5', 'fb:#ffb347', 'fc:#5ad1ff'])).status, 200);
   assert.equal((await save(['bstyle:zigzag'])).status, 400);
   assert.equal((await save(['bg:red'])).status, 400);
   assert.equal((await save(['bwidth:9'])).status, 400);
