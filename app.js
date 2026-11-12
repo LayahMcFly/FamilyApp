@@ -707,7 +707,12 @@
       for (var i = 0; a && i < a.length; i++) t += (t ? ' ' : '') + a[i].text;
       line.firstChild.textContent = t; line.hidden = !(shown && t);
     }
+    // The words are drawn by the page. Some phones switch the browser's own captions on again after load (an accessibility setting), which showed every line twice, so keep the built-in ones hidden.
+    function hush() { for (var k = 0; k < v.textTracks.length; k++) if (v.textTracks[k].mode === 'showing') v.textTracks[k].mode = 'hidden'; }
     tr.track.mode = 'hidden';
+    try { v.textTracks.addEventListener('change', hush); } catch (e) {}
+    ['loadedmetadata', 'loadeddata', 'play', 'playing', 'seeked'].forEach(function (n) { v.addEventListener(n, hush); });
+    tr.track.addEventListener('cuechange', function () { hush(); });
     tr.track.addEventListener('cuechange', showCue);
     function paint(on) {
       shown = on; showCue();

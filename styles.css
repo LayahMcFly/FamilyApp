@@ -1410,3 +1410,7 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 
 /* v1.48.13 — the tap-to-close area covers only the part ABOVE the comments sheet, never the sheet itself */
 .sheet-backdrop { bottom: 76dvh; }
+
+/* v1.48.15 — the page draws the captions itself; never show the browser's own caption layer as well */
+video::-webkit-media-text-track-container, video::-webkit-media-text-track-display { display: none !important; }
+video::cue { opacity: 0 !important; background: transparent !important; color: transparent !important; }
