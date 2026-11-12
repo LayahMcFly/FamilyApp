@@ -445,3 +445,14 @@ body.call-open { overflow: hidden; }
 .call-head .btn svg { width: 16px; height: 16px; vertical-align: -3px; }
 .call .btn, .call-fx .btn { box-shadow: none !important; background-image: none !important; }
 .call-pill .btn { box-shadow: none !important; background-image: none !important; }
+
+/* v1.50.16: header buttons and GIF tabs line up; the call banner is big and clear */
+.conv-head .btn, .conv-head .call-start { margin: 0 !important; align-self: center; }
+.conv-head .call-start { width: 40px; height: 40px; min-height: 40px; padding: 0; display: inline-grid; place-items: center; }
+.conv-head .btn.small:not(.call-start) { min-height: 40px; display: inline-grid; place-items: center; }
+.gp-tabs { align-items: center; }
+.gp-tabs button { margin: 0 !important; min-height: 40px; }
+.gp-tabs button[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: -2px; }
+.call-banner { position: sticky; top: 0; z-index: 5; padding: 10px 12px; font-weight: 600; }
+.call-banner .call-join { min-height: 40px; margin: 0; }
+.call-banner .call-join:not(.secondary) { background: #2e9e4f !important; color: #fff !important; }

@@ -907,8 +907,8 @@
     el.hidden = !ids.length || !!mine; if (el.hidden) return;
     clear(el);
     el.appendChild(h('span', { class: 'grow', text: ids.map(function (u) { return realName(u); }).join(', ') + (ids.length > 1 ? ' are' : ' is') + ' in a call' }));
-    el.appendChild(h('button', { class: 'btn small', type: 'button', text: 'Join', onclick: function () { startCall(c, c.cur, false); } }));
-    el.appendChild(h('button', { class: 'btn small secondary', type: 'button', text: 'Join with video', onclick: function () { startCall(c, c.cur, true); } }));
+    el.appendChild(h('button', { class: 'btn small call-join', type: 'button', text: 'Join call', onclick: function () { startCall(c, c.cur, false); } }));
+    el.appendChild(h('button', { class: 'btn small secondary call-join', type: 'button', text: 'Join with video', onclick: function () { startCall(c, c.cur, true); } }));
   }
 
   /* ---------- "online now" (a heartbeat while the chat is open and the page is visible; it expires by itself) ---------- */
