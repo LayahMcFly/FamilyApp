@@ -2876,7 +2876,7 @@
 
   VIEWS.create = function (main) {
     var kind = 'text', file = null, draft = '', previewUrl = null;
-    var KINDS = [{ id: 'text', label: 'Text' }, { id: 'photo', label: 'Photo' }, { id: 'video', label: 'Video' }, { id: 'short', label: 'Short' }, { id: 'link', label: 'Video link' }];
+    var KINDS = [{ id: 'text', label: 'Text' }, { id: 'photo', label: 'Photo' }, { id: 'video', label: 'Video' }, { id: 'short', label: 'Short' }];
     var holder = h('div');
     main.appendChild(h('h1', { text: 'Create a post' }));
     main.appendChild(holder);
@@ -2890,7 +2890,7 @@
       }));
       var ta = h('textarea', { id: 'body', maxlength: L.bodyMax || 2000, rows: 5, placeholder: kind === 'text' ? "What's on your mind?" : 'Add a caption (optional)' });
       ta.value = draft;
-      var linkIn = kind === 'link' ? h('input', { id: 'vlink', type: 'url', inputmode: 'url', autocomplete: 'off', placeholder: 'Paste a YouTube link', 'aria-label': 'Video link' }) : null;
+      var linkIn = kind === 'video' ? h('input', { id: 'vlink', type: 'text', inputmode: 'url', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'https://youtu.be/…', 'aria-label': 'Or paste a YouTube link' }) : null;
       var msg = h('div'), info = h('div', { class: 'hint' }), prev = h('div', { class: 'preview' }), limitsBox = h('div', { class: 'limits' });
       var bar = h('progress', { max: 100, value: 0, hidden: true, 'aria-label': 'Upload progress' });
       var fileInput = null;
@@ -2914,7 +2914,7 @@
           h('p', { class: 'hint', text: 'English only. Made on your phone before posting, so it adds a minute or so. The first time, it downloads a speech model (about 80 MB, once). Not perfect, so watch the captions once.' }));
       }
 
-      if (kind !== 'text' && kind !== 'link') {
+      if (kind !== 'text') {
         var accept = kind === 'photo' ? 'image/jpeg,image/png,image/webp,image/heic,image/heif' : 'video/mp4,video/quicktime,video/webm,.mp4,.m4v,.mov,.webm';
         fileInput = h('input', { id: 'file', type: 'file', accept: accept });
         renderUsage(limitsBox, true);
@@ -2979,14 +2979,15 @@
       var form = h('form', { novalidate: true, class: 'card', onsubmit: function (ev) {
         ev.preventDefault();
         var text = ta.value.trim(), uid = S.user.$id, wireKind = kind;
-        if (kind === 'link') {   // a shared link is an ordinary text post whose body holds the address; the feed turns a YouTube address into a player
-          var lu = linkIn.value.trim();
+        var lu = linkIn ? linkIn.value.trim() : '';
+        if (lu) {   // a shared link is an ordinary text post whose body holds the address; the feed turns a YouTube address into a player
+          if (file) return showAlert(msg, 'error', 'Choose either a video file or a link, not both.');
           if (!/^https?:\/\/[^\s]+$/i.test(lu)) return showAlert(msg, 'error', 'Paste a full link that starts with https://');
           text = (text ? text + '\n' : '') + lu; wireKind = 'text';
         }
-        if (kind === 'text' && !text) return showAlert(msg, 'error', 'Write something first.');
-        if (kind !== 'text' && kind !== 'link' && !file) return showAlert(msg, 'error', 'Please choose a ' + (kind === 'photo' ? 'photo' : 'video') + ' first.');
-        if ((kind === 'video' || kind === 'short') && file.size > (L.videoMaxMB || 15) * 1048576) return showAlert(msg, 'error', 'This video is ' + fmtMB(file.size) + ', over the ' + (L.videoMaxMB || 15) + ' MB limit, so it cannot be posted. Edit it smaller or cut it shorter.');
+        if (wireKind === 'text' && !text) return showAlert(msg, 'error', 'Write something first.');
+        if (wireKind !== 'text' && !file) return showAlert(msg, 'error', 'Please choose a ' + (kind === 'photo' ? 'photo' : 'video') + (kind === 'video' ? ' or paste a link' : '') + ' first.');
+        if (file && (kind === 'video' || kind === 'short') && file.size > (L.videoMaxMB || 15) * 1048576) return showAlert(msg, 'error', 'This video is ' + fmtMB(file.size) + ', over the ' + (L.videoMaxMB || 15) + ' MB limit, so it cannot be posted. Edit it smaller or cut it shorter.');
         if (text.length > (L.bodyMax || 2000)) return showAlert(msg, 'error', 'That is too long. The limit is ' + (L.bodyMax || 2000) + ' characters.');
         showAlert(msg, 'error', '');
         var fid = S.familyId;
@@ -2997,7 +2998,8 @@
           try {
             var payload = { familyId: fid, kind: wireKind, body: text };
             function onProg(p) { bar.hidden = false; bar.value = Math.round(p.progress || 0); }
-            if (kind === 'photo') {
+            if (wireKind === 'text') { /* link post: nothing to upload */ }
+            else if (kind === 'photo') {
               btn.textContent = 'Preparing photo…';
               var jf = await imageToJpegFile(file, L.imageMaxEdge || 1600, L.imageQuality || 0.82, false, 'photo.jpg');
               btn.textContent = 'Uploading…';
@@ -3032,9 +3034,9 @@
           }
         }, 'Posting…');
       } },
-        kind === 'link' ? h('div', null, h('label', { for: 'vlink', text: 'Link' }), linkIn, h('div', { class: 'hint', text: 'YouTube links play right in the post. Other links show a preview card.' })) : null,
-        h('label', { for: 'body', text: kind === 'text' ? 'Your note' : 'Caption' }), ta,
+                h('label', { for: 'body', text: kind === 'text' ? 'Your note' : 'Caption' }), ta,
         fileInput ? h('div', null, h('label', { for: 'file', text: kind === 'photo' ? 'Photo' : kind === 'short' ? 'Short video' : 'Video' }), fileInput, info, limitsBox, prev) : null,
+        linkIn ? h('div', null, h('label', { for: 'vlink', text: 'Or share a link' }), linkIn, h('div', { class: 'hint', text: 'Paste a YouTube link and it plays right in the post. Leave the file empty.' })) : null,
         ccRow, giftRow, bar, msg, h('div', { class: 'stack' }, btn, cancelBtn));
       holder.appendChild(tabs); holder.appendChild(form);
     }
