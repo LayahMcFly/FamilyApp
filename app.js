@@ -2099,7 +2099,7 @@
     box.appendChild(h('div', { class: 'orig-head' }, avatarEl(pr), h('div', { class: 'who' },
       h('a', { class: 'member-link', href: '#/profile/' + o.authorId, text: nm }),
       h('div', { class: 'small muted' }, 'Originally posted ', h('time', { datetime: o.$createdAt, text: longDate(o.$createdAt) }), (Date.now() - new Date(o.$createdAt).getTime() < 7 * 86400000) ? ' · ' + timeAgo(o.$createdAt) : ''))));
-    if (o.body) box.appendChild(h('p', { class: 'post-body', text: o.body }));
+    if (o.body) { var obp = h('p', { class: 'post-body' }); obp.appendChild(richText(o.body)); box.appendChild(obp); }
     if (o.mediaFileId) {
       if (o.kind === 'photo') box.appendChild(imageBlock(o));
       else if (o.kind === 'video' || o.kind === 'short') box.appendChild(videoBlock(o, false));
@@ -2172,7 +2172,14 @@
 
     // text (can be swapped for an editor)
     var bodyHolder = h('div');
-    function showBody() { clear(bodyHolder); if (post.body) bodyHolder.appendChild(h('p', { class: 'post-body' }, (isReel || isTile) ? null : h('strong', { class: 'cap-name', text: name }), (isReel || isTile) ? '' : ' ', post.body)); if (isTile && post.body && post.body.length > 200) bodyHolder.appendChild(h('a', { class: 'tile-more', href: '#/post/' + post.$id, text: 'more' })); }
+    function showBody() {
+      clear(bodyHolder);
+      if (post.body) {
+        var bp = h('p', { class: 'post-body' }, (isReel || isTile) ? null : h('strong', { class: 'cap-name', text: name }), (isReel || isTile) ? '' : ' ');
+        bp.appendChild(richText(post.body)); bodyHolder.appendChild(bp);
+        if (!isReel && !isTile) { var lc = linkCard(post.body); if (lc) bodyHolder.appendChild(lc); }   // same preview card as in chat
+      }
+      if (isTile && post.body && post.body.length > 200) bodyHolder.appendChild(h('a', { class: 'tile-more', href: '#/post/' + post.$id, text: 'more' })); }
     showBody();
     if (isReel) info.appendChild(bodyHolder);
     else if (!post.mediaFileId) card.appendChild(bodyHolder);   // text-only posts: text first; media posts: caption goes under the buttons
@@ -2545,7 +2552,7 @@
         isPinned(c) ? h('div', { class: 'pin-flag small' }, icon('pin'), ' Pinned by the author') : null,
         h('div', { class: 'chead' }, h('strong', { text: p ? p.displayName : 'Family member' }), h('span', { class: 'muted', text: timeAgo(c.$createdAt) }),
           c.authorId === post.authorId ? h('span', { class: 'muted', text: '\u2022 Author' }) : null, badge),
-        h('div', { class: 'comment-body', text: c.body }),
+        (function () { var cb = h('div', { class: 'comment-body' }); cb.appendChild(richText(c.body)); return cb; })(),
         h('div', { class: 'comment-actions' }, replyBtn, pin, del)));
       item.appendChild(likeBtn);
       return item;
@@ -3579,6 +3586,9 @@
     loadTree(false).then(fill).catch(function () { /* the basics above stay */ });
     return box;
   }
+  // Links in posts: clickable (opens a new tab) and, for the first link, a preview card like the one in chat.
+  function richText(text) { return window.FCChat && window.FCChat.linkify ? window.FCChat.linkify(text) : document.createTextNode(String(text || '')); }
+  function linkCard(text) { try { return window.FCChat && window.FCChat.linkCardFor ? window.FCChat.linkCardFor(text) : null; } catch (e) { return null; } }
   function personFor(tree, uid) { return tree ? tree.people.filter(function (p) { return p.userId === uid; })[0] || null : null; }
 
   async function sendSuggestion(personId, prefill) {

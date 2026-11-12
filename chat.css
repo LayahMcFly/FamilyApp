@@ -537,3 +537,8 @@ strong.pf-open:hover { text-decoration: underline; }
 .pf-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .pf-actions .btn { flex: 1 1 0; text-align: center; justify-content: center; white-space: nowrap; }
 .pf-facts { border-top: 1px solid var(--border); padding-top: 10px; }
+
+/* v1.51.6 links inside posts and comments */
+.post-body .msg-link, .comment-body .msg-link { color: var(--accent-text); text-decoration: underline; overflow-wrap: anywhere; }
+article.card .link-card { margin: 8px 14px 0; max-width: calc(100% - 28px); background: var(--surface-2); color: var(--text); text-decoration: none; }
+.comment-body .link-card, .orig .link-card { max-width: 100%; }

@@ -1633,5 +1633,19 @@
     X.VIEWS.dms = function (main, token, id) { return view(main, token, 'dms', id); };
     globalListeners(); startPeek();
   }
-  window.FCChat = { install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
+  /* Used by posts and comments (app.js): clickable links and the same link preview card as in chat. Respects the "link previews" setting in Chat settings. */
+  function linkify(text) {
+    var frag = document.createDocumentFragment();
+    splitLinks(String(text || '')).forEach(function (p) {
+      if (p.u) frag.appendChild(h('a', { href: p.u, target: '_blank', rel: 'noopener noreferrer nofollow ugc', class: 'msg-link', text: p.u }));
+      else frag.appendChild(document.createTextNode(p.t));
+    });
+    return frag;
+  }
+  function linkCardFor(text) {
+    if (!previewsOn() || !X) return null;
+    var first = splitLinks(String(text || '')).filter(function (p) { return p.u; })[0];
+    return first ? previewCard(first.u) : null;
+  }
+  window.FCChat = { linkify: linkify, linkCardFor: linkCardFor, install: install, navItem: navItem, mountPanel: mountPanel, stop: stop, closePanel: function () { closePanel(false); }, refreshTotals: function () { return refreshTotals(true); } };
 })();
