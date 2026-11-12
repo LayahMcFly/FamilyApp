@@ -33,6 +33,8 @@ export const LIMITS = {
   nameMax: 60,
   imageMaxBytes: 8 * 1024 * 1024,
   avatarMaxBytes: 1024 * 1024,
+  avatarGifMaxBytes: 2 * 1024 * 1024,
+  bannerMaxBytes: 3 * 1024 * 1024,      // profile banner: a wide picture or a looping GIF   // a looping GIF picture may be a little larger
   bioMax: 200,
   aboutCategories: 10,
   aboutItems: 12,
@@ -387,9 +389,12 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     if (purpose === 'photo') {
       if (!IMAGE_MIMES.includes(mime)) throw bad('Photos must be JPEG, PNG or WebP.');
       if (size > LIMITS.imageMaxBytes) throw bad('That photo is too large.');
+    } else if (purpose === 'banner') {
+      if (!IMAGE_MIMES.includes(mime) && mime !== 'image/gif') throw bad('A banner must be JPEG, PNG, WebP or GIF.');
+      if (size > LIMITS.bannerMaxBytes) throw bad('That banner is too large.');
     } else if (purpose === 'avatar') {
-      if (!IMAGE_MIMES.includes(mime)) throw bad('Profile pictures must be JPEG, PNG or WebP.');
-      if (size > LIMITS.avatarMaxBytes) throw bad('That profile picture is too large.');
+      if (!IMAGE_MIMES.includes(mime) && mime !== 'image/gif') throw bad('Profile pictures must be JPEG, PNG, WebP or GIF.');
+      if (size > (mime === 'image/gif' ? LIMITS.avatarGifMaxBytes : LIMITS.avatarMaxBytes)) throw bad('That profile picture is too large.');
     } else {
       if (!mime.startsWith('video/')) throw bad('That file is not a video.');
       if (size > maxVideoBytes) throw bad('That video is too large.');
@@ -582,7 +587,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     async saveAbout({ user, body }) {
       const { familyId } = await requireMember(user, body.familyId);
       const list = body.about;
-      if (!Array.isArray(list) || list.filter((c) => !(c && (c.key === 'ringcolors' || c.key === 'address'))).length > LIMITS.aboutCategories || list.length > LIMITS.aboutCategories + 2) throw bad(`You can have up to ${LIMITS.aboutCategories} categories.`);   // the hidden "ringcolors" entry (own circle colors) does not count
+      if (!Array.isArray(list) || list.filter((c) => !(c && (c.key === 'ringcolors' || c.key === 'address' || c.key === 'banner'))).length > LIMITS.aboutCategories || list.length > LIMITS.aboutCategories + 3) throw bad(`You can have up to ${LIMITS.aboutCategories} categories.`);   // the hidden "ringcolors" entry (own circle colors) does not count
       const clean = list.map((c, i) => {
         if (!c || typeof c !== 'object') throw bad('A category is not valid.');
         const title = textOf(c.title ?? '', 'Category name', { min: 1, max: LIMITS.aboutTitleMax });
@@ -593,6 +598,12 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       });
       const existing = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${familyId}_${user.$id}`])]);
       if (!existing) throw bad('Set up your profile first.');
+      // The banner is one hidden category: "color:#rrggbb" or "file:<id>" (a picture or looping GIF).
+      const bannerOf = (arr) => { const b = Array.isArray(arr) ? arr.find((x) => x && x.key === 'banner') : null; return b && Array.isArray(b.items) && typeof b.items[0] === 'string' ? b.items[0] : ''; };
+      let oldAbout = []; try { oldAbout = JSON.parse(existing.about || '[]'); } catch (e) { oldAbout = []; }
+      const oldBanner = bannerOf(oldAbout), newBanner = bannerOf(clean);
+      if (newBanner && !/^(color:#[0-9a-fA-F]{6}|file:[A-Za-z0-9._-]{1,34})$/.test(newBanner)) throw bad('That banner is not valid.');
+      if (newBanner !== oldBanner && newBanner.startsWith('file:')) await claimFile(user, familyId, newBanner.slice(5), 'banner');
       const json = JSON.stringify(clean);
       try {
         await updateRow(TABLES.profiles, existing.$id, { about: json });
@@ -600,6 +611,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         if (sdkCode(e) === 400) throw bad('About me needs one more setup step: add the about column to the profiles table (see the Setup Guide).');
         throw e;
       }
+      if (newBanner !== oldBanner && oldBanner.startsWith('file:')) await deleteFileQuiet(oldBanner.slice(5));
       return { about: json };
     },
 
@@ -1155,7 +1167,7 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       if (!(await deleteWhere(TABLES.bookmarks, byFamily, deadline))) return { done: false };
       const postDone = await deleteWhere(TABLES.posts, byFamily, deadline, (p) => deleteFileQuiet(p.mediaFileId));
       if (!postDone) return { done: false };
-      const profDone = await deleteWhere(TABLES.profiles, byFamily, deadline, (p) => deleteFileQuiet(p.avatarFileId));
+      const profDone = await deleteWhere(TABLES.profiles, byFamily, deadline, async (p) => { await deleteFileQuiet(p.avatarFileId); try { const a = JSON.parse(p.about || '[]'); const b = a.find((x) => x && x.key === 'banner'); const v = b && b.items && b.items[0]; if (typeof v === 'string' && v.startsWith('file:')) await deleteFileQuiet(v.slice(5)); } catch (e) { /* no banner */ } });
       if (!profDone) return { done: false };
       if (!(await chat.purgeFamily(familyId, deleteWhere, deadline))) return { done: false };
       await deleteRow(TABLES.families, familyId);
@@ -1182,13 +1194,21 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       for (const f of page.files) {
         const inPost = await firstRow(TABLES.posts, [Query.equal('mediaFileId', [f.$id])]);
         const inProfile = inPost ? null : await firstRow(TABLES.profiles, [Query.equal('avatarFileId', [f.$id])]);
-        let inDesign = false;
+        let inDesign = false, inBanner = false, inChatPic = false;
         if (!inPost && !inProfile) {
+          // A banner lives inside the About text, and the family chat picture lives in the team settings. If a check fails, the file is kept.
+          try { inBanner = !!(await firstRow(TABLES.profiles, [Query.contains('about', [`file:${f.$id}`])])); } catch (e) { inBanner = true; }
+          try {
+            const tp = (f.$permissions || []).map((x) => /^read\("team:([^"]+)"\)$/.exec(x)).filter(Boolean)[0];
+            if (tp) { const pr = await teams.getPrefs({ teamId: tp[1] }); inChatPic = pr && pr.chatPic === f.$id; }
+          } catch (e) { inChatPic = sdkCode(e) !== 404; }
+        }
+        if (!inPost && !inProfile && !inBanner && !inChatPic) {
           // A saved gift design. If the shop is not installed the table is simply missing (404), which means "no". Any other
           // error means "could not check", and an unchecked file is kept rather than risk deleting a print file.
           try { inDesign = !!(await firstRow(TABLES.shopDesigns, [Query.equal('fileId', [f.$id])])); } catch (e) { if (sdkCode(e) !== 404) inDesign = true; }
         }
-        if (!inPost && !inProfile && !inDesign) {
+        if (!inPost && !inProfile && !inBanner && !inChatPic && !inDesign) {
           await deleteFileQuiet(f.$id);
           removed += 1;
         }

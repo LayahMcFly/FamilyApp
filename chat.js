@@ -432,6 +432,7 @@
     var p = profileOf(uid), me = uid === X.S.user.$id, s = null;
     var body = h('div', { class: 'pf-sheet' }), rel = h('div', { class: 'pf-rel' });
     if (!me && X.relationFor) X.relationFor(uid).then(function (t) { if (t) rel.textContent = t; });   // for example: Your older sister
+    var ban = X.bannerFor ? X.bannerFor(uid) : null; if (ban) body.appendChild(ban);
     body.appendChild(h('div', { class: 'pf-top' }, avWrap(c, uid, 'lg'), h('div', { class: 'grow' }, h('h3', { class: 'pf-name', text: realName(uid) + (me ? ' (you)' : '') }), rel, h('div', { class: 'small muted', text: isHere(c, uid) ? 'Online now' : 'Offline' }))));
     var acts = h('div', { class: 'pf-actions' });
     if (!me) {
@@ -737,6 +738,50 @@
       es.forEach(function (e) { var api = e.target._gif; if (api) { if (e.isIntersecting && !reducedMotion() && !api.userStopped) api.play(); else if (!e.isIntersecting) api.stop(); } });
     }, { threshold: 0.6 });
   }
+
+  /* Picture viewer for GIFs and stickers: tap to open, then zoom with + / -, the mouse wheel, double tap, or two fingers; drag to move. */
+  function openViewer(src, alt) {
+    var scale = 1, tx = 0, ty = 0, MIN = 1, MAX = 6, pts = new Map(), pinch0 = 0, scale0 = 1, drag = null, opener = document.activeElement;
+    var img = h('img', { class: 'vw-img', src: src, alt: alt || 'GIF', draggable: 'false', referrerpolicy: 'no-referrer' });
+    var stage = h('div', { class: 'vw-stage' }, img);
+    var pct = h('span', { class: 'vw-pct small', 'aria-live': 'polite', text: '100%' });
+    function apply() {
+      if (scale <= 1) { tx = 0; ty = 0; }
+      img.style.setProperty('transform', 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')');
+      pct.textContent = Math.round(scale * 100) + '%'; stage.classList.toggle('zoomed', scale > 1);
+    }
+    function zoom(to) { scale = Math.max(MIN, Math.min(MAX, to)); apply(); }
+    var closeB = h('button', { class: 'btn ghost vw-btn', type: 'button', 'aria-label': 'Close', text: '✕' });
+    var outB = h('button', { class: 'btn ghost vw-btn', type: 'button', 'aria-label': 'Zoom out', text: '−' });
+    var inB = h('button', { class: 'btn ghost vw-btn', type: 'button', 'aria-label': 'Zoom in', text: '+' });
+    var bar = h('div', { class: 'vw-bar' }, outB, pct, inB);
+    var ov = h('div', { class: 'vw-overlay', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Picture viewer' }, closeB, stage, bar);
+    function close() { document.removeEventListener('keydown', onKey, true); ov.remove(); if (opener && opener.focus) try { opener.focus(); } catch (e) { /* gone */ } }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === '+' || e.key === '=') zoom(scale * 1.4); else if (e.key === '-') zoom(scale / 1.4); }
+    closeB.addEventListener('click', close); outB.addEventListener('click', function () { zoom(scale / 1.5); }); inB.addEventListener('click', function () { zoom(scale * 1.5); });
+    stage.addEventListener('click', function (e) { if (e.target === stage && !drag) close(); });
+    stage.addEventListener('wheel', function (e) { e.preventDefault(); zoom(scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
+    img.addEventListener('dblclick', function () { zoom(scale > 1 ? 1 : 2.5); });
+    stage.addEventListener('pointerdown', function (e) {
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { stage.setPointerCapture(e.pointerId); } catch (x) { /* fine */ }
+      if (pts.size === 2) { var a = Array.from(pts.values()); pinch0 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); scale0 = scale; drag = null; }
+      else if (scale > 1) drag = { x: e.clientX - tx, y: e.clientY - ty, moved: false };
+    });
+    stage.addEventListener('pointermove', function (e) {
+      if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 2 && pinch0) { var a = Array.from(pts.values()); zoom(scale0 * Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) / pinch0); }
+      else if (drag) { drag.moved = true; tx = e.clientX - drag.x; ty = e.clientY - drag.y; apply(); }
+    });
+    function up(e) { pts.delete(e.pointerId); if (pts.size < 2) pinch0 = 0; if (!pts.size) setTimeout(function () { drag = null; }, 0); }
+    stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(ov); apply(); closeB.focus();
+  }
+  function zoomable(img, full, alt) {
+    img.classList.add('zoomable'); img.setAttribute('role', 'button'); img.tabIndex = 0; img.setAttribute('aria-label', 'Open ' + (alt || 'GIF') + ' larger');
+    img.addEventListener('click', function (e) { e.stopPropagation(); openViewer(full, alt); });
+    img.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openViewer(full, alt); } });
+  }
   function mediaNode(m, md) {
     var sticker = md.type === 'sticker', base = 'https://media.giphy.com/media/' + md.id + '/';
     var dw = Math.min(md.w, sticker ? 160 : 260), still = base + '200w_s.gif', moving = base + '200w.gif', playing = false, tried = 0;
@@ -757,6 +802,7 @@
       if (!tried) { tried = 1; img.src = playing ? base + 'giphy.gif' : base + 'giphy_s.gif'; return; }   // one fallback address, then give up
       box.classList.add('gone'); clear(box); box.appendChild(h('span', { class: 'media-gone small muted', text: (sticker ? 'Sticker' : 'GIF') + ' no longer available' }));
     });
+    zoomable(img, base + 'giphy.gif', label);
     box.appendChild(img); box.appendChild(btn); wrap.appendChild(box);
     wrap.appendChild(h('span', { class: 'gif-credit small muted', text: 'via GIPHY' }));
     box._gif = api; animInit(); if (ANIM.io) ANIM.io.observe(box); else if (!reducedMotion()) api.play();
@@ -818,7 +864,7 @@
     if (md) return previewsOn() ? mediaNode(m, md) : h('p', { class: 'small muted', text: (md.type === 'sticker' ? 'Sticker' : 'GIF') + ' hidden. Turn on link previews and GIFs in Chat settings to see it.' });
     if (!previewsOn()) return null;
     var g = gifOf(m);
-    if (g) return h('div', { class: 'gif-wrap' }, h('img', { class: 'gif-img', src: g, alt: 'GIF', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }), h('span', { class: 'gif-credit small muted', text: 'via GIPHY' }));
+    if (g) { var gi = h('img', { class: 'gif-img', src: g, alt: 'GIF', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }); zoomable(gi, g, 'GIF'); return h('div', { class: 'gif-wrap' }, gi, h('span', { class: 'gif-credit small muted', text: 'via GIPHY' })); }
     var first = splitLinks(String(m.body || '')).filter(function (p) { return p.u; })[0];
     return first ? previewCard(first.u) : null;
   }
@@ -1450,7 +1496,7 @@
       body.appendChild(h('h3', { text: 'Family chat picture' }));
       body.appendChild(h('p', { class: 'small muted', text: 'Shown instead of the letter at the top of the left bar, for everyone in ' + famLabel() + '. Square pictures look best.' }));
       var picMsg = h('p', { class: 'small', role: 'status' });
-      var file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', id: 'cs-pic', class: 'visually-hidden', 'aria-label': 'Choose a family chat picture' });
+      var file = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', id: 'cs-pic', class: 'visually-hidden', 'aria-label': 'Choose a family chat picture' });
       var pick = h('button', { class: 'btn secondary small', type: 'button', text: c.picture ? 'Change picture' : 'Upload picture', onclick: function () { file.click(); } });
       var drop = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove picture', hidden: !c.picture, onclick: async function () {
         drop.disabled = true;

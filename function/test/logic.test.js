@@ -55,6 +55,8 @@ function makeWorld() {
         const q = parseQ(raw);
         if (q.method === 'equal') {
           rows = rows.filter((r) => q.values.includes(q.attribute === '$id' ? r.$id : r[q.attribute]));
+        } else if (q.method === 'contains') {
+          rows = rows.filter((r) => String(r[q.attribute] || '').includes(String(q.values[0])));
         } else if (q.method === 'limit') limit = q.values[0];
       }
       return { total: rows.length, rows: rows.slice(0, limit) };
@@ -106,6 +108,7 @@ function makeWorld() {
     }
   };
   const teams = {
+    async getPrefs({ teamId }) { return { ...((world.teams[teamId] || {}).prefs || {}) }; },
     async listMemberships({ teamId }) {
       const t = world.teams[teamId];
       return { memberships: t ? t.members.map((m) => ({ $id: 'm_' + teamId + '_' + m.userId, teamId, userId: m.userId, roles: m.roles, confirm: m.confirm })) : [] };
@@ -838,4 +841,19 @@ test('inviting someone who is already in the tree without an account (e.g. a par
   assert.equal(s.world.tables.people.get(momId).userId, 'bob');
   const aliceRow = [...s.world.tables.people.values()].find((p) => p.userId === 'alice');
   assert.ok(aliceRow.parentIds.includes(momId));
+});
+
+test('profile banner: a colour or a picture/GIF is stored, checked, and the old file is removed', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });
+  const save = (items) => s.call(s.alice, { action: 'saveAbout', familyId: 'famA', about: [{ key: 'banner', title: 'Banner', items }] });
+  assert.equal((await save(['color:#112233'])).status, 200);
+  assert.equal((await save(['color:red'])).status, 400);
+  assert.equal((await save(['file:../x'])).status, 400);
+  s.addFile('ban1', { owner: 'alice', familyId: 'famA', mime: 'image/gif', size: 2.5 * 1024 * 1024 });
+  assert.equal((await save(['file:ban1'])).status, 200);
+  s.addFile('big', { owner: 'alice', familyId: 'famA', mime: 'image/gif', size: 4 * 1024 * 1024 });
+  assert.equal((await save(['file:big'])).status, 400);
+  assert.equal((await save(['color:#445566'])).status, 200);
+  assert.equal(s.world.files.ban1, undefined, 'the replaced banner file is deleted');
 });

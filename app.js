@@ -1031,7 +1031,7 @@
 
   function avatarUrl(fileId) {
     if (!S.avatarUrls.has(fileId)) {
-      S.avatarUrls.set(fileId, fetchMedia(fileId).then(function (b) { return URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })); })
+      S.avatarUrls.set(fileId, fetchMedia(fileId).then(function (b) { return b.slice(0, 4).text().then(function (head) { return URL.createObjectURL(new Blob([b], { type: head === 'GIF8' ? 'image/gif' : 'image/jpeg' })); }); })
         .catch(function (e) { S.avatarUrls.delete(fileId); throw e; }));
     }
     return S.avatarUrls.get(fileId);
@@ -1403,6 +1403,38 @@
     var name = field('familyName', 'Family name', 'text', { required: true, maxlength: 60, placeholder: 'The Rivera family', hint: 'Everyone you invite will see this name.' });
     var msg = h('div');
     var btn = h('button', { class: 'btn block', type: 'submit', text: 'Create family' });
+    // Banner: a colour, or a picture / looping GIF. Saved as soon as it is chosen, like the profile picture.
+    var banBox = h('div', { class: 'ban-edit' }), banFile = h('input', { id: 'newBanner', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a banner picture' });
+    var banColor = h('input', { type: 'color', id: 'banColor', 'aria-label': 'Banner colour' }); banColor.value = (bannerValue(S.profile) && bannerValue(S.profile).color) || '#7c5cff';
+    var banRemove = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove banner' });
+    var banUseColor = h('button', { class: 'btn secondary small', type: 'button', text: 'Use this colour' });
+    function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page') || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
+    paintBanner();
+    async function saveBanner(item) {
+      var list = visibleAbout(S.profile).concat(ringCat(S.profile), addrCat(S.profile), item ? [{ key: BANNER_KEY, title: 'Banner', items: [item] }] : []);
+      var r = await api('saveAbout', { familyId: fid, about: list });
+      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); paintBanner();
+    }
+    banUseColor.addEventListener('click', function () { busy(banUseColor, async function () {
+      try { await saveBanner('color:' + banColor.value.toLowerCase()); toast('Banner saved.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); }
+    }); });
+    banRemove.addEventListener('click', function () {
+      if (!bannerValue(S.profile)) return toast('You have no banner to remove.');
+      busy(banRemove, async function () { try { await saveBanner(''); toast('Banner removed.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); } });
+    });
+    banFile.addEventListener('change', async function () {
+      var f = banFile.files[0]; if (!f) return; showAlert(pmsg, 'error', '');
+      var up = null;
+      try {
+        var bf = await bannerFile(f); toast('Uploading banner…');
+        up = await uploadFile(bf);
+        await saveBanner('file:' + up.$id); up = null; toast('Banner saved.');
+      } catch (e) {
+        if (up) storage.deleteFile({ bucketId: CFG.bucketId, fileId: up.$id }).catch(function () {});
+        showAlert(pmsg, 'error', errText(e));
+      }
+      banFile.value = '';
+    });
     var form = h('form', { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
       var n = name.input.value.trim();
@@ -1432,7 +1464,7 @@
   function renderProfileSetup() {
     var fam = currentFamily();
     var name = field('displayName', 'Display name', 'text', { required: true, maxlength: 60, value: S.user.name || '', hint: 'Only members of ' + (fam ? fam.name : 'this family') + ' will see this name.' });
-    var file = h('input', { id: 'avatar', type: 'file', accept: 'image/jpeg,image/png,image/webp' });
+    var file = h('input', { id: 'avatar', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif' });
     var msg = h('div');
     var btn = h('button', { class: 'btn block', type: 'submit', text: 'Save and continue' });
     var form = h('form', { novalidate: true, onsubmit: function (ev) {
@@ -2770,7 +2802,11 @@
   }
   // Shows the crop dialog, then makes the square avatar. Returns null when the person cancels.
   async function avatarFile(file, name) {
-    if (file.type === 'image/gif') throw new Error('Animated GIFs are not supported. Please choose a JPEG, PNG or WebP photo.');
+    if (file.type === 'image/gif') {   // an animated GIF is kept as it is (cropping would flatten it); the circle shows its middle and it loops
+      var gifMax = L.avatarGifMaxBytes || 2 * 1048576;
+      if (file.size > gifMax) throw new Error('That GIF is over ' + Math.round(gifMax / 1048576) + ' MB. Please choose a shorter or smaller GIF.');
+      return new File([file], name.replace(/\.\w+$/, '') + '.gif', { type: 'image/gif' });
+    }
     var c = await cropDialog(file); if (c === null) return null;
     return imageToJpegFile(file, L.avatarEdge || 256, 0.85, true, name, c === 'skip' ? null : c);
   }
@@ -3455,7 +3491,31 @@
   // Own circle colors are kept inside the About list as one hidden category (key "ringcolors"), so family can see them without a server change.
   var RING_KEY = 'ringcolors';
   var ADDR_KEY = 'address';   // also hidden from the About lists: one optional line, shown on the family tree
-  function visibleAbout(profile) { return aboutOf(profile).filter(function (c) { return c && c.key !== RING_KEY && c.key !== ADDR_KEY; }); }
+  var BANNER_KEY = 'banner';   // hidden too: "color:#rrggbb" or "file:<id>" (a picture or a looping GIF) shown at the top of the profile
+  function visibleAbout(profile) { return aboutOf(profile).filter(function (c) { return c && c.key !== RING_KEY && c.key !== ADDR_KEY && c.key !== BANNER_KEY; }); }
+  function bannerCat(profile) { return aboutOf(profile).filter(function (c) { return c && c.key === BANNER_KEY; }); }
+  function bannerValue(profile) {
+    var c = bannerCat(profile)[0], v = c && Array.isArray(c.items) && typeof c.items[0] === 'string' ? c.items[0] : '';
+    if (/^color:#[0-9a-fA-F]{6}$/.test(v)) return { type: 'color', color: v.slice(6).toLowerCase() };
+    if (/^file:[A-Za-z0-9._-]{1,34}$/.test(v)) return { type: 'file', id: v.slice(5) };
+    return null;
+  }
+  // The banner picture or colour as an element (null when the person has none). A GIF loops because it is an ordinary image.
+  function bannerEl(profile, cls) {
+    var b = profile ? bannerValue(profile) : null; if (!b) return null;
+    var el = h('div', { class: 'banner ' + (cls || ''), role: 'img', 'aria-label': 'Profile banner' });
+    if (b.type === 'color') el.style.setProperty('background-color', b.color);
+    else avatarUrl(b.id).then(function (u) { el.appendChild(h('img', { src: u, alt: '' })); }).catch(function () { el.classList.add('banner-missing'); });
+    return el;
+  }
+  async function bannerFile(file) {
+    if (file.type === 'image/gif') {
+      var max = L.bannerMaxBytes || 3 * 1048576;
+      if (file.size > max) throw new Error('That GIF is over ' + Math.round(max / 1048576) + ' MB. Please choose a shorter or smaller GIF.');
+      return new File([file], 'banner.gif', { type: 'image/gif' });
+    }
+    return imageToJpegFile(file, 1200, 0.82, false, 'banner.jpg');
+  }
   function ringCat(profile) { return aboutOf(profile).filter(function (c) { return c && c.key === RING_KEY; }); }
   function addrCat(profile) { return aboutOf(profile).filter(function (c) { return c && c.key === ADDR_KEY; }); }
   function addressOf(profile) { var c = addrCat(profile)[0]; return c && Array.isArray(c.items) && c.items[0] ? String(c.items[0]) : ''; }
@@ -3620,7 +3680,7 @@
     saveBtn.addEventListener('click', function () {
       busy(saveBtn, async function () {
         try {
-          var r = await api('saveAbout', { familyId: S.familyId, about: draft.concat(ringCat(S.profile), addrCat(S.profile)) });
+          var r = await api('saveAbout', { familyId: S.familyId, about: draft.concat(ringCat(S.profile), addrCat(S.profile), bannerCat(S.profile)) });
           S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
           draft = visibleAbout(S.profile); base = JSON.stringify(draft);
           showAlert(msg, 'ok', 'Saved. Your family can now see it.'); paint();
@@ -3792,6 +3852,7 @@
       top.appendChild(h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': 'Settings', title: 'Settings' }, icon('gear')));
     }
     main.appendChild(top);
+    var pBan = bannerEl(prof, 'on-page'); if (pBan) main.appendChild(pBan);
     main.appendChild(h('header', { class: 'profile-head' },
       h('div', { class: 'profile-avatar' }, avatarEl(prof, 'lg')),
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
@@ -3884,7 +3945,7 @@
     var pmsg = h('div'), avatarBox = h('div', { class: 'row' });
     function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); }
     paintAvatar();
-    var file = h('input', { id: 'newAvatar', type: 'file', accept: 'image/jpeg,image/png,image/webp', 'aria-label': 'Choose a new profile picture' });
+    var file = h('input', { id: 'newAvatar', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a new profile picture' });
     var saveBtn = h('button', { class: 'btn', type: 'submit', text: 'Save profile' });
     var removeAv = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove picture' });
     async function saveProfile(extra) {
@@ -3933,7 +3994,7 @@
           }
           var av = addrIn.value.trim();
           if (av !== addressOf(S.profile)) {
-            var rr = await api('saveAbout', { familyId: fid, about: visibleAbout(S.profile).concat(ringCat(S.profile), av ? [{ key: ADDR_KEY, title: 'Address', items: [av] }] : []) });
+            var rr = await api('saveAbout', { familyId: fid, about: visibleAbout(S.profile).concat(ringCat(S.profile), bannerCat(S.profile), av ? [{ key: ADDR_KEY, title: 'Address', items: [av] }] : []) });
             S.profile = Object.assign({}, S.profile, { about: rr.about }); S.profiles.set(S.user.$id, S.profile);
           }
           showAlert(pmsg, 'ok', 'Saved.');
@@ -3951,7 +4012,12 @@
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
       avatarBox,
       h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), file, h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
-      h('div', { class: 'stack' }, removeAv), form));
+      h('div', { class: 'stack' }, removeAv),
+      h('div', { class: 'ban-section' }, h('label', { for: 'newBanner', text: 'Banner' }), banBox,
+        h('div', { class: 'row' }, banColor, banUseColor), banFile,
+        h('div', { class: 'hint', text: 'A colour, a picture or a looping GIF (GIFs up to 3 MB). It shows on your profile and your profile card.' }),
+        h('div', { class: 'stack' }, banRemove)),
+      form));
     var aboutCard = h('section', { class: 'card', id: 'about-editor', 'aria-label': 'About me' }, h('h2', { text: 'About me' }),
       h('p', { class: 'small muted', text: 'Add as many categories as you like and several answers to each. All of it is optional.' }), ed.el, whoCanSee());
     main.appendChild(aboutCard);
@@ -4102,7 +4168,7 @@
       more.appendChild(saveB); controls.appendChild(more);
     }
     async function saveRing(cols) {
-      var list = visibleAbout(S.profile).concat(addrCat(S.profile)); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
+      var list = visibleAbout(S.profile).concat(addrCat(S.profile), bannerCat(S.profile)); if (cols) list = list.concat([{ key: RING_KEY, title: 'Circle colors', items: cols }]);
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
       S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); applyRingTheme();
     }
@@ -4842,7 +4908,7 @@
     initAppwrite();
     if (window.FCChat) window.FCChat.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, route: route, switchFamily: switchFamily, avatarEl: avatarEl, db: db, client: client, teams: teams, Query: Query,
-      avatarUrl: avatarUrl, profileFacts: profileFacts, relationFor: relationFor,
+      avatarUrl: avatarUrl, bannerFor: function (uid) { return bannerEl(S.profiles.get(uid), 'in-sheet'); }, profileFacts: profileFacts, relationFor: relationFor,
       uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,

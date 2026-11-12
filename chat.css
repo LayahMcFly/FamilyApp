@@ -544,3 +544,25 @@ article.card .link-card { margin: 8px 14px 0; max-width: calc(100% - 28px); back
 .comment-body .link-card, .orig .link-card { max-width: 100%; }
 .pf-rel { font-weight: 700; color: var(--accent-text); margin: 2px 0; }
 .pf-rel:empty { display: none; }
+
+/* Profile banner: a colour, a picture or a looping GIF */
+.banner { position: relative; width: 100%; height: 110px; border-radius: 14px; overflow: hidden; background: var(--surface-2, #eee); margin: 0 0 12px; }
+.banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.banner.on-page { height: 150px; }
+.banner.in-sheet { height: 96px; }
+.banner-empty { display: flex; align-items: center; justify-content: center; color: var(--muted, #667); font-size: .9rem; border: 1px dashed var(--border, #ccc); }
+.ban-section { display: grid; gap: 8px; margin: 12px 0; }
+.ban-edit .banner { margin-bottom: 0; }
+#banColor { width: 52px; height: 40px; padding: 2px; }
+
+/* GIF viewer */
+img.zoomable { cursor: zoom-in; }
+.vw-overlay { position: fixed; inset: 0; z-index: 3000; background: rgba(0,0,0,.88); display: flex; flex-direction: column; }
+.vw-stage { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
+.vw-stage.zoomed { cursor: grab; }
+.vw-img { max-width: 94vw; max-height: 80vh; object-fit: contain; user-select: none; -webkit-user-drag: none; transform-origin: center; }
+.vw-btn { color: #fff; font-size: 1.3rem; min-width: 44px; min-height: 44px; }
+.vw-overlay > .vw-btn { position: absolute; top: 10px; right: 10px; z-index: 2; background: rgba(255,255,255,.14); border-radius: 999px; }
+.vw-bar { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 10px calc(12px + env(safe-area-inset-bottom)); color: #fff; }
+.vw-bar .vw-btn { background: rgba(255,255,255,.14); border-radius: 999px; }
+.vw-pct { min-width: 52px; text-align: center; }
