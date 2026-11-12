@@ -4460,7 +4460,7 @@
     file.addEventListener('change', function () { var f = file.files[0]; if (f) useAvatar(f); });
     function pictureLink() {   // paste the address of a picture; it loads, then the same adjust window opens
       var dlg = h('dialog', { class: 'sheet-dialog', 'aria-labelledby': 'pl-title' }), msg = h('div');
-      var inp = h('input', { type: 'url', id: 'pl-url', inputmode: 'url', autocomplete: 'off', placeholder: 'https://…', 'aria-label': 'Picture web address' });
+      var inp = h('input', { type: 'text', id: 'pl-url', inputmode: 'url', autocomplete: 'off', placeholder: 'https://…', 'aria-label': 'Picture web address' });
       function close() { try { dlg.close(); } catch (e) { /* closed */ } if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
       var go = h('button', { class: 'btn', type: 'button', text: 'Load picture', onclick: function () { busy(go, async function () {
         showAlert(msg, 'error', '');
