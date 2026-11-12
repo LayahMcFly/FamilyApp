@@ -4155,6 +4155,9 @@
     var par = p ? (p.parentIds || []).filter(function (x) { return known[x]; }) : [], prt = p ? (p.partnerIds || []).filter(function (x) { return known[x]; }) : [];
     var curKinds = p ? kindsOf(p) : {};
     var s4 = select('link', 'Linked family member', memberOpts, p ? p.userId : '');
+    if (!p) s4.querySelector('select').addEventListener('change', function (ev) {
+      var pr = S.profiles.get(ev.target.value); if (pr) { name.value = pr.displayName; if (pr.gender && !gd.value) gd.value = pr.gender; }
+    });
     var KIND_ORDER = ['birth', 'adoptive', 'step', 'foster', 'guardian'];
     var MAX_PARENTS = 6, MAX_PARTNERS = 8;
     var parentRows = h('div', { class: 'stack parent-rows' }), partnerRows = h('div', { class: 'stack partner-rows' });
@@ -4180,6 +4183,7 @@
         h('button', { class: 'btn secondary small', type: 'button', text: 'Remove', 'aria-label': 'Remove this partner', onclick: function () { row.parentNode.removeChild(row); sync(); } }));
       row._id = ps; partnerRows.appendChild(row); sync();
     }
+    var noOthers = !others.length;
     addParentBtn = h('button', { class: 'btn secondary small', type: 'button', text: '+ Add a parent', onclick: function () { addParentRow('', 'birth'); } });
     addPartnerBtn = h('button', { class: 'btn secondary small', type: 'button', text: '+ Add a partner', onclick: function () { addPartnerRow(''); } });
     par.forEach(function (id) { addParentRow(id, curKinds[id] || 'birth'); });
@@ -4231,15 +4235,19 @@
         } catch (e) { showAlert(msg, 'error', errText(e)); }
       }, 'Saving…');
     } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : (preset && preset.of ? 'Add ' + ({ parent: 'a parent', child: 'a child', partner: 'a partner', sibling: 'a sibling' }[preset.relation] || 'a relative') + ' of ' + preset.of.name : 'Add a person') }),
+      (!p && admin) ? h('div', { class: 'pick-member' }, s4,
+        memberOpts.length > 1 ? h('p', { class: 'hint', text: 'Pick someone who has already joined the family, or leave this and type a name below for a relative who has not joined.' })
+          : h('p', { class: 'hint' }, 'No one else has joined the family yet. To add someone who can sign in, go to ', h('a', { href: '#/settings/family', onclick: function () { close(); }, text: 'Settings, Family' }), ' and invite them. You can still type a name below for a relative who is not on the app.')) : null,
       h('div', null, h('label', { for: 'pname', text: 'Name' }), name),
       h('div', null, h('label', { for: 'pgender', text: 'Gender' }), gd),
       h('div', null, h('label', { for: 'pbday', text: 'Birthday' }), bd),
       locked ? h('p', { class: 'hint', text: 'Only ' + p.name + ' can change their name, gender and birthday, because it is their account.' }) : null,
+      noOthers ? h('p', { class: 'hint', text: 'No one else is in the tree yet, so there is no one to choose as a parent or partner. Add the first person, then add others. To bring in people who can sign in, invite them from Settings, Family.' }) : null,
       h('div', null, h('strong', { text: 'Parents' }), parentRows, addParentBtn,
         h('p', { class: 'hint', text: 'List everyone who is a parent to this person, and say how: birth, adoptive, step, foster or guardian. The tree can draw two parents at a time, so the tree page lets you switch between birth parents and the parents who raised them.' })),
       h('div', null, h('strong', { text: 'Partners' }), partnerRows, addPartnerBtn,
         h('p', { class: 'hint', text: 'A person can have more than one partner, for example a current and a former one.' })),
-      (admin && !isSelf) ? s4 : null,
+      (admin && !isSelf && p) ? s4 : null,
       h('p', { class: 'hint', text: 'Linking a member lets them confirm “this is me”. The tree entry and their sign-in account stay separate.' }),
       msg, h('div', { class: 'row' }, cancel, save), (remove && admin) ? h('div', { class: 'stack' }, remove) : null));
     document.body.appendChild(dlg); dlg.showModal(); name.focus();
