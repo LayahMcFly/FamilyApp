@@ -28,15 +28,15 @@
     f.appendChild(line);
     if (C.tagline) { var tg = document.createElement('p'); tg.textContent = C.tagline; f.insertBefore(tg, line); tg.className = 'tagline'; }
     var pp = document.createElement('p'); pp.className = 'foot-play';
-    pp.appendChild(document.createTextNode('I also made '));
+    pp.appendChild(document.createTextNode('Also by LayahMcFly: '));
     pp.appendChild(link('https://layahmcfly.github.io/PlayPop/?v=2', 'PlayPop'));
     pp.appendChild(document.createTextNode(', a site for kids who want phone games on a PC, with no ads inside the games.'));
     f.appendChild(pp);
     if (C.feedbackUrl) {
       var l2 = document.createElement('p');
-      l2.appendChild(document.createTextNode('Feedback, bug or problem? '));
-      l2.appendChild(link(C.feedbackUrl, 'Tell me on GitHub'));
-      if (C.githubUrl) { l2.appendChild(document.createTextNode(' · ')); l2.appendChild(link(C.githubUrl, 'My GitHub')); }
+      l2.appendChild(document.createTextNode('Feedback or a bug to report? '));
+      l2.appendChild(link(C.feedbackUrl, 'Open an issue on GitHub'));
+      if (C.githubUrl) { l2.appendChild(document.createTextNode(' · ')); l2.appendChild(link(C.githubUrl, 'LayahMcFly on GitHub')); }
       f.appendChild(l2);
     }
   })();
