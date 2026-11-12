@@ -112,7 +112,7 @@
       if (local) grid.insertBefore(el, grid.firstChild); else grid.appendChild(el);
       return t;
     }
-    function dropTile(id) { var t = call.tiles[id]; if (t) { t.el.remove(); delete call.tiles[id]; } }
+    function dropTile(id) { var t = call.tiles[id]; if (t) { delete call.tiles[id]; t.el.classList.add('leaving'); setTimeout(function () { t.el.remove(); }, 260); } }
     function camPub(p) { return p.getTrackPublication && p.getTrackPublication(L.Track.Source.Camera); }
     function micPub(p) { return p.getTrackPublication && p.getTrackPublication(L.Track.Source.Microphone); }
     function paintTile(p) {
@@ -136,7 +136,8 @@
       var order = [r.localParticipant].concat(Array.from(r.remoteParticipants.values()));
       order.forEach(function (p) {
         var t = call.tiles[p.identity], muted = t && !t.mic.hidden;
-        people.appendChild(h('span', { class: 'cp-chip' + (t && t.el.classList.contains('speaking') ? ' speaking' : '') }, o.avatarEl(p.identity, 'sm'), h('span', { class: 'clamp', text: p.isLocal ? 'You' : o.nameOf(p.identity) }), muted ? svg('micoff', 14) : null));
+        var fresh = !(call.seen = call.seen || {})[p.identity]; call.seen[p.identity] = 1;
+        people.appendChild(h('span', { class: 'cp-chip' + (fresh ? ' cp-new' : '') + (t && t.el.classList.contains('speaking') ? ' speaking' : '') }, o.avatarEl(p.identity, 'sm'), h('span', { class: 'clamp', text: p.isLocal ? 'You' : o.nameOf(p.identity) }), muted ? svg('micoff', 14) : null));
       });
       paintButtons();
     }

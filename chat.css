@@ -509,3 +509,18 @@ body.chat-mode .call-pill { bottom: calc(env(safe-area-inset-bottom) + 78px); }
 .call-banner { flex-wrap: wrap; align-items: center; gap: 8px; }
 .call-banner > .grow { flex: 1 1 100%; min-width: 0; text-align: left; font-weight: 600; }
 .call-banner .btn, .call-banner .call-join { flex: 1 1 0; margin: 0 !important; min-height: 44px; height: 44px; padding: 0 12px; display: inline-grid; place-items: center; text-shadow: none !important; white-space: nowrap; box-shadow: none; }
+
+/* v1.50.30: an odd last tile takes the whole bottom row; people pop in and fade out */
+.call-grid .call-tile.leaving { display: none; }
+@media (max-width: 699px) {
+  .call-grid[data-n="3"] .call-tile:last-child, .call-grid[data-n="5"] .call-tile:last-child, .call-grid[data-n="7"] .call-tile:last-child, .call-grid[data-n="9"] .call-tile:last-child { grid-column: 1 / -1; }
+}
+@media (min-width: 700px) {
+  .call-grid[data-n="3"] .call-tile:last-child, .call-grid[data-n="7"] .call-tile:last-child { grid-column: 1 / -1; }
+}
+.call-tile { animation: tile-in .45s cubic-bezier(.2, 1.3, .4, 1) both; }
+.call-tile.local { animation-duration: .3s; }
+@keyframes tile-in { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: none; } }
+.cp-chip.cp-new { animation: chip-pop .5s cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes chip-pop { 0% { opacity: 0; transform: scale(.4); } 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .call-tile, .cp-chip.cp-new { animation: none; } }
