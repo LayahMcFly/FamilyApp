@@ -2962,11 +2962,15 @@
       var p = S.profiles.get(m.userId) || null;
       var isOwnerRow = m.roles.indexOf('owner') >= 0;
       var isTA = !!(p && p.treeAdmin === true);
-      listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: m.userName || '?' }),
-        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + m.userId }, h('strong', { text: p.displayName })) : h('strong', { text: m.userName || ((S.tree && S.tree.people.filter(function (x) { return x.userId === m.userId || x.inviteMembershipId === m.$id; })[0] || {}).name) || 'Family member' }),
+      // Someone who joined but has not finished "Set up your profile" has no saved name or picture. Show the best name we know.
+      var treeName = ((S.tree && S.tree.people.filter(function (x) { return x.userId === m.userId || x.inviteMembershipId === m.$id; })[0]) || {}).name || '';
+      var shownName = (p && p.displayName) || m.userName || treeName || '';
+      listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: shownName || '?' }),
+        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + m.userId }, h('strong', { text: p.displayName })) : h('strong', { text: shownName || 'Family member' }),
           m.userId === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null,
           isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null,
-          isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null)));
+          isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null,
+          p ? null : h('div', { class: 'small muted', text: shownName ? 'Has not set up their profile yet, so there is no picture.' : 'Has not set up their profile yet, so there is no name or picture. They add them when they open the app and finish "Set up your profile".' }))));
     });
   }
 
