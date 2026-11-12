@@ -80,12 +80,20 @@
   }
   function norm(s) { return String(s || '').toLowerCase(); }
   function priceText(it) { return (it.hasRange ? 'From ' : '') + money(it.fromCents); }
+  /* A moving shimmer sits on a picture until it has loaded. */
+  function waitImg(img) {
+    if (!img || img.complete) return img;
+    img.classList.add('img-wait');
+    var done = function () { img.classList.remove('img-wait'); };
+    img.addEventListener('load', done); img.addEventListener('error', done);
+    return img;
+  }
   function priceBits(it) {
     var c = Number(it.fromCents || 0), d = Math.floor(c / 100), ct = String(c % 100).padStart(2, '0');
     return h('span', { class: 'tt-price' }, it.hasRange ? h('em', { text: 'From ' }) : null, h('small', { text: '$' }), h('b', { text: d.toLocaleString('en-US') }), h('small', { text: '.' + ct }));
   }
   function itemCard(it) {
-    var img = it.image ? h('img', { class: 'shop-thumb', src: it.image, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : h('div', { class: 'shop-thumb ph', 'aria-hidden': 'true' });
+    var img = it.image ? waitImg(h('img', { class: 'shop-thumb', src: it.image, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })) : h('div', { class: 'shop-thumb ph', 'aria-hidden': 'true' });
     var tag = it.tag ? h('span', { class: 'tt-badge', text: it.tag }) : null;
     var avail = it.availability === 'out_of_stock' ? h('span', { class: 'tt-out', text: 'Out of stock' }) : null;
     var title = h('strong', { class: 'shop-title' }, tag, tag ? ' ' : null, it.title);
@@ -400,7 +408,7 @@
   }
   var SECTIONS = [{ id: 'wall-art', title: 'Wall art and prints' }, { id: 'drinkware', title: 'Mugs and drinkware' }, { id: 'home', title: 'Home and keepsakes' }, { id: 'jewelry', title: 'Jewelry' }, { id: 'apparel', title: 'Clothing and bags' }, { id: 'gifts', title: 'More photo gifts' }];
   function sectionTitle(id) { var f = SECTIONS.filter(function (x) { return x.id === id; })[0]; return f ? f.title : 'More photo gifts'; }
-  function cardImg(p) { return p.image ? h('img', { class: 'shop-thumb', src: p.image, alt: '', loading: 'lazy' }) : null; }
+  function cardImg(p) { return p.image ? waitImg(h('img', { class: 'shop-thumb', src: p.image, alt: '', loading: 'lazy' })) : null; }
   function pretty(s) { return String(s || '').replace(/^./, function (c) { return c.toUpperCase(); }); }
 
   // Where the photo sits inside the print area. All numbers are in print-area pixels.
@@ -444,7 +452,7 @@
   async function viewProduct(main, token, key, postId) {
     st().section = 'photo-gifts';
     main.appendChild(head('', '#/shop', 'Photo Gifts'));
-    var holder = h('div', null, X.spinnerLine('Loading…')); main.appendChild(holder);
+    var holder = h('div', { role: 'status', 'aria-label': 'Loading the product' }, h('div', { class: 'shop-hero img-wait', 'aria-hidden': 'true' }), h('div', { class: 'skel-line wide img-wait', 'aria-hidden': 'true' }), h('div', { class: 'skel-line img-wait', 'aria-hidden': 'true' })); main.appendChild(holder);
     var cat, prod;
     try { cat = await loadCatalog(false); } catch (e) { if (token === X.S.nav) setupNeeded(main, e); return; }
     prod = productByKey(cat, key);
@@ -452,7 +460,7 @@
     if (!prod) { clear(holder); holder.appendChild(h('div', { class: 'empty' }, h('p', { text: 'That product is not available right now.' }), h('a', { class: 'btn', href: '#/shop', text: 'Back to the shop' }))); return; }
     main.firstChild.querySelector('h1') && (main.firstChild.querySelector('h1').textContent = prod.title);
     clear(holder);
-    var hero = prod.image ? h('img', { class: 'shop-hero', src: prod.image, alt: prod.title + ' (sample product picture)' }) : null;
+    var hero = prod.image ? waitImg(h('img', { class: 'shop-hero', src: prod.image, alt: prod.title + ' (sample product picture)' })) : null;
     if (hero) holder.appendChild(hero);
     // Each size or style has its own Printify picture. Fetch them all quietly now, one after another, so a tap on a size swaps instantly instead of waiting for a download.
     var warm = {};
@@ -891,7 +899,7 @@
     try { r = await shopApi('shopCjItem', { familyId: X.S.familyId, id: id }); } catch (e) { if (token === X.S.nav) { clear(holder); holder.appendChild(X.alertBox('error', e.apiCode === 'not_found' ? 'That product is not available any more.' : msgOf(e))); holder.appendChild(h('a', { class: 'btn secondary', href: '#/shop', text: 'Back to the shop' })); } return; }
     if (token !== X.S.nav) return;
     var p = r.product; clear(holder);
-    var hero = h('img', { class: 'shop-hero', alt: p.title, src: p.images[0] || p.image || '', referrerpolicy: 'no-referrer' });
+    var hero = waitImg(h('img', { class: 'shop-hero', alt: p.title, src: p.images[0] || p.image || '', referrerpolicy: 'no-referrer' }));
     var thumbs = h('div', { class: 'thumb-strip', role: 'group', 'aria-label': 'Pictures' }, p.images.slice(0, 8).map(function (u, i) {
       return h('button', { class: 'thumb-btn', type: 'button', 'aria-label': 'Picture ' + (i + 1), onclick: function () { hero.src = u; } }, h('img', { src: u, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }));
     }));

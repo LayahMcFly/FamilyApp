@@ -207,3 +207,9 @@
 .shop-toolbar .btn.small { min-height: 34px; padding: 4px 14px; }
 .shop-count { display: none; }
 #auto-sync-note { margin: 8px 4px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+/* Loading shimmer on pictures and the product page while it opens */
+.img-wait { background: linear-gradient(110deg, var(--surface-2) 30%, color-mix(in srgb, var(--surface-2) 35%, #fff) 50%, var(--surface-2) 70%) 0 0 / 220% 100% !important; animation: thumb-shimmer 1.2s linear infinite; }
+.shop-hero.img-wait { min-height: 240px; }
+.skel-line { height: 18px; width: 45%; margin: 12px auto; border-radius: 9px; }
+.skel-line.wide { width: 70%; }
+@media (prefers-reduced-motion: reduce) { .img-wait { animation: none; } }
