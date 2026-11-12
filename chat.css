@@ -497,3 +497,10 @@ body.chat-mode .call-pill { bottom: calc(env(safe-area-inset-bottom) + 78px); }
 .dm-last { display: block; font-size: .85rem; color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-item.has-unread .dm-last { color: var(--text); font-weight: 600; }
 .side-item .dm-text { overflow: hidden; }
+
+/* v1.50.26: call debug strip */
+.call-debug { flex: none; background: #101418; color: #b8f5c8; font: 11px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 6px 10px; border-bottom: 2px solid #2e9e4f; max-height: 34dvh; overflow: auto; }
+.call-debug[hidden] { display: none; }
+.call-debug > div { overflow-wrap: anywhere; }
+.call-debug .cd-row { display: flex; gap: 8px; margin-top: 6px; }
+.call-debug .cd-row .btn { min-height: 32px; margin: 0; font-size: .75rem; }

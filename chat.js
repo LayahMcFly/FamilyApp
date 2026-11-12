@@ -242,6 +242,7 @@
   }
   function onEvent(c, ev) {
     var p = ev.payload || {}, evs = (ev.events || []).join(' '), kind = eventKind(ev);
+    (c.dbg = c.dbg || { evs: [] }).lastAny = Date.now(); c.dbg.anyCount = (c.dbg.anyCount || 0) + 1;
     if (!kind || p.familyId !== c.famId) return;                // another family's event is never used
     if (evs.indexOf('.chatTyping.') >= 0) return onTypingEvent(c, kind, p);
     if (evs.indexOf('.chatMessages.') >= 0) return onMessageEvent(c, kind, p);
@@ -645,6 +646,7 @@
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a voice call', title: 'Voice call', onclick: function () { startCall(c, cv, false); } }, icon('phone')) : null,
       convOpen(c, cv) && callsAvailable() ? h('button', { class: 'btn secondary small call-start', type: 'button', 'aria-label': 'Start a video call', title: 'Video call', onclick: function () { startCall(c, cv, true); } }, icon('video')) : null,
       dm ? h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Conversation options', onclick: function () { dmOptions(c, dm); } }, icon('more')) : h('button', { class: 'btn secondary small', type: 'button', text: 'Members', onclick: function () { membersSheet(c); } }));
+    pane.appendChild(h('div', { class: 'call-debug', id: 'call-debug', hidden: true }));
     pane.appendChild(head);
     pane.appendChild(h('div', { class: 'chat-banner', id: 'chat-banner', hidden: true, role: 'status' }));
     pane.appendChild(h('div', { class: 'chat-banner call-banner', id: 'call-banner', hidden: true, role: 'status' }));
@@ -655,7 +657,7 @@
     pane.appendChild(buildComposer(c, cv, ch, dm));
     list.addEventListener('scroll', function () { c.stick = nearBottom(); }, { passive: true });
     var st = null; list.addEventListener('scroll', function () { if (st) return; st = setTimeout(function () { st = null; paintJump(); if (nearBottom()) { cv.newCount = 0; maybeMarkRead(c); } if (list.scrollTop < 60 && cv.hasMore && cv.ready) loadOlder(c, cv); }, 120); });
-    paintBanner(); paintCallBanner(c);
+    paintBanner(); paintCallBanner(c); paintDebug(c);
     paintMessages(cv.ready ? (cv.stickToDivider ? 'divider' : 'bottom') : 'keep');
     cv.stickToDivider = false;
     if (cv.ready) maybeMarkRead(c);
@@ -922,6 +924,7 @@
   }
   function callsAvailable() { return !!window.FCCalls; }
   function onCallEvent(c, kind, row) {
+    (c.dbg = c.dbg || { evs: [] }).evs.unshift({ at: Date.now(), kind: kind, uid: row.userId, conv: String(row.convId).slice(5), until: Date.parse(row.until || '') }); c.dbg.evs.length = Math.min(c.dbg.evs.length, 6);
     var convId = String(row.convId).slice(5), u = kind === 'delete' ? 0 : Date.parse(row.until || '');
     var m = c.calls[convId] || (c.calls[convId] = {}), was = callIds(c, convId).length;
     if (u > Date.now()) m[row.userId] = u; else delete m[row.userId];
@@ -930,15 +933,39 @@
       toast(realName(row.userId) + (dm ? ' is calling you.' : ' started a call in ' + ((channelById(c, convId) || {}).name ? '#' + channelById(c, convId).name : 'chat') + '.'));
       try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) { /* ok */ }
     }
-    paintCallBanner(c); paintList();
+    paintCallBanner(c); paintList(); paintDebug(c);
     if (c.cur && c.cur.id === convId) paintMessages('keep');   // the call card's Join button follows the call
   }
   async function loadCalls(c) {
     try {
       var r = await X.db.listRows({ databaseId: dbId(), tableId: 'chatTyping', queries: [X.Query.startsWith('convId', 'call:'), X.Query.limit(100)] });
-      (r.rows || r.documents || []).forEach(function (row) { if (row.familyId === c.famId) { var u = Date.parse(row.until || ''); if (u > Date.now()) (c.calls[String(row.convId).slice(5)] || (c.calls[String(row.convId).slice(5)] = {}))[row.userId] = u; } });
+      c.dbg = c.dbg || { evs: [] }; var all = (r.rows || r.documents || []); c.dbg.load = 'ok: ' + all.length + ' call row(s) on the server, ' + all.filter(function (x) { return x.familyId === c.famId; }).length + ' for this family' + (all.length ? ', newest until ' + new Date(Math.max.apply(null, all.map(function (x) { return Date.parse(x.until || '') || 0; }))).toLocaleTimeString() : '');
+      all.forEach(function (row) { if (row.familyId === c.famId) { var u = Date.parse(row.until || ''); if (u > Date.now()) (c.calls[String(row.convId).slice(5)] || (c.calls[String(row.convId).slice(5)] = {}))[row.userId] = u; } });
       paintCallBanner(c); paintList();
-    } catch (e) { /* the banner appears with the next event */ }
+    } catch (e) { (c.dbg = c.dbg || { evs: [] }).load = 'ERROR: ' + ((e && (e.message || e.code)) || e); }
+    paintDebug(c);
+  }
+  /* ---------- call debug strip (Chat settings > "Show call debug at the top", or add ?debug to the address) ---------- */
+  function dbgOn() { return lsGet('fc_chat_dbg', false) === true || /[?&]debug\b/.test(location.search + location.hash); }
+  function paintDebug(c) {
+    var el = document.getElementById('call-debug'); if (!el) return;
+    if (!dbgOn() || !c || !c.cur) { el.hidden = true; return; }
+    el.hidden = false; clear(el);
+    var cv = c.cur, d = c.dbg || { evs: [] }, now = Date.now(), m = c.calls[cv.id] || {};
+    var rows = Object.keys(m).map(function (u) { return (u === c.uid ? 'ME' : realName(u)) + ' ' + (m[u] > now ? Math.round((m[u] - now) / 1000) + 's left' : 'expired'); });
+    var line = function (t) { el.appendChild(h('div', { text: t })); };
+    line('CALL DEBUG  v' + ((window.FAMILY_CONFIG && window.FAMILY_CONFIG.version) || '?') + '  ' + new Date().toLocaleTimeString());
+    line('You: ' + c.uid.slice(0, 6) + '…   family: ' + String(c.famId).slice(0, 6) + '…   chat: ' + cv.kind + ' ' + String(cv.id).slice(0, 6) + '…');
+    line('Online: ' + (c.online === false ? 'NO' : 'yes') + '   realtime events seen: ' + (d.anyCount || 0) + (d.lastAny ? ' (last ' + Math.round((now - d.lastAny) / 1000) + 's ago)' : ' (none yet)'));
+    line('Calls library loaded: ' + (window.FCCalls ? 'yes' : 'NO') + '   I am in this call here: ' + (window.FCCalls && window.FCCalls.inCall(cv.id) ? 'yes' : 'no'));
+    line('People in this call (as known): ' + (rows.length ? rows.join(', ') : 'nobody') + '   live count: ' + callIds(c, cv.id).length);
+    line('Last load: ' + (d.load || 'not run yet'));
+    var ev = d.evs.slice(0, 4).map(function (e) { return Math.round((now - e.at) / 1000) + 's ago ' + e.kind + ' ' + (e.uid === c.uid ? 'ME' : realName(e.uid)) + (e.conv === cv.id ? '' : ' (other chat)') + ' until ' + (e.until ? Math.round((e.until - e.at) / 1000) + 's after arrival' : 'invalid'); });
+    line('Call events received: ' + (ev.length ? ev.join('  |  ') : 'none'));
+    var lastCard = null; (cv.msgs || []).forEach(function (x) { if (x.body === '[call]') lastCard = x; });
+    line('Newest call card: ' + (lastCard ? Math.round((now - Date.parse(lastCard.$createdAt)) / 1000) + 's ago by ' + (lastCard.authorId === c.uid ? 'ME' : realName(lastCard.authorId)) : 'none') + '   banner showing: ' + (document.getElementById('call-banner') && !document.getElementById('call-banner').hidden ? 'yes' : 'no'));
+    el.appendChild(h('div', { class: 'cd-row' }, h('button', { class: 'btn small', type: 'button', text: 'Refresh now', onclick: function () { loadCalls(c); } }),
+      h('button', { class: 'btn small secondary', type: 'button', text: 'Hide', onclick: function () { lsSet('fc_chat_dbg', false); paintDebug(c); } })));
   }
   function startCall(c, cv, video) {
     if (!window.FCCalls) { toast('Calls could not load. Reload the page and try again.'); return; }
@@ -987,6 +1014,7 @@
     loadPresence(c); loadCalls(c); loadDmLast(c); beat(c);
     c.timers.beat = setInterval(function () { beat(c); }, 45000);
     c.timers.expire = setInterval(function () { if (C === c && !document.hidden) { repaintHere(c); paintCallBanner(c); } }, 30000);
+    c.timers.dbg = setInterval(function () { if (C === c && !document.hidden && dbgOn()) paintDebug(c); }, 2000);
     listen(c, document, 'visibilitychange', function () { if (!document.hidden) { beat(c); loadPresence(c); } });
   }
   /** A picture with a live green dot. The dot is added or removed in place when someone comes or goes (no redraw of the messages). */
@@ -1386,6 +1414,11 @@
     body.appendChild(h('h3', { text: 'Links and GIFs' }));
     body.appendChild(h('label', { class: 'check' }, pv, ' Show link previews and GIFs on this device'));
     body.appendChild(h('p', { class: 'small muted', text: 'A preview is made by the family server visiting the link, so your device never contacts that website. GIFs load straight from GIPHY, which can see your internet address. Turn this off to see plain links only.' }));
+    body.appendChild(h('h3', { text: 'Call debug' }));
+    var dbg = h('input', { type: 'checkbox' }); dbg.checked = dbgOn();
+    dbg.addEventListener('change', function () { lsSet('fc_chat_dbg', dbg.checked); paintDebug(c); });
+    body.appendChild(h('label', { class: 'check' }, dbg, ' Show call debug at the top of the chat'));
+    body.appendChild(h('p', { class: 'small muted', text: 'A small panel that shows what this device knows about calls: who is in the call, which updates arrived and the time left. For finding problems.' }));
     body.appendChild(h('h3', { text: 'Online status' }));
     var pOn = h('input', { type: 'checkbox' }); pOn.checked = presenceOn();
     pOn.addEventListener('change', function () { lsSet('fc_chat_presence', pOn.checked); if (pOn.checked) { c.beatAt = 0; beat(c); } repaintHere(c); toast(pOn.checked ? 'Others can see when you are online.' : 'Others will see you as offline within about two minutes.'); });
