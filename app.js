@@ -267,82 +267,26 @@
    * 4. APPEARANCE (light/dark/system + preset + accent)
    * ===================================================================== */
 
-  var PREF_KEY = 'fc_appearance';
-  var MODES = ['system', 'light', 'dark'];
-  var PRESETS = [
-    { id: 'default', name: 'Default', note: 'Clean blue and slate' },
-    { id: 'neutral', name: 'Neutral', note: 'Cream, sage, warm gray' },
-    { id: 'girly', name: 'Girly', note: 'Blush, lavender, soft corners' },
-    { id: 'boyish', name: 'Boyish', note: 'Navy, forest, charcoal' }
-  ];
-  var ACCENTS = [
-    { name: 'Blue', hex: '#2563eb' }, { name: 'Teal', hex: '#0f766e' }, { name: 'Green', hex: '#15803d' },
-    { name: 'Amber', hex: '#b45309' }, { name: 'Rose', hex: '#be185d' }, { name: 'Purple', hex: '#7c3aed' }, { name: 'Slate', hex: '#475569' }
-  ];
-  var prefs = loadLocalPrefs();
-
-  function sanitizePrefs(p) {
-    p = p || {};
-    return {
-      mode: MODES.indexOf(p.mode) >= 0 ? p.mode : 'system',
-      preset: PRESETS.some(function (x) { return x.id === p.preset; }) ? p.preset : 'default',
-      accent: /^#[0-9a-fA-F]{6}$/.test(p.accent || '') ? p.accent.toLowerCase() : ''
-    };
-  }
-  function loadLocalPrefs() {
-    try { return sanitizePrefs(JSON.parse(localStorage.getItem(PREF_KEY))); } catch (e) { return sanitizePrefs(); }
-  }
-  function lum(hex) {
-    var c = [1, 3, 5].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-  }
-  function contrast(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
-  function mix(hex, toward, amt) {
-    var out = '#';
-    for (var i = 1; i <= 5; i += 2) {
-      var a = parseInt(hex.substr(i, 2), 16), b = parseInt(toward.substr(i, 2), 16);
-      out += ('0' + Math.round(a + (b - a) * amt).toString(16)).slice(-2);
-    }
-    return out;
-  }
-  function applyPrefs() {
-    var el = document.documentElement;
-    el.setAttribute('data-theme', prefs.mode);
-    el.setAttribute('data-preset', prefs.preset);
-    ['--accent', '--accent-text', '--on-accent', '--bg', '--surface', '--surface-2', '--border'].forEach(function (v) { el.style.removeProperty(v); });
-    if (!prefs.accent) return;
-    var dark = prefs.mode === 'dark' || (prefs.mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    // Default style in light mode only: the page background takes on the chosen color (a light tint of it).
-    if (!dark && prefs.preset === 'default') {
-      el.style.setProperty('--bg', mix(prefs.accent, '#ffffff', 0.86));
-      el.style.setProperty('--surface', mix(prefs.accent, '#ffffff', 0.86));
-      el.style.setProperty('--surface-2', mix(prefs.accent, '#ffffff', 0.74));
-      el.style.setProperty('--border', mix(prefs.accent, '#ffffff', 0.58));
-    }
-    var surface = (getComputedStyle(el).getPropertyValue('--surface') || (dark ? '#131c2e' : '#ffffff')).trim();
-    if (!/^#[0-9a-f]{6}$/i.test(surface)) surface = dark ? '#131c2e' : '#ffffff';
-    var text = prefs.accent, n = 0;
-    while (contrast(text, surface) < 4.5 && n++ < 20) text = mix(text, dark ? '#ffffff' : '#000000', 0.1);
-    el.style.setProperty('--accent', prefs.accent);
-    el.style.setProperty('--accent-text', text);
-    el.style.setProperty('--on-accent', contrast(prefs.accent, '#ffffff') >= contrast(prefs.accent, '#000000') ? '#ffffff' : '#000000');
-  }
+  // The appearance engine lives in theme.js (loaded in <head>, so the first paint is already correct). Here we only keep the saved state,
+  // reconcile it with the account, and sync it. State shape: { v:2, theme, per:{ <theme>:{mode, accent} }, at }.
+  var T = window.FCTheme;
+  var appearance = T.sanitize(T.readLocal().state);     // the SAVED appearance for whoever is signed in (or this device before sign-in)
+  var lookDraft = null;                                 // unsaved changes while the Appearance screen is open
+  function applyPrefs() { T.apply(T.effective(lookDraft || appearance)); }
+  T.onSystemChange = function () { var e = T.effective(lookDraft || appearance); if (e.mode === 'system') T.apply(e); };
   var syncTimer = null;
-  function savePrefs() {
-    try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) { /* private mode: ignore */ }
-    applyPrefs();
-    if (S.user) {                                    // sync to the signed-in account (debounced)
-      clearTimeout(syncTimer);
-      syncTimer = setTimeout(function () {
-        var merged = Object.assign({}, S.user.prefs || {}, { appearance: prefs });
-        account.updatePrefs({ prefs: merged }).then(function (u) { S.user = u; }).catch(function () { /* local copy still works */ });
-      }, 700);
-    }
+  function pushAppearance() {
+    if (!S.user) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () {
+      var merged = Object.assign({}, S.user.prefs || {}, { appearance: appearance });
+      account.updatePrefs({ prefs: merged }).then(function (u) { S.user = u; }).catch(function () { /* the local copy still works */ });
+    }, 500);
   }
-  if (window.matchMedia) {
-    var mq = window.matchMedia('(prefers-color-scheme: dark)');
-    var onMq = function () { if (prefs.mode === 'system') applyPrefs(); };
-    if (mq.addEventListener) mq.addEventListener('change', onMq);
+  function saveAppearance(state) {
+    appearance = T.sanitize(state); appearance.at = Date.now();
+    T.writeLocal(S.user && S.user.$id, appearance);
+    lookDraft = null; applyPrefs(); pushAppearance();
   }
 
   /* =====================================================================
@@ -1125,8 +1069,10 @@
     try { S.user = await account.get(); }
     catch (e) { if (!isUnauthorized(e)) S.notice = { kind: 'error', text: friendly(e) }; return; }
 
-    var ap = S.user.prefs && S.user.prefs.appearance;      // appearance saved on the account wins
-    if (ap) { prefs = sanitizePrefs(ap); try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) {} applyPrefs(); }
+    // Appearance: the account copy and this device's copy are reconciled (newest wins; another account's local copy is ignored).
+    var rec = T.reconcile(S.user.$id, S.user.prefs && S.user.prefs.appearance);
+    appearance = rec.state; T.writeLocal(S.user.$id, appearance); lookDraft = null; applyPrefs();
+    if (rec.pushToAccount) pushAppearance();
 
     if (!S.user.emailVerification) return;                  // the server refuses family actions until the email is verified
     try {
@@ -1402,6 +1348,7 @@
 
   async function signOut() {
     try { await account.deleteSession({ sessionId: 'current' }); } catch (e) { /* already signed out */ }
+    T.clearLocal(); appearance = T.sanitize(); lookDraft = null; applyPrefs();   // the next person on this device starts from Default
     await mediaCacheClear();     // photos and videos kept on this device are removed when you sign out
     resetState();
     S.authMode = 'signin';
@@ -2670,7 +2617,7 @@
     return new Promise(function (resolve) {
       var F = 280, url = URL.createObjectURL(file), done = false;
       var img = h('img', { class: 'crop-img', alt: '', draggable: 'false' });
-      var frame = h('div', { class: 'crop-frame', style: 'width:' + F + 'px;height:' + F + 'px', 'aria-label': 'Drag the picture to choose what shows' }, img, h('div', { class: 'crop-mask', 'aria-hidden': 'true' }));
+      var frame = h('div', { class: 'crop-frame', 'aria-label': 'Drag the picture to choose what shows' }, img, h('div', { class: 'crop-mask', 'aria-hidden': 'true' }));
       var zoom = h('input', { type: 'range', min: '1', max: '4', step: '0.01', value: '1', 'aria-label': 'Zoom' });
       var dlg = h('dialog', { class: 'cs crop-dlg', 'aria-label': 'Adjust picture' });
       function finish(v) { if (done) return; done = true; try { dlg.close(); } catch (e) { /* closed */ } if (dlg.parentNode) dlg.parentNode.removeChild(dlg); URL.revokeObjectURL(url); resolve(v); }
@@ -3987,30 +3934,92 @@
     paintRing(); paintControls();
     ringCard.appendChild(stage); ringCard.appendChild(controls); ringCard.appendChild(ringMsg);
     main.appendChild(ringCard);
+    /* ---- Theme, display mode and accent: three separate settings, previewed live, saved only when the person taps Save ---- */
+    var base = JSON.stringify(appearance.per) + appearance.theme;
+    function copyState(s) { return JSON.parse(JSON.stringify(s)); }
+    function draftState() { if (!lookDraft) lookDraft = copyState(appearance); return lookDraft; }
+    function isDirty() { return !!lookDraft && (JSON.stringify(lookDraft.per) + lookDraft.theme) !== base; }
+    function setFor(st, themeId, patch) { st.per[themeId] = Object.assign({}, st.per[themeId] || {}, patch); }
+    function change(fn) { fn(draftState()); applyPrefs(); paintLook(); }
+    function modeLabel(m) { return m === 'system' ? 'Follow system' : m === 'dark' ? 'Dark' : 'Light'; }
+    function swatchSet(themeId, eff) {
+      var list = T.ACCENTS[themeId] || [], sw = h('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' }), known = false;
+      if (themeId === 'default') sw.appendChild(h('button', { class: 'swatch none', type: 'button', 'aria-label': 'Style color (the original look)', title: 'Style color', 'aria-pressed': eff.accent ? 'false' : 'true', onclick: function () { change(function (st) { setFor(st, themeId, { accent: '' }); }); } }));
+      list.forEach(function (c) {
+        var on = eff.accent === c.hex; known = known || on;
+        var b = h('button', { class: 'swatch', type: 'button', 'aria-label': c.name, title: c.name, 'aria-pressed': on ? 'true' : 'false', onclick: function () { change(function (st) { setFor(st, themeId, { accent: c.hex }); }); } });
+        b.style.background = c.hex; sw.appendChild(b);
+      });
+      var custom = h('input', { type: 'color', 'aria-label': 'Pick a custom accent color', value: eff.accent || '#2563eb' });
+      custom.addEventListener('change', function () { change(function (st) { setFor(st, themeId, { accent: custom.value.toLowerCase() }); }); });
+      sw.appendChild(custom);
+      return sw;
+    }
+    // A small picture of the theme: it re-uses the theme's own tokens, so card, button and input shapes really differ.
+    function miniTheme(t) {
+      var st = copyState(appearance), e = T.effective(lookDraft || appearance, t.id), dark = T.isDark(e.mode);
+      var surf = T.surfaces[t.id][dark ? 'dark' : 'light'], col = e.accent ? T.accentColors(e.accent, dark, surf) : { fill: dark ? '#0095f6' : '#0095f6', on: '#ffffff', text: '#0095f6' };
+      var el = h('div', { class: 'mini-theme', 'data-style': t.id, 'data-theme': dark ? 'dark' : 'light', 'aria-hidden': 'true' },
+        h('div', { class: 'm-card' }, h('div', { class: 'm-row' }, h('span', { class: 'lp-av m-av' }), h('div', { class: 'm-lines' }, h('span', { class: 'm-line' }), h('span', { class: 'm-line s' }))), h('span', { class: 'm-line' })),
+        h('div', { class: 'm-row' }, h('span', { class: 'm-btn' }), h('span', { class: 'm-btn sec' })),
+        h('div', { class: 'm-row' }, h('span', { class: 'm-in' })));
+      el.style.setProperty('--accent', col.fill); el.style.setProperty('--on-accent', col.on); el.style.setProperty('--accent-text', col.text);
+      return el;
+    }
+    function liveSample(eff) {
+      var card = h('div', { class: 'card lp-card' },
+        h('div', { class: 'lp-who' }, h('span', { class: 'lp-av', 'aria-hidden': 'true', text: 'S' }), h('div', null, h('strong', { text: 'Sample Person' }), h('div', { class: 'small muted', text: 'Just now \u00b7 sample post' }))),
+        h('p', { text: 'Grandma\u2019s lemon cake turned out great. Who wants the recipe?' }),
+        h('div', { class: 'row' }, h('span', { class: 'badge', text: 'Recipe' }), h('span', { class: 'badge', text: 'Sample' })));
+      var tabs = h('div', { class: 'tabs', role: 'group', 'aria-label': 'Sample tabs' }, h('button', { class: 'tab', type: 'button', 'aria-pressed': 'true', text: 'Selected' }), h('button', { class: 'tab', type: 'button', 'aria-pressed': 'false', text: 'Other' }));
+      var inp = h('input', { type: 'text', 'aria-label': 'Sample input', placeholder: 'Sample input field' });
+      var btns = h('div', { class: 'lp-row' }, h('button', { class: 'btn', type: 'button', text: 'Primary' }), h('button', { class: 'btn secondary', type: 'button', text: 'Secondary' }),
+        h('button', { class: 'btn secondary lp-iconbtn', type: 'button', 'aria-label': 'Sample icon button' }, icon('heart')), h('button', { class: 'btn danger', type: 'button', text: 'Delete' }), h('button', { class: 'btn', type: 'button', disabled: true, text: 'Disabled' }));
+      return h('div', { class: 'live-preview', 'aria-label': 'Live preview with sample content' }, card, tabs, inp, btns);
+    }
     function paintLook() {
       clear(look);
-      look.appendChild(h('h3', { text: 'Light or dark' }));
-      look.appendChild(h('div', { class: 'tabs', role: 'group', 'aria-label': 'Light or dark mode' }, [['system', 'Follow system'], ['light', 'Light'], ['dark', 'Dark']].map(function (m) {
-        return h('button', { class: 'tab', type: 'button', text: m[1], 'aria-pressed': prefs.mode === m[0] ? 'true' : 'false', onclick: function () { prefs.mode = m[0]; savePrefs(); paintLook(); } });
-      })));
-      look.appendChild(h('h3', { text: 'Style' }));
-      look.appendChild(h('div', { class: 'choice-grid', role: 'group', 'aria-label': 'Style preset' }, PRESETS.map(function (p) {
-        return h('button', { class: 'choice', type: 'button', 'aria-pressed': prefs.preset === p.id ? 'true' : 'false', onclick: function () { prefs.preset = p.id; savePrefs(); paintLook(); } },
-          h('strong', { text: p.name }), h('div', { class: 'small muted', text: p.note }));
-      })));
-      look.appendChild(h('h3', { text: 'Accent color' }));
-      var sw = h('div', { class: 'swatches', role: 'group', 'aria-label': 'Accent color' });
-      sw.appendChild(h('button', { class: 'swatch none', type: 'button', 'aria-label': 'Use the style’s own color', 'aria-pressed': prefs.accent ? 'false' : 'true', onclick: function () { prefs.accent = ''; savePrefs(); paintLook(); } }));
-      ACCENTS.forEach(function (a) {
-        var b = h('button', { class: 'swatch', type: 'button', 'aria-label': a.name, 'aria-pressed': prefs.accent === a.hex ? 'true' : 'false', onclick: function () { prefs.accent = a.hex; savePrefs(); paintLook(); } });
-        b.style.background = a.hex; sw.appendChild(b);
-      });
-      var custom = h('input', { type: 'color', 'aria-label': 'Pick a custom accent color', value: prefs.accent || '#2563eb' });
-      custom.addEventListener('change', function () { prefs.accent = custom.value.toLowerCase(); savePrefs(); paintLook(); });
-      sw.appendChild(custom);
-      look.appendChild(sw);
-      look.appendChild(h('p', { class: 'hint', text: 'Saved on this device and on your account, so it follows you to your other devices.' }));
+      var st = lookDraft || appearance, eff = T.effective(st), dirty = isDirty();
+      look.appendChild(h('h2', { text: 'Appearance' }));
+      look.appendChild(h('p', { class: 'look-sum', role: 'status', text: (dirty ? 'Previewing: ' : 'Saved: ') + T.summary(eff) }));
+      look.appendChild(h('p', { class: 'hint', text: 'Appearance is personal. It only changes how Family Circle looks for you, not for your family.' }));
+      look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: 'Live preview' }), liveSample(eff)));
+
+      look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: '1. Theme' }),
+        h('p', { class: 'hint', text: 'The theme changes the shape of cards, buttons, tabs and fields, not just colors. Each theme remembers its own display mode and accent.' }),
+        h('div', { class: 'theme-grid', role: 'group', 'aria-label': 'Theme' }, T.THEMES.map(function (t) {
+          var on = eff.theme === t.id;
+          return h('button', { class: 'theme-card', type: 'button', 'aria-pressed': on ? 'true' : 'false', onclick: function () { change(function (s2) { s2.theme = t.id; }); } },
+            miniTheme(t), h('div', { class: 'tc-name' }, h('span', { text: t.name }), on ? h('span', { class: 'tc-sel', text: 'Selected' }) : null), h('div', { class: 'tc-note', text: t.note }));
+        }))));
+
+      look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: '2. Display mode' }),
+        h('div', { class: 'tabs', role: 'group', 'aria-label': 'Light or dark mode' }, T.MODES.map(function (m) {
+          return h('button', { class: 'tab', type: 'button', text: modeLabel(m), 'aria-pressed': eff.mode === m ? 'true' : 'false', onclick: function () { change(function (s2) { setFor(s2, eff.theme, { mode: m }); }); } });
+        }))));
+
+      look.appendChild(h('div', { class: 'look-sec' }, h('h3', { text: '3. Accent color' }), swatchSet(eff.theme, eff),
+        h('p', { class: 'hint', text: 'The colors on offer match the ' + (T.themeOf(eff.theme) || {}).name + ' theme. Text on top of an accent color switches between black and white so it stays readable.' })));
+
+      var bar = h('div', { class: 'look-actions' },
+        h('button', { class: 'btn', type: 'button', text: 'Save', disabled: !dirty, onclick: function () { saveAppearance(lookDraft); base = JSON.stringify(appearance.per) + appearance.theme; toast('Appearance saved.'); paintLook(); } }),
+        h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', disabled: !dirty, onclick: function () { lookDraft = null; applyPrefs(); paintLook(); toast('Back to your saved appearance.'); } }),
+        h('span', { class: 'grow', text: dirty ? 'You have unsaved changes. Leaving this page also cancels them.' : 'Everything shown is saved.' }));
+      look.appendChild(bar);
+
+      look.appendChild(h('div', { class: 'look-sec look-reset' }, h('h3', { text: 'Reset' }),
+        h('p', { class: 'hint', text: 'Resets are previewed first. Tap Save to keep them, or Cancel to undo.' }),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn secondary small', type: 'button', text: 'Reset ' + T.themeOf(eff.theme).name, onclick: function () { change(function (s2) { delete s2.per[eff.theme]; }); } }),
+          h('button', { class: 'btn secondary small', type: 'button', text: 'Reset everything', onclick: function () { change(function (s2) { s2.theme = 'default'; s2.per = {}; }); } })),
+        h('p', { class: 'small muted', text: 'Reset ' + T.themeOf(eff.theme).name + ': this theme goes back to its own starting mode and accent. Your other themes keep their choices. Reset everything: all themes forget your choices and the Default theme comes back.' })));
+      look.appendChild(h('p', { class: 'hint', text: 'Saved on this device and on your account, so it follows you to your other devices. If two devices disagree, the most recent save wins. Photos, videos, GIFs and stickers never change color.' }));
     }
+    window.addEventListener('hashchange', function leave() {          // unsaved previews never outlive the Appearance page
+      if (/^#\/settings\/appearance/.test(location.hash)) return;
+      window.removeEventListener('hashchange', leave);
+      if (lookDraft) { lookDraft = null; applyPrefs(); }
+    });
     paintLook();
   }
 
