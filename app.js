@@ -4072,6 +4072,7 @@
       clear(stage);
       var auto = S.ringRole && S.ringRole.get(S.user.$id), av = avatarEl(Object.assign({}, S.profile, { about: '[]' }), 'lg'), wrap = h('div', { class: 'ring ring-preview' }, av);
       if (mode === 'custom') wrap.style.setProperty('--rb', ringStops(picks)); else if (auto) av.classList.add('ring-' + auto);
+      window.FC_RING_COLORS = mode === 'custom' ? ringStops(picks).split(', ') : null;   // the tab icon previews the colors right away; leaving this page puts the saved ones back
       stage.appendChild(h('div', { class: 'ring-sample' }, wrap, h('strong', { text: mode === 'custom' ? 'Your colors' : (auto === 'married' ? 'Gold (from the tree)' : auto === 'grand' ? 'Double ring (from the tree)' : 'Rainbow') })));
     }
     function paintControls() {
@@ -4105,6 +4106,10 @@
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
       S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); applyRingTheme();
     }
+    window.addEventListener('hashchange', function backToSaved() {
+      if (/^#\/settings\/appearance/.test(location.hash)) return;
+      window.removeEventListener('hashchange', backToSaved); applyRingTheme();
+    });
     paintRing(); paintControls();
     ringCard.appendChild(stage); ringCard.appendChild(controls); ringCard.appendChild(ringMsg);
     main.appendChild(ringCard);
