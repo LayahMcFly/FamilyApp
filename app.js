@@ -4097,7 +4097,12 @@
     function close(revert) { if (revert) applyPageStyle(page, saved); dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(true); });
     var body = h('div', { class: 'pd-body' });
-    function live() { applyPageStyle(page, st); }
+    // A small copy of the page that always stays in view, so every change can be seen without closing this window.
+    var prev = h('div', { class: 'profile-page pd-preview', 'aria-hidden': 'true' },
+      h('div', { class: 'pd-pv-head' }, avatarEl(S.profile, 'sm'), h('strong', { text: (S.profile && S.profile.displayName) || 'You' }), h('span', { class: 'small muted', text: 'Preview' })),
+      h('div', { class: 'gal-bar' }, h('div', { class: 'gal-tabs' }, ['Videos 3', 'Pictures 8', 'Posts 12'].map(function (t, i) { return h('button', { class: 'gal-tab', type: 'button', tabindex: '-1', 'aria-selected': i === 0 ? 'true' : 'false', text: t }); }))),
+      h('div', { class: 'card' }, h('h2', { text: 'A card on my page' }), h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', tabindex: '-1', text: 'Like' }), h('button', { class: 'btn secondary', type: 'button', tabindex: '-1', text: 'Share' }))));
+    function live() { applyPageStyle(page, st); applyPageStyle(prev, st); }
     function setKey(k, v) { if (v) st[k] = v; else delete st[k]; live(); paint(); }
     function swatches(key, list, label) {
       var row = h('div', { class: 'pd-sw', role: 'group', 'aria-label': label });
@@ -4181,9 +4186,9 @@
     var resetB = h('button', { class: 'btn secondary', type: 'button', text: 'Reset to default', onclick: function () { st = {}; live(); paint(); } });
     dlg.appendChild(h('h2', { id: 'pd-title', text: 'Customize my page' }));
     dlg.appendChild(h('p', { class: 'small muted', text: 'Changes show on your page right away. Nothing is saved until you press Save.' }));
-    dlg.appendChild(body); dlg.appendChild(msg);
+    dlg.appendChild(prev); dlg.appendChild(body); dlg.appendChild(msg);
     dlg.appendChild(h('div', { class: 'stack' }, saveB, resetB, h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: function () { close(true); } })));
-    paint(); document.body.appendChild(dlg); dlg.showModal();
+    applyPageStyle(prev, st); paint(); document.body.appendChild(dlg); dlg.showModal();
   }
 
   /* ---------- a person's gallery on their profile: Videos, Pictures and Posts, like a channel page ---------- */

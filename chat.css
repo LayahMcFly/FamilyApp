@@ -751,3 +751,17 @@ dialog.cs[open]::backdrop { animation: csFade .3s ease backwards; }
 .pg-p-stitched .card, .pg-p-stitched .gal-tab, .pg-p-stitched .gal-sort { border: calc(var(--bw) * .7) solid var(--c1); outline: 2px dashed var(--c2); outline-offset: calc(var(--bw) * -.5); }
 .pg-p-ridge .card, .pg-p-ridge .gal-tab, .pg-p-ridge .gal-sort { border: var(--bw) ridge var(--c1); }
 .pg-p-stripes .gal-tab, .pg-p-zigzag .gal-tab, .pg-p-checker .gal-tab { margin: 0 0 8px; }
+/* Live preview inside "Customize my page" */
+.pd-preview { pointer-events: none; margin: 0 0 10px; padding: 10px; border: 1px dashed var(--border, #ccc); border-radius: 16px; }
+.pd-preview .card { margin: 0 !important; padding: 10px 12px; }
+.pd-preview .card h2 { font-size: 1rem; margin: 0 0 2px; }
+.pd-preview .card p { margin: 0 0 8px; }
+.pd-preview .card .row { gap: 8px; }
+.pd-preview .btn { min-height: 34px; padding: 4px 16px; flex: none; }
+.pd-pv-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.pd-pv-head .small { margin-left: auto; }
+.pd-preview .gal-bar { margin-bottom: 8px; }
+.pd-preview.pg-bg { padding: 10px; }
+.designer .pd-body { max-height: 32vh; }
+.pd-preview .gal-tab { padding: 6px 10px; font-size: .85rem; }
+.pd-preview .gal-bar { border-bottom: 0; }
