@@ -3751,6 +3751,7 @@
     }
     var fromProfile = /^#\/profile(\/edit)?\/?$/.test(S.settingsFrom || '');
     if (S.prevHash && !/^#\/settings/.test(S.prevHash)) S.settingsFrom = S.prevHash;
+    else if (/^#\/settings\/?$/.test(S.prevHash || '')) S.settingsFrom = '';   // I came through the Settings list: back goes there
     fromProfile = /^#\/profile(\/edit)?\/?$/.test(S.settingsFrom || '');
     main.appendChild(h('p', null, fromProfile
       ? h('a', { class: 'link-btn back-btn', href: S.settingsFrom, text: /edit/.test(S.settingsFrom) ? 'Edit profile' : 'Profile' })
