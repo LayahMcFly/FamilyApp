@@ -188,6 +188,9 @@
 .shop-section { margin: 14px 0 4px; font-size: 1.05rem; }
 
 .shop-grid, .skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+@media (min-width: 700px) { .shop-grid, .skeleton-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 960px) { .shop-grid, .skeleton-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .shop-grid, .skeleton-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .shop-card.tt-card { padding: 0; gap: 6px; border: 0; border-radius: 0; background: none; box-shadow: none; min-height: 0; }
 .tt-card .shop-thumb { aspect-ratio: 1; object-fit: cover; border-radius: 14px; background: var(--surface-2); }
 .tt-card .shop-title { font-size: .95rem; font-weight: 500; padding: 0 2px; }
