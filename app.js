@@ -2992,15 +2992,24 @@
     if (!me) { S.validatedAt = 0; return route(false); }           // not a member any more: re-check with the server
     clear(listBox);
     listBox.appendChild(h('h2', { text: joined.length + (joined.length === 1 ? ' member' : ' members') }));
+    try { if (!S.tree) await loadTree(true); } catch (e) { /* the tree is only used to fill in names and pictures */ }
+    if (token !== S.nav) return;
+    var tpeople = (S.tree && S.tree.people) || [];
+    function treeMatch(m) {   // the tree entry that belongs to this membership: by account, by the invitation, or (last) by the same name
+      var hit = tpeople.filter(function (x) { return x.userId === m.userId || (x.inviteMembershipId && x.inviteMembershipId === m.$id); })[0];
+      if (!hit && m.userName) hit = tpeople.filter(function (x) { return x.userId && String(x.name).trim().toLowerCase() === String(m.userName).trim().toLowerCase(); })[0];
+      return hit || null;
+    }
     joined.forEach(function (m) {
-      var p = S.profiles.get(m.userId) || null;
+      var tp = treeMatch(m);
+      var p = S.profiles.get(m.userId) || (tp && tp.userId ? S.profiles.get(tp.userId) : null) || null;
       var isOwnerRow = m.roles.indexOf('owner') >= 0;
       var isTA = !!(p && p.treeAdmin === true);
       // Someone who joined but has not finished "Set up your profile" has no saved name or picture. Show the best name we know.
-      var treeName = ((S.tree && S.tree.people.filter(function (x) { return x.userId === m.userId || x.inviteMembershipId === m.$id; })[0]) || {}).name || '';
+      var treeName = (tp && tp.name) || '';
       var shownName = (p && p.displayName) || m.userName || treeName || '';
       listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: shownName || '?' }),
-        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + m.userId }, h('strong', { text: p.displayName })) : h('strong', { text: shownName || 'Family member' }),
+        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + (p.userId || m.userId) }, h('strong', { text: p.displayName })) : h('strong', { text: shownName || 'Family member' }),
           m.userId === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null,
           isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null,
           isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null,
