@@ -2368,6 +2368,17 @@
         var lk = ev.target.closest && ev.target.closest('.post-body a.msg-link');
         if (lk && !hooks.inlineComments) { ev.preventDefault(); toggleComments('body'); return; }   // the link in the words opens the post first; "Open on YouTube" and the preview card open the media in a new tab
         if (ev.target.closest && ev.target.closest('a, button, iframe, input, textarea, .yt-card, .link-card')) return;
+        if (!post.mediaFileId) {   // text threads: a double tap likes (a heart pops up), a single tap opens the comments after a short wait
+          var now = Date.now();
+          if (bodyHolder.__last && now - bodyHolder.__last < 300) {
+            bodyHolder.__last = 0; clearTimeout(bodyHolder.__t); bodyHolder.__t = 0;
+            var r = bodyHolder.getBoundingClientRect(); doubleTapLike(ev.clientX - r.left, ev.clientY - r.top, bodyHolder); return;
+          }
+          bodyHolder.__last = now;
+          var sel0 = window.getSelection && window.getSelection(); if (sel0 && String(sel0).length) return;
+          if (!hooks.inlineComments) bodyHolder.__t = setTimeout(function () { bodyHolder.__t = 0; toggleComments('body'); }, 300);
+          return;
+        }
         var sel = window.getSelection && window.getSelection(); if (sel && String(sel).length) return;
         if (hooks.inlineComments) return;   // on the post's own page the comments are already open
         toggleComments('body');
