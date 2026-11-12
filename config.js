@@ -14,7 +14,7 @@ window.FAMILY_CONFIG = {
   giphyKey: "gV7kw5ScYkdgbcuTOyohUjySrjmarfpL",
 
   // Shown in the footer. Bump this on every update (1.0.0 -> 1.0.1 for fixes, 1.1.0 for new features).
-  version: "1.51.26",
+  version: "1.51.27",
 
   // "Xenova/whisper-tiny.en" is about 40 MB, faster, but misses a lot. Base is the better balance.
   // "Xenova/whisper-base.en" is more accurate but about 3 times bigger and slower.

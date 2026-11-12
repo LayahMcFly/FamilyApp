@@ -1778,6 +1778,7 @@
       }
       if (opts.variant !== 'short' && !opts.infinite) {
         card.classList.add(live ? 'post-new' : 'post-in');
+        card.addEventListener('animationend', function (ev) { if (ev.target !== card) return; card.classList.remove('post-in', 'post-new'); card.style.removeProperty('animation-delay'); });   // a finished animation must not leave the card as its own layer: the comments sheet inside it would then sit under the next cards
         if (!live) card.style.setProperty('animation-delay', Math.min(i || 0, 6) * 70 + 'ms');
       }
     }

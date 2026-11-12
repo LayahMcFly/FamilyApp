@@ -582,8 +582,8 @@ img.zoomable { cursor: zoom-in; }
 /* Comments: yours pops in, comments that arrive while you watch slide in */
 @keyframes cPop { 0% { opacity: 0; transform: translateY(10px) scale(.94); } 60% { opacity: 1; transform: translateY(-2px) scale(1.02); } 100% { opacity: 1; transform: none; } }
 @keyframes cSlide { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
-.comment.c-pop { animation: cPop .38s cubic-bezier(.2, .9, .3, 1.2) both; }
-.comment.c-slide { animation: cSlide .45s cubic-bezier(.2, .8, .2, 1) both; }
+.comment.c-pop { animation: cPop .38s cubic-bezier(.2, .9, .3, 1.2) backwards; }
+.comment.c-slide { animation: cSlide .45s cubic-bezier(.2, .8, .2, 1) backwards; }
 @media (prefers-reduced-motion: reduce) { .comment.c-pop, .comment.c-slide { animation: none; } }
 
 .pl-loop { font-size: 1.15rem; line-height: 1; }
@@ -600,8 +600,8 @@ img.zoomable { cursor: zoom-in; }
 /* Posts ease in; a post that arrives while you watch slides down from the top */
 @keyframes postIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 @keyframes postNew { from { opacity: 0; transform: translateY(-28px) scale(.97); } to { opacity: 1; transform: none; } }
-.post-in { animation: postIn .45s cubic-bezier(.2, .8, .2, 1) both; }
-.post-new { animation: postNew .55s cubic-bezier(.2, .8, .2, 1) both; }
+.post-in { animation: postIn .45s cubic-bezier(.2, .8, .2, 1) backwards; }
+.post-new { animation: postNew .55s cubic-bezier(.2, .8, .2, 1) backwards; }
 @media (prefers-reduced-motion: reduce) { .post-in, .post-new { animation: none; } }
 
 /* Banner behind the picture, name and button (profile page and profile card) */
