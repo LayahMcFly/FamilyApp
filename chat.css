@@ -639,3 +639,20 @@ img.zoomable { cursor: zoom-in; }
 /* Online dots on the circles at the top of Home */
 .story .ring { position: relative; }
 .story .online-dot { display: block; margin: 0; right: 4px; bottom: 4px; width: 16px; height: 16px; border-color: var(--bg, #fff); }
+
+/* Profile gallery: Videos, Pictures, Posts */
+.gal-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border, #ddd); margin-bottom: 12px; overflow-x: auto; }
+.gal-tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 12px; font: inherit; font-weight: 600; color: var(--muted, #667); cursor: pointer; white-space: nowrap; min-height: 44px; }
+.gal-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); }
+.gal-videos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 10px; }
+.gal-video { display: grid; gap: 4px; color: inherit; text-decoration: none; align-content: start; }
+.gal-thumb { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #15151a; display: grid; place-items: center; }
+.gal-thumb video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.gal-play { position: relative; z-index: 1; color: #fff; font-size: 1.2rem; background: rgba(0,0,0,.55); border-radius: 999px; width: 38px; height: 38px; display: grid; place-items: center; padding-left: 3px; }
+.gal-cap { font-weight: 600; font-size: .9rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.gal-pictures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.gal-pic { position: relative; aspect-ratio: 1; background: var(--surface-2, #eee); overflow: hidden; border-radius: 6px; display: block; }
+.gal-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gal-posts { display: grid; gap: 10px; }
+.gal-text { display: grid; gap: 6px; padding: 12px; border-radius: 12px; background: var(--surface-2, #f3f3f5); color: inherit; text-decoration: none; }
+.gal-text-body { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }

@@ -3933,6 +3933,63 @@
   }
 
   /* ---------- PROFILE ---------- */
+
+  /* ---------- a person's gallery on their profile: Videos, Pictures and Posts, like a channel page ---------- */
+  function galleryCard(uid, own, name) {
+    var card = h('section', { class: 'card gallery', 'aria-label': 'Posts' }, h('h2', { text: own ? 'My posts' : name + '\u2019s posts' }));
+    var body = h('div', { class: 'gal-body' }, spinnerLine('Loading…'));
+    card.appendChild(body);
+    var rows = null, cur = '';
+    var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); if (e.target.__load) e.target.__load(); } }); }, { rootMargin: '300px' }) : null;
+    function lazy(el, fn) { el.__load = fn; if (io) io.observe(el); else fn(); }
+    function thumbImg(box, fileId) {
+      lazy(box, function () { fetchMedia(fileId, true).then(function (b) { box.appendChild(h('img', { src: URL.createObjectURL(b), alt: '', loading: 'lazy' })); box.classList.add('loaded'); }).catch(function () { box.classList.add('gal-miss'); }); });
+    }
+    function videoFrame(box, fileId) {   // only small videos are fetched for a still frame, so the page stays light
+      lazy(box, function () {
+        storage.getFile({ bucketId: CFG.bucketId, fileId: fileId }).then(function (f) {
+          if (f.sizeOriginal > 6 * 1048576) return;
+          return fetchMedia(fileId, true).then(function (b) {
+            var v = h('video', { muted: 'true', playsinline: 'true', preload: 'metadata', 'aria-hidden': 'true', tabindex: '-1' });
+            v.muted = true; v.src = URL.createObjectURL(b) + '#t=0.1'; box.insertBefore(v, box.firstChild); box.classList.add('loaded');
+          });
+        }).catch(function () { /* the play button tile stays */ });
+      });
+    }
+    function paint() {
+      clear(body);
+      var vids = rows.filter(function (p) { return p.kind === 'video' || p.kind === 'short'; }),
+          pics = rows.filter(function (p) { return p.kind === 'photo'; }),
+          txt = rows.filter(function (p) { return p.kind === 'text'; });
+      var tabs = [{ id: 'videos', label: 'Videos', list: vids }, { id: 'pictures', label: 'Pictures', list: pics }, { id: 'posts', label: 'Posts', list: txt }];
+      if (!cur) cur = (tabs.filter(function (t) { return t.list.length; })[0] || tabs[0]).id;
+      var bar = h('div', { class: 'gal-tabs', role: 'tablist', 'aria-label': 'Kinds of posts' });
+      tabs.forEach(function (t) {
+        bar.appendChild(h('button', { class: 'gal-tab', type: 'button', role: 'tab', 'aria-selected': t.id === cur ? 'true' : 'false', text: t.label + ' ' + t.list.length, onclick: function () { cur = t.id; paint(); } }));
+      });
+      body.appendChild(bar);
+      var t = tabs.filter(function (x) { return x.id === cur; })[0], panel = h('div', { class: 'gal-panel gal-' + cur, role: 'tabpanel' });
+      if (!t.list.length) panel.appendChild(h('p', { class: 'muted', text: own ? 'Nothing here yet.' : name + ' has not posted any ' + t.label.toLowerCase() + ' yet.' }));
+      t.list.forEach(function (p) {
+        if (cur === 'videos') {
+          var tb = h('div', { class: 'gal-thumb' }, h('span', { class: 'gal-play', 'aria-hidden': 'true', text: '\u25B6' }));
+          if (p.mediaFileId) videoFrame(tb, p.mediaFileId);
+          panel.appendChild(h('a', { class: 'gal-video', href: '#/post/' + p.$id }, tb,
+            h('span', { class: 'gal-cap', text: (p.body || (p.kind === 'short' ? 'Short' : 'Video')).slice(0, 90) }), h('span', { class: 'small muted', text: (p.kind === 'short' ? 'Short \u00B7 ' : '') + timeAgo(p.$createdAt) })));
+        } else if (cur === 'pictures') {
+          var sq = h('a', { class: 'gal-pic', href: '#/post/' + p.$id, 'aria-label': (p.body ? p.body.slice(0, 60) + '. ' : '') + 'Open picture' });
+          if (p.mediaFileId) thumbImg(sq, p.mediaFileId); panel.appendChild(sq);
+        } else {
+          panel.appendChild(h('a', { class: 'gal-text', href: '#/post/' + p.$id }, h('span', { class: 'gal-text-body', text: p.body || '' }), h('span', { class: 'small muted', text: timeAgo(p.$createdAt) })));
+        }
+      });
+      body.appendChild(panel);
+    }
+    listRows('posts', [Query.equal('familyId', [S.familyId]), Query.equal('authorId', [uid]), Query.orderDesc('$createdAt'), Query.limit(100)])
+      .then(function (r) { rows = r.rows; if (!card.isConnected && !card.parentNode) return; paint(); })
+      .catch(function () { clear(body).appendChild(h('p', { class: 'muted small', text: 'The gallery could not load. Try again in a moment.' })); });
+    return card;
+  }
   VIEWS.profile = async function (main, token, param, param2) {
     if (param === 'edit') return profileEdit(main, token, param2);
     var preview = param === 'preview';
@@ -3991,6 +4048,7 @@
       sec.appendChild(whoCanSee());
     } else if (preview) sec.appendChild(h('p', { class: 'hint', text: 'Only members of ' + famName() + ' can see this.' }));
     main.appendChild(sec);
+    main.appendChild(galleryCard(uid, mine, firstName(prof)));
 
     // Family tree connection (active family only)
     var box = h('section', { class: 'card', 'aria-label': 'Family tree' }, h('h2', { text: 'Family tree' }));
