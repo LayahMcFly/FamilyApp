@@ -2822,7 +2822,7 @@
         h('option', { value: 'birth', text: 'Draw birth parents' }), h('option', { value: 'raised', text: 'Draw the parents who raised them' }));
       bar.appendChild(h('div', { class: 'grow' }, h('label', { for: 'tree-lens', class: 'small muted', text: 'Parents shown' }), lensSel));
     }
-    if (canEditTree()) bar.appendChild(h('button', { class: 'btn small tree-add', type: 'button', text: '+ Add person', onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }); } }));
+    if (canEditTree()) bar.appendChild(h('button', { class: 'btn small tree-add', type: 'button', text: '+ Add person', onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { lite: true }); } }));
     holder.appendChild(bar);
 
     var chartEl = h('div', { class: 'tree-chart', role: 'group', 'aria-label': 'Family tree. Drag to move around. Use the plus and minus buttons to zoom. Press Tab to move through the people, then Enter to choose one.' });
@@ -2874,7 +2874,7 @@
       if (canEditTree()) {
         var addRow = h('div', { class: 'tree-addrel' }, h('strong', { class: 'small', text: 'Add a relative of ' + p.name + ':' }));
         [['parent', 'Parent'], ['partner', 'Partner'], ['child', 'Child'], ['sibling', 'Sibling']].forEach(function (o) {
-          addRow.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: '+ ' + o[1], onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { relation: o[0], of: p }); } }));
+          addRow.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: '+ ' + o[1], onclick: function () { personDialog(null, tree, function () { S.tree = null; route(false); }, { relation: o[0], of: p, lite: true }); } }));
         });
         panel.appendChild(addRow);
       }
@@ -4236,19 +4236,20 @@
       }, 'Saving…');
     } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : (preset && preset.of ? 'Add ' + ({ parent: 'a parent', child: 'a child', partner: 'a partner', sibling: 'a sibling' }[preset.relation] || 'a relative') + ' of ' + preset.of.name : 'Add a person') }),
       (!p && admin) ? h('div', { class: 'pick-member' }, s4,
-        memberOpts.length > 1 ? h('p', { class: 'hint', text: 'Pick someone who has already joined the family, or leave this and type a name below for a relative who has not joined.' })
+        memberOpts.length > 1 ? ((preset && preset.lite) ? null : h('p', { class: 'hint', text: 'Pick someone who has already joined the family, or leave this and type a name below for a relative who has not joined.' }))
+          : (preset && preset.lite) ? h('p', { class: 'hint' }, 'No one else has joined yet. Invite people in ', h('a', { href: '#/settings/family', onclick: function () { close(); }, text: 'Settings' }), '. You can still type a name below.')
           : h('p', { class: 'hint' }, 'No one else has joined the family yet. To add someone who can sign in, go to ', h('a', { href: '#/settings/family', onclick: function () { close(); }, text: 'Settings, Family' }), ' and invite them. You can still type a name below for a relative who is not on the app.')) : null,
       h('div', null, h('label', { for: 'pname', text: 'Name' }), name),
       h('div', null, h('label', { for: 'pgender', text: 'Gender' }), gd),
       h('div', null, h('label', { for: 'pbday', text: 'Birthday' }), bd),
       locked ? h('p', { class: 'hint', text: 'Only ' + p.name + ' can change their name, gender and birthday, because it is their account.' }) : null,
-      noOthers ? h('p', { class: 'hint', text: 'No one else is in the tree yet, so there is no one to choose as a parent or partner. Add the first person, then add others. To bring in people who can sign in, invite them from Settings, Family.' }) : null,
+      noOthers ? h('p', { class: 'hint', text: 'No one else is in the tree yet. Add the first person, then add others.' }) : null,
       h('div', null, h('strong', { text: 'Parents' }), parentRows, addParentBtn,
         h('p', { class: 'hint', text: 'List everyone who is a parent to this person, and say how: birth, adoptive, step, foster or guardian. The tree can draw two parents at a time, so the tree page lets you switch between birth parents and the parents who raised them.' })),
       h('div', null, h('strong', { text: 'Partners' }), partnerRows, addPartnerBtn,
         h('p', { class: 'hint', text: 'A person can have more than one partner, for example a current and a former one.' })),
       (admin && !isSelf && p) ? s4 : null,
-      h('p', { class: 'hint', text: 'Linking a member lets them confirm “this is me”. The tree entry and their sign-in account stay separate.' }),
+      (preset && preset.lite) ? null : h('p', { class: 'hint', text: 'Linking a member lets them confirm “this is me”. The tree entry and their sign-in account stay separate.' }),
       msg, h('div', { class: 'row' }, cancel, save), (remove && admin) ? h('div', { class: 'stack' }, remove) : null));
     document.body.appendChild(dlg); dlg.showModal(); name.focus();
   }
