@@ -4091,6 +4091,16 @@
     el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
+  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|border:#[0-9a-fA-F]{6}|border2:#[0-9a-fA-F]{6}|bstyle:(solid|dashed|dotted|double|rainbow|none|stripes|zigzag|checker|stitched|ridge)|bwidth:[1-6]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
+  function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
+    var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
+    return l.map(function (x) {
+      if (!x || typeof x.id !== 'string' || typeof x.name !== 'string' || !x.st || typeof x.st !== 'object') return null;
+      var st = {}; Object.keys(x.st).forEach(function (k) { if (typeof x.st[k] === 'string' && PAGE_OK.test(k + ':' + x.st[k])) st[k] = x.st[k]; });
+      return { id: x.id.slice(0, 24), name: x.name.slice(0, 30), st: st };
+    }).filter(Boolean).slice(0, 12);
+  }
+  async function savePageLib(list) { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { pageLib: list }) }); }
   function pageDesigner(prof, page) {
     var saved = pageStyleOf(prof), st = Object.assign({}, saved), done = false, cols = [];
     var dlg = h('dialog', { class: 'sheet-dialog designer', 'aria-labelledby': 'pd-title' }), msg = h('div');
@@ -4129,6 +4139,34 @@
       var keepTop = body.scrollTop;   // rebuilding the list must not throw the person back to the top
       clear(body);
       var reco = cols.slice(0, 5);
+      // saved looks: a small library with a mini preview of each
+      var libB = block('My saved pages', 'Save the look you made, then switch between looks with one tap.'), lib = pageLib();
+      if (lib.length) {
+        var grid = h('div', { class: 'pd-lib' });
+        lib.forEach(function (it) {
+          var mini = h('div', { class: 'profile-page pd-mini', 'aria-hidden': 'true' }, h('div', { class: 'card' }, h('span', { class: 'pd-bar' }), h('span', { class: 'pd-bar short' }), h('span', { class: 'btn small' })));
+          applyPageStyle(mini, it.st);
+          var use = h('button', { class: 'pd-tile', type: 'button', 'aria-label': 'Use the look ' + it.name, onclick: function () { st = Object.assign({}, it.st); live(); paint(); toast('Look "' + it.name + '" is on. Press Save my page to keep it.'); } }, mini, h('span', { class: 'pd-tile-name', text: it.name }));
+          var del = h('button', { class: 'pd-tile-del', type: 'button', 'aria-label': 'Delete the look ' + it.name, title: 'Delete', onclick: async function () {
+            var ok = await confirmDialog('Delete "' + it.name + '"?', 'This saved look is removed from your library. Your current page is not changed.', 'Delete look');
+            if (!ok) return;
+            try { await savePageLib(pageLib().filter(function (x) { return x.id !== it.id; })); toast('Look deleted.'); paint(); } catch (e) { toast(errText(e)); }
+          } }, icon('trash'));
+          grid.appendChild(h('div', { class: 'pd-tile-wrap' }, use, del));
+        });
+        libB.appendChild(grid);
+      } else libB.appendChild(h('p', { class: 'small muted', text: 'Nothing saved yet.' }));
+      var nameIn = h('input', { type: 'text', maxlength: 30, placeholder: 'Name this look', 'aria-label': 'Name for this look', autocomplete: 'off' });
+      var saveLook = h('button', { class: 'btn secondary small', type: 'button', text: 'Save this look', onclick: function () {
+        if (!Object.keys(st).length) return toast('Change something first, then save the look.');
+        if (lib.length >= 12) return toast('You can save up to 12 looks. Delete one first.');
+        var nm = nameIn.value.replace(/\s+/g, ' ').trim() || ('My look ' + (lib.length + 1));
+        busy(saveLook, async function () {
+          try { await savePageLib(lib.concat([{ id: 'p' + Date.now().toString(36), name: nm.slice(0, 30), st: Object.assign({}, st) }])); toast('Look saved.'); paint(); } catch (e) { toast(errText(e)); }
+        });
+      } });
+      libB.appendChild(h('div', { class: 'pd-line' }, nameIn, saveLook));
+      body.appendChild(libB);
       // background
       var bgB = block('Page background', 'The color or gradient behind your cards.'), bgRow = h('div', { class: 'pd-sw', role: 'group', 'aria-label': 'Page background' });
       bgRow.appendChild(h('button', { class: 'pd-none', type: 'button', 'aria-pressed': !st.bg ? 'true' : 'false', text: 'None', onclick: function () { setKey('bg', ''); } }));

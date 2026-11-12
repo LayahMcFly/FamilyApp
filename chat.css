@@ -765,3 +765,18 @@ dialog.cs[open]::backdrop { animation: csFade .3s ease backwards; }
 .designer .pd-body { max-height: 32vh; }
 .pd-preview .gal-tab { padding: 6px 10px; font-size: .85rem; }
 .pd-preview .gal-bar { border-bottom: 0; }
+/* Saved page looks */
+.pd-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.pd-tile-wrap { position: relative; }
+.pd-tile { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 0; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; text-align: center; }
+.pd-tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
+.pd-tile-name { font-size: .8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-tile-del { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: #000a; color: #fff; cursor: pointer; }
+.pd-tile-del svg { width: 15px; height: 15px; }
+.pd-mini { pointer-events: none; padding: 8px; border: 1px solid var(--border, #ddd); border-radius: 12px; height: 84px; overflow: hidden; display: grid; align-content: center; }
+.pd-mini .gal-tabs { gap: 3px; }
+.pd-mini .gal-tab { padding: 3px 6px; font-size: .62rem; }
+.pd-mini .card { margin: 0 !important; padding: 6px; display: grid; gap: 4px; }
+.pd-bar { display: block; height: 6px; border-radius: 3px; background: var(--border, #ccc); }
+.pd-bar.short { width: 60%; }
+.pd-mini .btn.small { min-height: 14px; height: 14px; width: 40px; padding: 0; }
