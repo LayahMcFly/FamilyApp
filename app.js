@@ -2988,6 +2988,7 @@
         try {
           var nm = name.input.value.trim();
           if (!nm) return showAlert(msg, 'error', 'Please type their name.');
+          if (!rel.el.value) return showAlert(msg, 'error', 'Please choose how they are related to you under “They are my…”. That is what connects them to you in the family tree.');
           var birthday = bday.input.value || '';
           if (!birthday && age.input.value) {
             var a = Math.floor(Number(age.input.value));
@@ -2999,8 +3000,8 @@
           try {
             var pr = await api('treeAddPerson', { familyId: fid, name: nm, relation: rel.el.value || undefined, birthday: birthday || undefined, gender: gen.el.value || undefined, inviteMembershipId: mem.$id });
             S.tree = null;
-            if (rel.el.value && pr.linked === false) note = ' They were added to the family tree without a link, because that relationship could not be linked yet. You can link them in Settings \u2192 Family tree.';
-            else note = ' They were added to the family tree.';
+            if (pr.linked === false) note = ' They were added to the family tree but are not connected to anyone yet, because that relationship cannot be linked automatically. Open Settings \u2192 Family tree, tap Edit on their box and choose their parents or partner.';
+            else note = ' They were added to the family tree and connected to you.';
           } catch (te) { note = ' The invitation was sent, but adding them to the family tree did not work: ' + friendly(te); }
           showAlert(msg, 'ok', 'Invitation sent to ' + e + '. They need to open the link in the email while signed in with that address.' + note + ' If they already filled in their own details, theirs are used instead. Once they accept, only they can change their name, gender and birthday.');
           email.input.value = ''; name.input.value = ''; rel.el.value = ''; gen.el.value = ''; bday.input.value = ''; age.input.value = '';
@@ -4043,7 +4044,8 @@
           h('div', { class: 'grow' }, h('strong', { text: p.name }),
             partners.length ? h('div', { class: 'small muted', text: 'Partner: ' + partners.map(function (x) { return x.name; }).join(', ') }) : null,
             detailLine(p) ? h('div', { class: 'small muted', text: detailLine(p) }) : null,
-            p.userId ? h('div', { class: 'small muted', text: p.confirmed ? 'Member of this family' : 'Waiting for them to confirm' }) : null),
+            p.userId ? h('div', { class: 'small muted', text: p.confirmed ? 'Member of this family' : 'Waiting for them to confirm' }) : null,
+            (edit && people.length > 1 && !hasParents(p) && !partners.length && !(kids[p.$id] || []).length) ? h('div', { class: 'small', text: 'Not connected to anyone yet. Tap Edit to choose their parents or partner.' }) : null),
           h('div', { class: 'tnode-actions' },
             prof ? h('a', { class: 'link-btn small', href: '#/profile/' + p.userId, text: 'Profile' }) : null,
             (edit || p.userId === me) ? h('button', { class: 'link-btn small', type: 'button', text: 'Edit', 'aria-label': 'Edit ' + p.name, onclick: function () { personDialog(p, tree, function (id) { draw(id, true); }); } })
