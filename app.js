@@ -3964,6 +3964,63 @@
   /* ---------- PROFILE ---------- */
 
 
+
+  /* ---------- Browse ideas: build a Pinterest search from color, gender and aesthetic (the app cannot search Pinterest itself) ---------- */
+  function browseIdeas() {
+    var f = { kind: 'combo', color: '', who: '', looks: [] };
+    var KINDS = { combo: 'pfp and banner combo', pfp: 'pfp', banner: 'banner' };
+    var COLORS = ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple', 'Pink', 'Black', 'White', 'Pastel'];
+    var WHO = { girl: 'Girl', boy: 'Boy', neutral: 'Neutral' };
+    var LOOKS = ['Anime', 'Cute', 'Soft', 'Dark', 'Cozy', 'Y2K', 'Grunge', 'Cottagecore', 'Cyber', 'Fantasy', 'Nature', 'Gaming', 'K-pop', 'Minimal'];
+    var dlg = h('dialog', { class: 'sheet-dialog designer', 'aria-labelledby': 'bi-title' });
+    function close() { dlg.close(); if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    dlg.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+    function words() {
+      var w = [];
+      if (f.color) w.push(f.color.toLowerCase());
+      if (f.who === 'girl' || f.who === 'boy') w.push(f.who); else if (f.who === 'neutral') w.push('neutral');
+      f.looks.forEach(function (l) { w.push(l.toLowerCase()); });
+      if (!f.looks.length) w.push('aesthetic');
+      w.push(KINDS[f.kind]);
+      return w.join(' ');
+    }
+    var preview = h('p', { class: 'bi-words', 'aria-live': 'polite' }), body = h('div', { class: 'pd-body' });
+    function chips(list, isOn, onPick, label) {
+      var row = h('div', { class: 'bi-chips', role: 'group', 'aria-label': label });
+      list.forEach(function (it) { row.appendChild(h('button', { class: 'bi-chip', type: 'button', 'aria-pressed': isOn(it[0]) ? 'true' : 'false', text: it[1], onclick: function () { onPick(it[0]); paint(); } })); });
+      return row;
+    }
+    function block(title, hint) { return h('section', { class: 'pd-block' }, h('h3', { text: title }), hint ? h('p', { class: 'small muted', text: hint }) : null); }
+    function paint() {
+      clear(body);
+      var k = block('What are you looking for?');
+      k.appendChild(chips(Object.keys(KINDS).map(function (x) { return [x, { combo: 'PFP + banner combo', pfp: 'Profile picture', banner: 'Banner' }[x]]; }), function (x) { return f.kind === x; }, function (x) { f.kind = x; }, 'Kind'));
+      body.appendChild(k);
+      var c = block('Color', 'Pick one or leave it open.');
+      c.appendChild(chips(COLORS.map(function (x) { return [x, x]; }), function (x) { return f.color === x; }, function (x) { f.color = f.color === x ? '' : x; }, 'Color'));
+      body.appendChild(c);
+      var g = block('Gender');
+      g.appendChild(chips(Object.keys(WHO).map(function (x) { return [x, WHO[x]]; }), function (x) { return f.who === x; }, function (x) { f.who = f.who === x ? '' : x; }, 'Gender'));
+      body.appendChild(g);
+      var l = block('Aesthetic', 'Pick up to two.');
+      l.appendChild(chips(LOOKS.map(function (x) { return [x, x]; }), function (x) { return f.looks.indexOf(x) !== -1; }, function (x) { var i = f.looks.indexOf(x); if (i !== -1) f.looks.splice(i, 1); else { f.looks.push(x); if (f.looks.length > 2) f.looks.shift(); } }, 'Aesthetic'));
+      body.appendChild(l);
+      preview.textContent = 'Search: ' + words();
+    }
+    var go = h('a', { class: 'btn block', target: '_blank', rel: 'noopener noreferrer', text: 'Open Pinterest and search' });
+    go.addEventListener('click', function () { go.href = 'https://www.pinterest.com/search/pins/?q=' + encodeURIComponent(words()); });
+    go.href = 'https://www.pinterest.com/search/pins/?q=' + encodeURIComponent(words());
+    var copy = h('button', { class: 'btn secondary block', type: 'button', text: 'Copy the search words', onclick: async function () { try { await navigator.clipboard.writeText(words()); toast('Copied.'); } catch (e) { toast('Could not copy. The words are shown above.'); } } });
+    dlg.appendChild(h('h2', { id: 'bi-title', text: 'Browse ideas' }));
+    dlg.appendChild(h('p', { class: 'small muted', text: 'Choose what you like and the app builds a Pinterest search for you. Pinterest is a different website. Save a picture you like to your phone, then come back here and choose it as your profile picture or banner.' }));
+    dlg.appendChild(body); dlg.appendChild(preview);
+    dlg.appendChild(h('div', { class: 'stack' }, go, copy, h('button', { class: 'btn secondary', type: 'button', text: 'Close', onclick: close })));
+    paint(); document.body.appendChild(dlg); dlg.showModal();
+    // keep the link current as the words change
+    var obs = new MutationObserver(function () { go.href = 'https://www.pinterest.com/search/pins/?q=' + encodeURIComponent(words()); });
+    obs.observe(preview, { childList: true, characterData: true, subtree: true });
+  }
+
   /* ---------- "Customize my page": background, borders, accent, font and corners of a person's own profile page ---------- */
   var PAGE_GRADS = { g1: ['Sunset', 'linear-gradient(135deg,#ff9a8b,#ff6a88 55%,#ff99ac)'], g2: ['Ocean', 'linear-gradient(135deg,#2193b0,#6dd5ed)'], g3: ['Forest', 'linear-gradient(135deg,#5a8f4a,#a8e063)'],
     g4: ['Night', 'linear-gradient(135deg,#0f2027,#2c5364)'], g5: ['Candy', 'linear-gradient(135deg,#a18cd1,#fbc2eb)'], g6: ['Graphite', 'linear-gradient(135deg,#232526,#555a5c)'] };
@@ -4393,6 +4450,7 @@
     if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
       avatarBox,
+      h('button', { class: 'btn secondary block', type: 'button', text: 'Browse ideas for a profile picture and banner', onclick: browseIdeas }),
       h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), file, h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
       h('div', { class: 'stack' }, removeAv),
       h('div', { class: 'ban-section' }, h('label', { for: 'newBanner', text: 'Banner' }), banBox,
