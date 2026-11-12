@@ -97,6 +97,8 @@
     play: ['M7 4.5v15l13-7.5z'],
     pause: ['M8 5v14', 'M16 5v14'],
     fullscreen: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'],
+    up: ['M12 19V5', 'M6 11l6-6 6 6'], down: ['M12 5v14', 'M6 13l6 6 6-6'], left: ['M15 6l-6 6 6 6'], right: ['M9 6l6 6-6 6'],
+    pencil: ['M4 20l1-4 11-11 3 3L8 19z', 'M14 7l3 3'], x: ['M6 6l12 12', 'M18 6 6 18'],
     flame: ['M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .2 1.2.8 2 1.7 2.3C10.2 8.5 10.5 5.5 12 3z']
   };
   function icon(name) {
@@ -3297,7 +3299,8 @@
     var discardBtn = h('button', { class: 'btn secondary', type: 'button', text: 'Discard changes' });
     var note = h('p', { class: 'small muted' });
     function dirty() { return JSON.stringify(draft) !== base; }
-    function mini(label, glyph, fn) { return h('button', { class: 'mini', type: 'button', 'aria-label': label, title: label, text: glyph, onclick: fn }); }
+    var GL = { '↑': 'up', '↓': 'down', '‹': 'left', '›': 'right', '✎': 'pencil', '×': 'x' };
+    function mini(label, glyph, fn) { return h('button', { class: 'mini', type: 'button', 'aria-label': label, title: label, onclick: fn }, icon(GL[glyph] || 'x')); }
     function move(arr, i, d) { var j = i + d; if (j < 0 || j >= arr.length) return; var t = arr[i]; arr[i] = arr[j]; arr[j] = t; paint(); }
 
     function paint() {

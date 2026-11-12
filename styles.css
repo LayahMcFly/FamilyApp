@@ -638,7 +638,7 @@ dialog form input[type="text"] { margin: 8px 0; }
 .about-cat { padding: 12px 0; border-top: 1px solid var(--border); }
 .about-cat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .about-cat-head h3 { margin: 0; }
-.about-tools { display: flex; flex-wrap: wrap; }
+.about-tools { display: flex; flex-wrap: nowrap; flex: none; }
 .about-add { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
 .about-add input { flex: 1; margin: 0; }
 .add-about { margin-top: 12px; }
@@ -1488,3 +1488,11 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
   :root[data-ring="custom"] .nav a[data-route="create"], :root[data-ring="custom"] .nav a[data-route="create"][aria-current="page"] { --plus-grad: var(--plus-me); }
   :root[data-ring="custom"] .nav a[data-route="create"] svg { filter: drop-shadow(0 1px 2px #0006); }
 }
+
+/* v1.50.5: About me editor buttons are drawn icons that stay on one row */
+.mini { display: inline-grid; place-items: center; }
+.mini svg { width: 18px; height: 18px; }
+.about-tools > * + * { margin-left: 2px; }
+.about-cat-head h3 { min-width: 0; overflow-wrap: anywhere; }
+.tag .mini { min-width: 28px; min-height: 28px; padding: 0 3px; }
+.tag .mini svg { width: 15px; height: 15px; }
