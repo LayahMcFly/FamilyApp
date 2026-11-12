@@ -2937,7 +2937,7 @@
       var isOwnerRow = m.roles.indexOf('owner') >= 0;
       var isTA = !!(p && p.treeAdmin === true);
       listBox.appendChild(h('div', { class: 'member' }, avatarEl(p || { displayName: m.userName || '?' }),
-        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + m.userId }, h('strong', { text: p.displayName })) : h('strong', { text: m.userName || 'Family member' }),
+        h('div', { class: 'grow' }, p ? h('a', { class: 'member-link', href: '#/profile/' + m.userId }, h('strong', { text: p.displayName })) : h('strong', { text: m.userName || ((S.tree && S.tree.people.filter(function (x) { return x.userId === m.userId || x.inviteMembershipId === m.$id; })[0] || {}).name) || 'Family member' }),
           m.userId === S.user.$id ? h('span', { class: 'badge', text: ' You' }) : null,
           isOwnerRow ? h('span', { class: 'badge', text: ' Owner' }) : null,
           isTA && !isOwnerRow ? h('span', { class: 'badge', text: ' Tree admin' }) : null)));
@@ -3324,6 +3324,12 @@
     if (!force && c && c.fid === S.familyId && Date.now() - c.at < 20000) return c;
     var fid = S.familyId;
     var people = await listAllRows('people', [Query.equal('familyId', [fid])], 400);
+    try { S.memberList = (await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] })).memberships.filter(function (m) { return m.confirm; }); } catch (e) { S.memberList = S.memberList || []; }
+    if (canEditTree() && people.some(function (x) { return x.inviteMembershipId && !x.userId; }) && !S.syncing) {   // someone joined: connect their invitation entry
+      S.syncing = true;
+      try { var sy = await api('treeSyncInvites', { familyId: fid }); if (sy && sy.linked) people = await listAllRows('people', [Query.equal('familyId', [fid])], 400); } catch (e) { /* older server: ignore */ }
+      S.syncing = false;
+    }
     var sug = [];
     try { sug = await listAllRows('suggestions', [Query.equal('familyId', [fid]), Query.orderDesc('$createdAt')], 200); } catch (e) { sug = []; }
     var out = { fid: fid, at: Date.now(), people: people, suggestions: sug };
@@ -4150,13 +4156,19 @@
     var others = tree.people.filter(function (x) { return !p || x.$id !== p.$id; });
     var linked = {}; tree.people.forEach(function (x) { if (x.userId && (!p || x.$id !== p.$id)) linked[x.userId] = true; });
     var memberOpts = [['', 'Not linked to an account']];
-    S.profiles.forEach(function (pr) { if (!linked[pr.userId]) memberOpts.push([pr.userId, pr.displayName]); });
+    var seenM = {};
+    S.profiles.forEach(function (pr) { if (!linked[pr.userId]) { seenM[pr.userId] = 1; memberOpts.push([pr.userId, pr.displayName]); } });
+    (S.memberList || []).forEach(function (m) {   // joined but no profile yet: still a member
+      if (linked[m.userId] || seenM[m.userId] || (p && p.userId === m.userId)) return;
+      var inv = tree.people.filter(function (x) { return x.inviteMembershipId === m.$id; })[0];
+      memberOpts.push([m.userId, m.userName || (inv && inv.name) || 'Family member']);
+    });
     var known = {}; tree.people.forEach(function (x) { known[x.$id] = true; });
     var par = p ? (p.parentIds || []).filter(function (x) { return known[x]; }) : [], prt = p ? (p.partnerIds || []).filter(function (x) { return known[x]; }) : [];
     var curKinds = p ? kindsOf(p) : {};
     var s4 = select('link', 'Linked family member', memberOpts, p ? p.userId : '');
     if (!p) s4.querySelector('select').addEventListener('change', function (ev) {
-      var pr = S.profiles.get(ev.target.value); if (pr) { name.value = pr.displayName; if (pr.gender && !gd.value) gd.value = pr.gender; }
+      var pr = S.profiles.get(ev.target.value); if (!pr) { var mo = memberOpts.filter(function (o) { return o[0] === ev.target.value; })[0]; if (mo && mo[1] !== 'Family member' && !name.value) name.value = mo[1]; } if (pr) { name.value = pr.displayName; if (pr.gender && !gd.value) gd.value = pr.gender; }
     });
     var KIND_ORDER = ['birth', 'adoptive', 'step', 'foster', 'guardian'];
     var MAX_PARENTS = 6, MAX_PARTNERS = 8;

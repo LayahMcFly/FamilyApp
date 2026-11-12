@@ -250,7 +250,11 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     if (raw === undefined || raw === null || raw === '') return '';
     const uid = idOf(raw, 'userId');
     const prof = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${familyId}_${uid}`])]);
-    if (!prof) throw bad('That account is not a member of this family yet.');
+    if (!prof) {
+      // A member who joined but never saved a profile has no profile row yet. Their membership is what proves they belong.
+      const ms = await users.listMemberships({ userId: uid, queries: [Query.limit(100)] }).catch(() => ({ memberships: [] }));
+      if (!ms.memberships.some((m) => m.teamId === familyId && m.confirm === true)) throw bad('That account is not a member of this family yet.');
+    }
     if (all.some((x) => x.userId === uid && x.$id !== selfId)) throw bad('That member is already linked to someone in the tree.');
     return uid;
   }
@@ -719,6 +723,24 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       }
       await deleteRow(TABLES.people, inv.$id);
       return { claimed: true, merged: true, personId: mine.$id };
+    },
+
+    /** Links tree entries made by an invitation to the member who has since joined (even if they never saved a profile). */
+    async treeSyncInvites({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      await requireTreeAdmin(user, ctx);
+      const all = await treePeople(ctx.familyId);
+      const waiting = all.filter((x) => x.inviteMembershipId && !x.userId);
+      if (!waiting.length) return { linked: 0 };
+      const res = await teams.listMemberships({ teamId: ctx.familyId, queries: [Query.limit(100)] });
+      let linked = 0;
+      for (const p of waiting) {
+        const m = res.memberships.find((x) => x.$id === p.inviteMembershipId && x.confirm === true && x.userId);
+        if (!m || all.some((x) => x.userId === m.userId)) continue;
+        await updateRow(TABLES.people, p.$id, { userId: m.userId, confirmed: false });
+        p.userId = m.userId; linked++;
+      }
+      return { linked };
     },
 
     async treeEditPerson({ user, body }) {

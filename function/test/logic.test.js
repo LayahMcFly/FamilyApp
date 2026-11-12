@@ -106,6 +106,10 @@ function makeWorld() {
     }
   };
   const teams = {
+    async listMemberships({ teamId }) {
+      const t = world.teams[teamId];
+      return { memberships: t ? t.members.map((m) => ({ $id: 'm_' + teamId + '_' + m.userId, teamId, userId: m.userId, roles: m.roles, confirm: m.confirm })) : [] };
+    },
     async delete({ teamId }) {
       if (!world.teams[teamId]) throw err(404, 'noteam');
       delete world.teams[teamId];
@@ -775,4 +779,19 @@ test('inviting by relationship connects every kind, adding unnamed placeholders 
   const gc = await add('Grandkid', 'grandchild'); assert.ok(rows().find((r) => r.$id === by('Grandkid').parentIds[0]).parentIds.includes(me().$id));
   const gp = await add('Granny', 'grandparent'); assert.ok(myParent.parentIds.includes(by('Granny').$id));
   assert.equal(nn.json.linked && co.json.linked && gc.json.linked && gp.json.linked, true);
+});
+
+test('a member who joined but never saved a profile can still be linked to their tree entry', async () => {
+  const s = await setup();
+  await s.call(s.alice, { action: 'saveProfile', familyId: 'famA', displayName: 'Alice' });   // bob never saves a profile
+  const r = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Bobby', relation: 'child', inviteMembershipId: 'm_famA_bob' });
+  assert.equal(r.status, 200);
+  const sync = await s.call(s.alice, { action: 'treeSyncInvites', familyId: 'famA' });
+  assert.equal(sync.json.linked, 1);
+  assert.equal(s.world.tables.people.get(r.json.personId).userId, 'bob');
+  assert.equal((await s.call(s.alice, { action: 'treeSyncInvites', familyId: 'famA' })).json.linked, 0);
+  assert.equal((await s.call(s.bob, { action: 'treeSyncInvites', familyId: 'famA' })).status, 403);
+  const other = await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'Robert' });
+  const link = await s.call(s.alice, { action: 'treeEditPerson', familyId: 'famA', personId: other.json.personId, userId: 'bob' });
+  assert.equal(link.status, 400);   // already linked to Bobby
 });
