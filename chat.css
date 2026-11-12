@@ -474,3 +474,6 @@ body.call-open { overflow: hidden; }
 .call-pill .pill-txt { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .call-pill .pill-top { white-space: nowrap; font-weight: 700; }
 .call-pill .pill-who { font-size: .8rem; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* v1.50.22: in a chat the in-call bar sits above the message box instead of on top of it */
+body.chat-mode .call-pill { bottom: calc(env(safe-area-inset-bottom) + 78px); }
