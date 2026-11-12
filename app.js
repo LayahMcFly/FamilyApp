@@ -4373,11 +4373,11 @@
     if (String(bd0).length === 4) ageIn.value = new Date().getFullYear() - Number(bd0);
     var addrIn = h('input', { type: 'text', id: 'pe-addr', maxlength: 120, autocomplete: 'street-address', placeholder: 'For example 12 Oak St, Valdosta GA' }); addrIn.value = addressOf(S.profile);
     var pmsg = h('div'), avatarBox = h('div', { class: 'row' });
-    function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); }
+    function paintAvatar() { clear(avatarBox); avatarBox.appendChild(avatarEl(S.profile, 'lg')); avatarBox.appendChild(h('button', { class: 'bi-open', type: 'button', 'aria-label': 'Browse ideas for a profile picture and banner', title: 'Browse ideas on Pinterest', onclick: browseIdeas }, icon('globe'))); }
     paintAvatar();
     var file = h('input', { id: 'newAvatar', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a new profile picture' });
     var saveBtn = h('button', { class: 'btn', type: 'submit', text: 'Save profile' });
-    var removeAv = h('button', { class: 'btn secondary small', type: 'button', text: 'Remove picture' });
+    var removeAv = h('button', { class: 'icon-del', type: 'button', 'aria-label': 'Remove picture', title: 'Remove picture' }, icon('trash'));
     async function saveProfile(extra) {
       var r = await api('saveProfile', Object.assign({ familyId: fid, displayName: S.profile.displayName }, extra));
       if (fid !== S.familyId) return;
@@ -4489,9 +4489,7 @@
     if (S.aboutPending) { ed.addCategory(S.aboutPending); S.aboutPending = null; }
     main.appendChild(h('section', { class: 'card', 'aria-label': 'Profile details' }, h('h2', { text: 'Profile' }),
       avatarBox,
-      h('button', { class: 'bi-open', type: 'button', 'aria-label': 'Browse ideas for a profile picture and banner', title: 'Browse ideas on Pinterest', onclick: browseIdeas }, icon('globe')),
-      h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), file, h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
-      h('div', { class: 'stack' }, removeAv),
+      h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), h('div', { class: 'file-row' }, file, removeAv), h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
       h('div', { class: 'ban-section' }, h('label', { for: 'newBanner', text: 'Banner' }), banBox,
         banReco, h('div', { class: 'row' }, banColor, banUseColor), banFile,
         h('div', { class: 'hint', text: 'A colour, a picture or a looping GIF (GIFs up to 3 MB). It shows on your profile and your profile card.' }),

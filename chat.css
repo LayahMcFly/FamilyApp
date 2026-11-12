@@ -723,3 +723,15 @@ img.zoomable { cursor: zoom-in; }
 .bi-open { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1.5px solid var(--border); border-radius: 50%; background: var(--surface-2); color: var(--text); cursor: pointer; justify-self: start; }
 .bi-open svg { width: 22px; height: 22px; }
 .bi-open:hover, .bi-open:focus-visible { border-color: var(--accent); color: var(--accent); }
+/* Picture + globe side by side; file chooser + trash side by side; colour dots shrink instead of wrapping. */
+.row .bi-open { margin-left: 4px; }
+.file-row { display: flex; align-items: center; gap: 8px; }
+.file-row input[type="file"] { flex: 1 1 auto; min-width: 0; }
+.icon-del { display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; border: 1.5px solid var(--border); border-radius: 50%; background: var(--surface-2); color: var(--danger, #d33); cursor: pointer; }
+.icon-del svg { width: 22px; height: 22px; }
+.icon-del:disabled { opacity: .5; }
+.ban-reco { flex-wrap: nowrap; }
+.ban-reco .small { flex: 0 1 auto; min-width: 0; }
+.ban-reco .ban-sw { flex: 0 1 40px; min-width: 18px; height: auto; aspect-ratio: 1; }
+.pd-reco .pd-sw { flex-wrap: nowrap; }
+.pd-reco .ban-sw { flex: 0 1 40px; min-width: 18px; height: auto; aspect-ratio: 1; }
