@@ -716,3 +716,5 @@ img.zoomable { cursor: zoom-in; }
 /* With a page colour, the eye and gear row floats on the colour instead of sitting in an empty white box. */
 .pg-bg .profile-top { background: none; padding: 0; margin: 0 0 6px; min-height: 40px; }
 .bi-tip { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2, rgba(124,92,255,.12)); }
+/* A chosen accent colour also tints the grey buttons on the page (Edit profile, Customize my page...). */
+.profile-page.pg-accent .btn.secondary { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--text); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }

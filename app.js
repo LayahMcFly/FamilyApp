@@ -4035,7 +4035,7 @@
   }
   function pageItems(st) { return Object.keys(st).filter(function (k) { return st[k]; }).map(function (k) { return k + ':' + st[k]; }); }
   function applyPageStyle(el, st) {
-    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
+    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-bwidth', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--grad', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
     ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-border', 'pg-accent'].forEach(function (cl) { el.classList.remove(cl); });
     if (!st || !Object.keys(st).length) return;
     el.classList.add('pg-custom');
@@ -4047,7 +4047,7 @@
       if (bs === 'rainbow') el.classList.add('pg-rainbow'); else { el.style.setProperty('--pg-bstyle', bs); el.style.setProperty('--pg-border', st.border || '#7c5cff'); }
     }
     if (st.accent) {
-      el.classList.add('pg-accent'); el.style.setProperty('--accent', st.accent);
+      el.classList.add('pg-accent'); el.style.setProperty('--accent', st.accent); el.style.setProperty('--grad', st.accent);
       var rgb = rgbOf(st.accent), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0; el.style.setProperty('--on-accent', lum > 170 ? '#1b1230' : '#fff');
     }
     ['fa', 'fb', 'fc'].forEach(function (k, i) { if (/^#[0-9a-f]{6}$/i.test(st[k] || '')) el.style.setProperty(['--fun-a', '--fun-b', '--fun-c'][i], st[k]); });   // the rainbow ribbon, button glow and corner tints
@@ -4085,6 +4085,7 @@
     }
     function block(title, hint) { return h('section', { class: 'pd-block' }, h('h3', { text: title }), hint ? h('p', { class: 'small muted', text: hint }) : null); }
     function paint() {
+      var keepTop = body.scrollTop;   // rebuilding the list must not throw the person back to the top
       clear(body);
       var reco = cols.slice(0, 5);
       // background
@@ -4129,6 +4130,7 @@
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Font' }), select('font', PAGE_FONTS, 'Font', 'sans')));
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Corners' }), select('round', PAGE_ROUND, 'Corner shape', 'md')));
       body.appendChild(fB);
+      body.scrollTop = keepTop;
     }
     if (prof.avatarFileId) avatarUrl(prof.avatarFileId).then(paletteFrom).then(function (c) { cols = c; if (!done) paint(); }).catch(function () { /* no suggestions */ });
     async function save(items) {
