@@ -1514,3 +1514,7 @@ video::-webkit-media-text-track-container, video::cue { display: none !important
 .mem-row > .grow { flex: 1 1 140px; min-width: 0; }
 .mem-row > .grow strong { overflow-wrap: anywhere; word-break: normal; }
 .mem-row > .btn { flex: none; }
+
+/* v1.50.15: Saved (bookmark) also lives in the side menu, on desktop only */
+.nav .nav-saved { display: none; }
+@media (min-width: 900px) { .nav .nav-saved { display: list-item; } }

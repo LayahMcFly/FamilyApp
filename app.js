@@ -1417,6 +1417,7 @@
     { id: 'shorts', label: 'Shorts', icon: 'shorts' },
     { id: 'create', label: 'Create', icon: 'plus' },
     { id: 'tree', label: 'Family Tree', icon: 'tree' },
+    { id: 'saved', label: 'Saved', icon: 'bookmark' },
     { id: 'profile', label: 'Profile', icon: 'user' }
   ];
   var VIEWS = {};
@@ -1443,7 +1444,8 @@
     var chatOn = !!(window.FCChat && CFG.chatEnabled !== false);
     var nav = h('nav', { class: 'nav', 'aria-label': 'Main' }, h('ul', null, NAV.map(function (n) {
       if (n.id === 'create' && chatOn) return h('li', { class: 'nav-create' }, window.FCChat.navItem());   // the center item of the same five: its small handle opens the quick-actions panel
-      return h('li', null, h('a', { href: n.href || '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
+      var li = h('li', n.id === 'saved' ? { class: 'nav-saved' } : null, h('a', { href: n.href || '#/' + n.id, 'data-route': n.id }, icon(n.icon), h('span', { text: n.label })));
+      return li;
     })));
     if (chatOn) window.FCChat.mountPanel();
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
