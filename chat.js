@@ -759,9 +759,9 @@
     function close() { document.removeEventListener('keydown', onKey, true); ov.remove(); if (opener && opener.focus) try { opener.focus(); } catch (e) { /* gone */ } }
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === '+' || e.key === '=') zoom(scale * 1.4); else if (e.key === '-') zoom(scale / 1.4); }
     closeB.addEventListener('click', close); outB.addEventListener('click', function () { zoom(scale / 1.5); }); inB.addEventListener('click', function () { zoom(scale * 1.5); });
-    stage.addEventListener('click', function (e) { if (e.target === stage && !drag) close(); });
+    function inImg(x, y) { var r = img.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
+    stage.addEventListener('click', function (e) { if (!inImg(e.clientX, e.clientY) && !(drag && drag.moved)) close(); });
     stage.addEventListener('wheel', function (e) { e.preventDefault(); zoom(scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
-    img.addEventListener('dblclick', function () { zoom(scale > 1 ? 1 : 2.5); });
     stage.addEventListener('pointerdown', function (e) {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { stage.setPointerCapture(e.pointerId); } catch (x) { /* fine */ }
       if (pts.size === 2) { var a = Array.from(pts.values()); pinch0 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); scale0 = scale; drag = null; }
@@ -772,7 +772,16 @@
       if (pts.size === 2 && pinch0) { var a = Array.from(pts.values()); zoom(scale0 * Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) / pinch0); }
       else if (drag) { drag.moved = true; tx = e.clientX - drag.x; ty = e.clientY - drag.y; apply(); }
     });
-    function up(e) { pts.delete(e.pointerId); if (pts.size < 2) pinch0 = 0; if (!pts.size) setTimeout(function () { drag = null; }, 0); }
+    var lastTap = 0, tapX = 0, tapY = 0, wasPinch = false;
+    function up(e) {
+      if (pts.size === 2) wasPinch = true;
+      var tap = e.type === 'pointerup' && pts.size === 1 && !wasPinch && !(drag && drag.moved) && inImg(e.clientX, e.clientY);
+      if (tap) {   // two quick taps on the picture (finger or mouse) zoom in or back out
+        var now = Date.now();
+        if (now - lastTap < 350 && Math.hypot(e.clientX - tapX, e.clientY - tapY) < 30) { zoom(scale > 1 ? 1 : 2.5); lastTap = 0; } else { lastTap = now; tapX = e.clientX; tapY = e.clientY; }
+      }
+      pts.delete(e.pointerId); if (!pts.size) wasPinch = false;
+      if (pts.size < 2) pinch0 = 0; if (!pts.size) setTimeout(function () { drag = null; }, 0); }
     stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(ov); apply(); closeB.focus();
