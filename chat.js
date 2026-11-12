@@ -102,13 +102,17 @@
   function place() {
     if (!panel || !handle) return;
     var r = handle.getBoundingClientRect();
-    if (wide()) { panel.style.left = Math.round(r.right + 10) + 'px'; panel.style.bottom = Math.max(12, Math.round(window.innerHeight - r.bottom - 8)) + 'px'; }
-    else { panel.style.left = ''; panel.style.bottom = ''; }
+    if (wide()) {
+      // Centered beside the button, kept fully on screen.
+      var ph = panel.offsetHeight || 230, top = r.top + r.height / 2 - ph / 2;
+      top = Math.max(12, Math.min(top, window.innerHeight - ph - 12));
+      panel.style.left = Math.round(r.right + 10) + 'px'; panel.style.top = Math.round(top) + 'px'; panel.style.bottom = 'auto';
+    } else { panel.style.left = ''; panel.style.bottom = ''; panel.style.top = ''; }
   }
   function openPanel() {
     if (!panel || panelOpen) return;
     panelOpen = true; lastFocus = document.activeElement;
-    place(); panel.hidden = false; var b = panel.previousSibling; if (b) b.hidden = false;
+    panel.hidden = false; place(); var b = panel.previousSibling; if (b) b.hidden = false;
     handle.setAttribute('aria-expanded', 'true');
     requestAnimationFrame(function () { panel.classList.add('open'); });
     var first = panel.querySelector('a'); if (first) first.focus({ preventScroll: true });
