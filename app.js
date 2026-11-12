@@ -2253,12 +2253,12 @@
       // Comments open as a sheet from the bottom on every kind of post, like Instagram: dimmed page behind, list in the middle, emoji row and box at the bottom.
       var panel = commentsPanel(post, st, paintCmt);
       commentsEl = h('div', { class: 'sheet', role: 'dialog', 'aria-label': 'Comments' },
-        h('div', { class: 'sheet-head' }, h('strong', { text: 'Comments' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Close', onclick: function () { toggleComments('the Close button'); } })), panel);
+        h('div', { class: 'sheet-head' }, h('strong', { text: 'Comments' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Close', onclick: function () { focusAt = 0; toggleComments('the Close button'); } })), panel);
       // The backdrop closes the sheet only for a real tap that STARTED on it. When the phone keyboard opens the layout shifts and the browser can
       // deliver the tap on the text box again at the old spot, which now lands on the backdrop; without a matching press there, that is ignored.
       var pressedBack = 0;
       backEl = h('div', { class: 'sheet-backdrop', onpointerdown: function () { pressedBack = Date.now(); }, onclick: function () { var ok = pressedBack && Date.now() - pressedBack < 1500; pressedBack = 0; if (ok) toggleComments('tap on the dimmed area behind the sheet'); } });
-      commentsEl.addEventListener('focusin', function () { focusAt = Date.now(); });
+      commentsEl.addEventListener('focusin', function (ev) { if (ev.target && /^(TEXTAREA|INPUT)$/.test(ev.target.tagName)) focusAt = Date.now(); });   // only the comment box counts, not the Close button
       card.appendChild(backEl); card.appendChild(commentsEl); paintCmt();
       // [debug] if the page removes the sheet without going through the close code, say so
       (function (sh) { var mo = new MutationObserver(function () { if (!sh.parentNode && !closingSheet) { try { toast('Comments removed by the page itself [debug]'); } catch (e) {} mo.disconnect(); } }); if (card.parentNode) mo.observe(card, { childList: true }); })(commentsEl);
