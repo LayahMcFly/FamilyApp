@@ -13,19 +13,22 @@
     deleteSession: function () { M.signedIn = false; return Promise.resolve({}); },
     updatePrefs: function (a) { M.user.prefs = a.prefs; return Promise.resolve(M.user); }
   }); }
-  function Teams() { return svc({ listMemberships: function () { return Promise.resolve({ memberships: (M.members || []) }); } }); }
+  function Teams() { return svc({ listMemberships: function (a) { var by = M.membersBy && M.membersBy[a && a.teamId]; return Promise.resolve({ memberships: by || (M.members || []) }); } }); }
   function Functions() { return svc({ createExecution: function (a) {
     var body = JSON.parse(a.body || '{}'), act = body.action, out = { ok: true };
     M.log.push('api ' + act + (body.familyId ? ' ' + body.familyId : ''));
-    if (M.api && M.api[act]) { var custom = M.api[act](body); return Promise.resolve({ responseBody: JSON.stringify(Object.assign({ ok: true }, custom)), responseStatusCode: 200 }); }
+    if (M.api && M.api[act]) { var custom = M.api[act](body); if (custom && custom.__deny) return Promise.resolve({ responseBody: JSON.stringify({ ok: false, error: custom.__error || 'forbidden', message: custom.__deny }), responseStatusCode: custom.__code || 403 }); return Promise.resolve({ responseBody: JSON.stringify(Object.assign({ ok: true }, custom)), responseStatusCode: 200 }); }
     if (act === 'chatOpen') { var tag = (body.familyId || '').replace('fam', '').toLowerCase(); out.role = 'owner'; out.channels = [{ id: 'ch-' + tag, name: 'channel-of-' + tag, kind: 'channel' }]; out.dms = []; out.unread = {}; out.blocked = []; out.allowDms = true; }
     if (act === 'listFamilies') { out.families = M.families.filter(function (f) { return !(M.revoked || []).includes(f.id); }); out.canCreateFamily = !!M.canCreateFamily; }
     return Promise.resolve({ responseBody: JSON.stringify(out), responseStatusCode: 200 });
   } }); }
   function TablesDB() { return svc({ listRows: function (a) {
     var fid = null; (a.queries || []).forEach(function (q) { if (q && q.m === 'equal' && q.a[0] === 'familyId') fid = q.a[1][0]; });
+    if (M.failRows && M.failRows[a.tableId + ':' + fid]) return fail(500, 'server_error');
     var rows = ((M.tables || {})[a.tableId] || []).filter(function (r) { return !fid || r.familyId === fid; });
-    return Promise.resolve({ rows: rows, total: rows.length });
+    var out = { rows: rows, total: rows.length };
+    var gate = M.gate && M.gate(a.tableId, fid, a.queries || []);   // a test can hold an answer back and release it later (a late response)
+    return gate ? gate.then(function () { return out; }) : Promise.resolve(out);
   } }); }
   function Storage() { return svc({ getFileView: function (a) { var ep = (window.FAMILY_CONFIG && window.FAMILY_CONFIG.endpoint) || 'https://fake.invalid/v1'; return ep.replace(/\/$/, '') + '/storage/buckets/' + a.bucketId + '/files/' + a.fileId + '/view'; } }); }
   var Query = new Proxy({}, { get: function (t, k) { return function () { return { m: k, a: [].slice.call(arguments) }; }; } });
