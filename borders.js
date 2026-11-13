@@ -153,21 +153,75 @@
     }
     return { E: E, C: C, B: B, T: T };
   }
-  var svgCache = {};
-  function frameSvg(id, c1) {   // a 90 x 90 picture; its corners and sides are cut out by "border-image-slice: 30"
-    var key = id + c1; if (svgCache[key]) return svgCache[key];
-    var f = frameOf(id, c1);
-    function piece(x, inner, tf) { return '<g' + (tf ? ' transform="' + tf + '"' : '') + '><svg x="' + x + '" y="0" width="30" height="30" viewBox="' + x + ' 0 30 30" overflow="hidden">' + inner + '</svg></g>'; }
-    var FLIPY = 'translate(0 90) scale(1 -1)';
-    var defs = id === 'pearls' ? '<defs><radialGradient id="bbpearl" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#f3eadb"/><stop offset="1" stop-color="#d9ccb0"/></radialGradient></defs>' : '';
-    var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'>" + defs + piece(0, f.C) + piece(0, f.T || f.C, 'translate(90 0) scale(-1 1)') + piece(0, f.C, FLIPY) + piece(0, f.C, 'translate(90 90) scale(-1 -1)') + piece(30, f.E) + piece(30, f.B || f.E, FLIPY) + piece(30, f.E, 'matrix(0 1 1 0 0 0)') + piece(30, f.E, 'matrix(0 1 -1 0 90 0)') + '</svg>';
-    svgCache[key] = 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
-    return svgCache[key];
+  /* One picture per button, drawn at the button's real size: the motifs are repeated a whole number of times along each side
+     and the corners join the sides exactly, so there are no seams, gaps or cut-off pieces. */
+  var PEARL_DEFS = '<defs><radialGradient id="bbpearl" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#f3eadb"/><stop offset="1" stop-color="#d9ccb0"/></radialGradient></defs>';
+  function n3(x) { return (Math.round(x * 1000) / 1000); }
+  function frameSvg(id, c1, W, H, ow) {   // returns a url("data:...") for a W x H button with a border band ow px wide, or '' when it is too small
+    var L = W - 2 * ow, T = H - 2 * ow; if (L < 4 || T < 4) return '';
+    var f = frameOf(id, c1), k = ow / 30, nx = Math.max(1, Math.round(L / ow)), ny = Math.max(1, Math.round(T / ow)), tw = L / nx, th = T / ny, sx = tw / 30, sy = th / 30, o = '', i, x, y;
+    for (i = 0; i < nx; i++) {
+      x = ow + i * tw;
+      o += '<g transform="translate(' + n3(x) + ' 0) scale(' + n3(sx) + ' ' + n3(k) + ') translate(-30 0)">' + f.E + '</g>';
+      o += '<g transform="translate(' + n3(x) + ' ' + H + ') scale(' + n3(sx) + ' ' + n3(-k) + ') translate(-30 0)">' + (f.B || f.E) + '</g>';
+    }
+    for (i = 0; i < ny; i++) {
+      y = ow + i * th - th;
+      o += '<g transform="matrix(0 ' + n3(sy) + ' ' + n3(k) + ' 0 0 ' + n3(y) + ')">' + f.E + '</g>';
+      o += '<g transform="matrix(0 ' + n3(sy) + ' ' + n3(-k) + ' 0 ' + W + ' ' + n3(y) + ')">' + f.E + '</g>';
+    }
+    o += '<g transform="scale(' + n3(k) + ')">' + f.C + '</g>';
+    o += '<g transform="translate(' + W + ' 0) scale(' + n3(-k) + ' ' + n3(k) + ')">' + (f.T || f.C) + '</g>';
+    o += '<g transform="translate(0 ' + H + ') scale(' + n3(k) + ' ' + n3(-k) + ')">' + f.C + '</g>';
+    o += '<g transform="translate(' + W + ' ' + H + ') scale(' + n3(-k) + ' ' + n3(-k) + ')">' + f.C + '</g>';
+    var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + W + "' height='" + H + "' viewBox='0 0 " + W + ' ' + H + "'>" + (id === 'pearls' ? PEARL_DEFS : '') + o + '</svg>';
+    return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
   }
 
   /* ---------- put a choice on a page (or on a preview) ---------- */
-  var VARS = ['--bb-c', '--bb-w', '--bb-ow', '--bb-img'];
+  var VARS = ['--bb-c', '--bb-w'];
+  var WATCH = typeof WeakMap === 'function' ? new WeakMap() : null;   // scope -> { cfg, mo }, button -> ResizeObserver
+  function bandFor(node, cfg) {
+    var ow = SIZES[cfg.s || 2];
+    if (node.classList.contains('gal-tab')) ow = Math.min(ow, 14);
+    if (node.closest && node.closest('.pd-preview')) ow = Math.min(ow, 9);
+    return ow;
+  }
+  function paintNode(node, style, cfg) {
+    var ow = bandFor(node, cfg);
+    node.style.setProperty('--bb-eow', ow + 'px');
+    var W = node.offsetWidth, H = node.offsetHeight; if (!W || !H) return;   // hidden for now; drawn when it gets a size
+    var img = frameSvg(style.id, HEX.test(cfg.c || '') ? cfg.c : (style.color || '#c9a46a'), W, H, ow);
+    if (img) { node.style.setProperty('--bb-img', img); node.style.setProperty('--bb-sl', String(ow)); }
+  }
+  function release(el) {
+    var st = WATCH && WATCH.get(el);
+    if (st && st.mo) st.mo.disconnect();
+    Array.prototype.forEach.call(el.querySelectorAll('.bb-t'), function (n) {
+      var ro = WATCH && WATCH.get(n); if (ro) { ro.disconnect(); WATCH.delete(n); }
+      n.style.removeProperty('--bb-img'); n.style.removeProperty('--bb-sl'); n.style.removeProperty('--bb-eow');
+    });
+    if (WATCH) WATCH.delete(el);
+  }
+  function watch(el, style, cfg) {
+    function scan() {
+      Array.prototype.forEach.call(el.querySelectorAll('.bb-t'), function (n) {
+        if (WATCH && WATCH.get(n)) return;
+        paintNode(n, style, cfg);
+        if (typeof ResizeObserver === 'function') {
+          var last = n.offsetWidth + 'x' + n.offsetHeight;
+          var ro = new ResizeObserver(function () { var now = n.offsetWidth + 'x' + n.offsetHeight; if (now !== last) { last = now; paintNode(n, style, cfg); } });
+          ro.observe(n); WATCH.set(n, ro);
+        }
+      });
+    }
+    scan();
+    var mo = typeof MutationObserver === 'function' ? new MutationObserver(function () { scan(); }) : null;   // buttons added a moment later
+    if (mo) mo.observe(el, { childList: true, subtree: true });
+    if (WATCH) WATCH.set(el, { cfg: cfg, mo: mo });
+  }
   function apply(el, cfg) {   // el is the element that holds the buttons; the buttons that take the border carry the class "bb-t"
+    release(el);
     STYLES.forEach(function (s) { el.classList.remove('pb-' + s.id); });
     el.classList.remove('pb-on'); el.classList.remove('pb-svg');
     VARS.forEach(function (v) { el.style.removeProperty(v); });
@@ -175,8 +229,7 @@
     el.classList.add('pb-on'); el.classList.add('pb-' + s.id);
     if (s.kind === 'svg') {
       el.classList.add('pb-svg');
-      el.style.setProperty('--bb-ow', SIZES[cfg.s || 2] + 'px');
-      el.style.setProperty('--bb-img', frameSvg(s.id, HEX.test(cfg.c || '') ? cfg.c : (s.color || '#c9a46a')));
+      watch(el, s, cfg);
     } else {
       el.style.setProperty('--bb-c', HEX.test(cfg.c || '') ? cfg.c : 'var(--text, #222)');
       el.style.setProperty('--bb-w', (cfg.w || (s.w && s.w.def) || 2) + 'px');

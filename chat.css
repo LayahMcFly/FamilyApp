@@ -785,8 +785,8 @@ dialog.cs[open]::backdrop { animation: csFade .3s ease backwards; }
 .pb-gradient .bb-t { border: var(--bb-w) solid transparent !important; background: linear-gradient(var(--surface-2), var(--surface-2)) padding-box, linear-gradient(135deg, var(--fun-a, #ff6bb5), var(--fun-b, #ffb347), var(--fun-c, #5ad1ff)) border-box !important; }
 .pb-stitched .bb-t { border: 2px solid var(--bb-c) !important; }
 .pb-stitched .bb-t::before { content: ""; position: absolute; inset: 4px; border: var(--bb-w) dashed var(--bb-c) !important; border-radius: inherit !important; pointer-events: none; }
-.pb-svg .bb-t { border: var(--bb-ow) solid transparent !important; border-image: var(--bb-img) 30 / var(--bb-ow) round !important; background-clip: padding-box !important; border-radius: 0 !important; min-height: 44px; margin-block: 2px !important; }
-.pb-svg .gal-tab.bb-t { border-width: min(var(--bb-ow), 14px) !important; border-image-width: min(var(--bb-ow), 14px) !important; margin: 0 !important; }
+.pb-svg .bb-t { border: var(--bb-eow, 24px) solid transparent !important; border-image: var(--bb-img) var(--bb-sl, 24) / var(--bb-eow, 24px) stretch !important; background-clip: padding-box !important; border-radius: 0 !important; min-height: 44px; margin-block: 2px !important; }
+.pb-svg .gal-tab.bb-t { margin: 0 !important; }
 .pb-on .bb-t:focus-visible { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 3px; }
 
 /* the picker */
@@ -881,7 +881,6 @@ dialog.designer .pd-actions { padding-top: 6px; }
 dialog.designer { font-size: .9rem; padding-inline: 12px; }
 dialog.designer h2 { font-size: 1.15rem; }
 dialog.designer .pd-preview { zoom: .74; max-height: 38dvh; overflow-y: auto; }
-dialog.designer .pd-preview .pb-svg .gal-tab.bb-t, dialog.designer .pd-preview .pb-svg .btn.bb-t { border-width: 9px !important; border-image-width: 9px !important; }
 dialog.designer .pd-body { gap: 8px; }
 dialog.designer .pd-block { padding: 10px; gap: 6px; }
 dialog.designer .pd-block h3 { font-size: .95rem; }
