@@ -4069,7 +4069,7 @@
   function pageItems(st) { return Object.keys(st).filter(function (k) { return st[k]; }).map(function (k) { return k + ':' + st[k]; }); }
   function applyPageStyle(el, st) {
     if (window.FCBorders) window.FCBorders.apply(el, window.FCBorders.read(st));   // button borders (clears them when none is chosen)
-    ['--pg-bg', '--pg-border', '--pg-bstyle', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--grad', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
+    ['--text', '--pg-bg', '--pg-border', '--pg-bstyle', '--pg-font', '--pg-radius', '--accent', '--on-accent', '--grad', '--fun-a', '--fun-b', '--fun-c'].forEach(function (v) { el.style.removeProperty(v); });
     ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-accent'].forEach(function (cl) { el.classList.remove(cl); });
     if (!st || !Object.keys(st).length) return;
     el.classList.add('pg-custom');
@@ -4079,11 +4079,12 @@
       var rgb = rgbOf(st.accent), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0; el.style.setProperty('--on-accent', lum > 170 ? '#1b1230' : '#fff');
     }
     ['fa', 'fb', 'fc'].forEach(function (k, i) { if (/^#[0-9a-f]{6}$/i.test(st[k] || '')) el.style.setProperty(['--fun-a', '--fun-b', '--fun-c'][i], st[k]); });   // the rainbow ribbon, button glow and corner tints
+    if (/^#[0-9a-f]{6}$/i.test(st.txt || '')) el.style.setProperty('--text', st.txt);   // optional text colour for the whole page
     if (st.font && PAGE_FONTS[st.font]) el.style.setProperty('--pg-font', PAGE_FONTS[st.font][1]);
     el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
-  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
+  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|txt:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
   function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
     var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
     return l.map(function (x) {
@@ -4195,6 +4196,7 @@
       body.appendChild(bbB);
       // font + corners
       var fB = block('Text and corners');
+      fB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Text color (optional)' }), colorInput('txt', 'Text color', '#222222'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('txt', ''); } })));
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Font' }), select('font', PAGE_FONTS, 'Font', 'sans')));
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Corners' }), select('round', PAGE_ROUND, 'Corner shape', 'md')));
       body.appendChild(fB);

@@ -869,6 +869,8 @@ test('page style is stored when valid and refused when not', async () => {
   assert.equal((await save(['btn:lace', 'btnc:#c9a46a', 'btns:3'])).status, 200);
   assert.equal((await save(['btn:classic', 'btnc:#112233', 'btnw:6'])).status, 200);
   assert.equal((await save(['btn:fringe'])).status, 200);
+  assert.equal((await save(['txt:#112233'])).status, 200);
+  assert.equal((await save(['txt:red'])).status, 400);
   assert.equal((await save(['btn:sparkly'])).status, 400);
   assert.equal((await save(['btn:lace', 'btns:4'])).status, 400);
   assert.equal((await save(['btn:lace', 'btnc:url(x)'])).status, 400);
