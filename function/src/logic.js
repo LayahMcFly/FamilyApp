@@ -591,7 +591,8 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       const clean = list.map((c, i) => {
         if (!c || typeof c !== 'object') throw bad('A category is not valid.');
         const title = textOf(c.title ?? '', 'Category name', { min: 1, max: LIMITS.aboutTitleMax });
-        if (!Array.isArray(c.items) || c.items.length > LIMITS.aboutItems) throw bad(`Each category can have up to ${LIMITS.aboutItems} answers.`);
+        const maxItems = c && c.key === 'pagestyle' ? 24 : LIMITS.aboutItems;   // the page look has more settings than a normal category
+        if (!Array.isArray(c.items) || c.items.length > maxItems) throw bad(`Each category can have up to ${maxItems} answers.`);
         const items = c.items.map((x) => textOf(typeof x === 'string' ? x : '', 'Answer', { min: 1, max: LIMITS.aboutItemMax }));
         const key = typeof c.key === 'string' && /^[a-z0-9]{1,20}$/.test(c.key) ? c.key : `c${i}`;
         return { key, title, items };
