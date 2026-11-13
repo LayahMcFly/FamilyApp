@@ -4210,7 +4210,7 @@
       });
       bgB.appendChild(bgRow);
       if (reco.length) bgB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('bg', reco, 'Background')));
-      bgB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Any color' }), colorInput('bg', 'Page background color', '#7c5cff')));
+      bgB.appendChild(colorPalette(/^#/.test(st.bg || '') ? st.bg : '', function (hex) { setKey('bg', hex); }, 'Solid page background color'));
       var hasG = !!(st.gc1 && st.gc2);   // custom two-color gradient: color 1, color 2 and a direction
       var gB = h('div', { class: 'pd-sub' }, h('h4', { class: 'pd-sub-h', text: 'Custom gradient' }));
       if (!hasG) gB.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Make my own gradient', onclick: function () { delete st.bg; st.gc1 = '#ff9a8b'; st.gc2 = '#7c5cff'; delete st.gd; live(); paint(); } }));
@@ -4224,7 +4224,8 @@
       // accent
       var aB = block('Accent color', 'Buttons, tabs and highlights on your page.');
       if (reco.length) aB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('accent', reco, 'Accent')));
-      aB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Any color' }), colorInput('accent', 'Accent color', '#0b84f3'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('accent', ''); } })));
+      aB.appendChild(colorPalette(st.accent, function (hex) { setKey('accent', hex); }, 'Accent color'));
+      aB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('accent', ''); } })));
       body.appendChild(aB);
       // rainbow ribbon colours
       var rB = block('Rainbow colors', 'The colored line on top of your cards, the glow under buttons and the soft tint in the corners.'), rRow = h('div', { class: 'pd-sw', role: 'group', 'aria-label': 'Rainbow presets' });
@@ -4244,7 +4245,9 @@
       body.appendChild(bbB);
       // font + corners
       var fB = block('Text and corners');
-      fB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Text color (optional)' }), colorInput('txt', 'Text color', '#222222'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('txt', ''); } })));
+      fB.appendChild(h('div', { class: 'pd-sub-h', text: 'Text color (optional)' }));
+      fB.appendChild(colorPalette(st.txt, function (hex) { setKey('txt', hex); }, 'Text color'));
+      fB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('txt', ''); } })));
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Font' }), select('font', PAGE_FONTS, 'Font', 'sans')));
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Corners' }), select('round', PAGE_ROUND, 'Corner shape', 'md')));
       body.appendChild(fB);
