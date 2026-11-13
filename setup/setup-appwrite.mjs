@@ -59,6 +59,12 @@ const schema = {
     columns: [S('familyId', 36, true), S('authorId', 36, true), S('personId', 36, false), S('text', 500, true), S('status', 12, true)],
     indexes: [['idx_familyId', 'key', ['familyId']], ['idx_authorId', 'key', ['authorId']], ['idx_status', 'key', ['status']]]
   },
+  // A tree admin's proposed new name for an adult's own tree entry (the adult approves or declines). Rows are written by the function with
+  // read permission for the proposer and that adult only. See FAMILY-TREE-GUIDE.md.
+  nameRequests: {
+    columns: [S('familyId', 36, true), S('personId', 36, true), S('proposerId', 36, true), S('targetUserId', 36, true), S('oldName', 80, true), S('newName', 80, true), S('status', 12, true)],
+    indexes: [['idx_familyId', 'key', ['familyId']], ['idx_targetUserId', 'key', ['targetUserId']], ['idx_proposerId', 'key', ['proposerId']], ['idx_personId', 'key', ['personId']]]
+  },
   // Optional home address. Row id = the owner's user id. No indexes on purpose (nothing can search addresses). Rows are created with NO
   // permissions, so no browser session can read them; only the family-api function can. See ADDRESS-GUIDE.md.
   addresses: {

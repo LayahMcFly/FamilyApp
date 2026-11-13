@@ -185,3 +185,13 @@ If steps 3, 5 and 8 all behave as described, two families are isolated.
 | `function/test/logic.test.js` | Tests for all of the above, including two families. |
 | `setup/setup-appwrite.mjs` | Adds the `parentKinds` column for new installs. |
 | `THIRD-PARTY-NOTICES.md` | Required license notices. |
+
+
+## Changing a person's name (owners, tree admins and approval)
+
+- **Owner:** changes anyone's name in the tree directly. It takes effect at once; nobody is asked.
+- **Tree admin (not an owner):** for a person who has no account, a teen, a child, or an entry with **no birthday**, the name changes at once. For an **adult who has accepted their entry**, the change becomes a **request**. The name stays the same until that adult accepts it. They see it in **Activity** (the bell) with **Accept** and **Decline** buttons. The tree admin sees "Waiting for ...", and later "accepted" or "declined", and can **Take back** a request that is still waiting. A newer request replaces an older one.
+- **Teens and children never approve or decline.** The approval step is for adults only, so a younger person cannot keep an unkind name by declining a correction. Age comes from the birthday on the tree entry. **A missing birthday counts as "not an adult"**, and a birth year alone counts as an adult only when the person is certainly 18 or older. To use the approval step for an adult, give their entry a birthday.
+- **Birthday and gender** of someone who has accepted their entry can still only be changed by that person. This is unchanged.
+- This only renames the **tree entry**. The person's own account name and profile are separate and are not changed.
+- **One extra setup step (needed only for the approval step):** create a table `nameRequests` with **Row security ON** and no table permissions. Columns: `familyId` (String 36, required), `personId` (String 36, required), `proposerId` (String 36, required), `targetUserId` (String 36, required), `oldName` (String 80, required), `newName` (String 80, required), `status` (String 12, required). Indexes: `idx_familyId`, `idx_targetUserId`, `idx_proposerId`, `idx_personId`, each Key, on the column of the same name. The function writes each row with read permission for **only the tree admin who asked and the adult they asked about**. Until the table exists, an owner's direct renames work and a tree admin trying to rename an adult sees a message that one more setup step is needed; nothing changes.

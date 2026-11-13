@@ -2061,6 +2061,18 @@
         items.push({ type: 'join', href: '#/profile/' + m.userId, at: m.joined, text: name + ' accepted the invitation and joined ' + famName() });
       });
     } catch (e) { /* the list of people is not available right now; the other entries still show */ }
+    // Name changes: a tree admin asked to change an adult's name in the tree. I see requests about me (to approve or decline) and my own requests (waiting, accepted, declined).
+    try {
+      var nr = (await listRows('nameRequests', [Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt'), Query.limit(50)])).rows;
+      await ensureProfiles(nr.map(function (r) { return r.proposerId; }));
+      var recent = Date.now() - 30 * 86400000;
+      nr.forEach(function (r) {
+        var done = r.status === 'accepted' || r.status === 'rejected';
+        if (r.targetUserId === me && r.status === 'open') items.push({ type: 'namereq', req: r, urgent: true, at: r.$createdAt, text: nm(r.proposerId) + ' wants to change your name in the family tree from \u201c' + r.oldName + '\u201d to \u201c' + r.newName + '\u201d.' });
+        else if (r.proposerId === me && r.status === 'open') items.push({ type: 'namewait', req: r, at: r.$createdAt, text: 'Waiting for ' + r.oldName + ' to approve the new name \u201c' + r.newName + '\u201d.' });
+        else if (r.proposerId === me && done && new Date(r.$updatedAt || r.$createdAt).getTime() > recent) items.push({ type: 'namedone', href: '#/tree', at: r.$updatedAt || r.$createdAt, text: r.oldName + (r.status === 'accepted' ? ' accepted' : ' declined') + ' the new name \u201c' + r.newName + '\u201d.' });
+      });
+    } catch (e) { /* the name-request table is not set up yet, or not available right now: the other entries still show */ }
     items.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     return items.slice(0, 60);
   }
@@ -2080,13 +2092,37 @@
     try {
       var items = await getActivity(), seen = seenAt();
       if (gen0 !== S.famGen) return;   // I switched family (or lost access) while this was loading: do not show the old family's count
-      setBadge(items.filter(function (i) { return new Date(i.at).getTime() > seen; }).length);
+      setBadge(items.filter(function (i) { return i.urgent || new Date(i.at).getTime() > seen; }).length);   // a name change waiting for my answer counts until I answer it
     } catch (e) { /* quiet */ }
+  }
+
+  // One name-change entry in Activity. I can approve or decline a request about me, or take back one I made.
+  function nameRequestItem(it, fresh) {
+    var r = it.req, mineToAnswer = it.type === 'namereq';
+    var row = h('div', { class: 'act-item act-name' + (fresh ? ' fresh' : ''), role: 'group', 'aria-label': 'Name change in the family tree' });
+    var msg = h('p', { class: 'small', role: 'status' });
+    function send(btn, action, extra, okText) {
+      busy(btn, async function () {
+        try {
+          await api(action, Object.assign({ familyId: S.familyId, requestId: r.$id }, extra));
+          S.tree = null; S.badgeAt = 0; toast(okText);
+          if (row.parentNode) row.parentNode.removeChild(row);
+          refreshBadge(true);
+        } catch (e) { showAlert(msg, 'error', errText(e)); }
+      }, 'Saving…');
+    }
+    var yes = mineToAnswer ? h('button', { class: 'btn small', type: 'button', text: 'Accept', 'aria-label': 'Accept the new name ' + r.newName, onclick: function () { send(yes, 'treeNameRespond', { accept: true }, 'Your name in the tree is now ' + r.newName + '.'); } }) : null;
+    var no = mineToAnswer ? h('button', { class: 'btn secondary small', type: 'button', text: 'Decline', 'aria-label': 'Decline the new name ' + r.newName, onclick: function () { send(no, 'treeNameRespond', { accept: false }, 'Declined. Your name stays the same.'); } }) : null;
+    var back = mineToAnswer ? null : h('button', { class: 'btn secondary small', type: 'button', text: 'Take back', 'aria-label': 'Take back the name change request for ' + r.oldName, onclick: function () { send(back, 'treeNameCancel', {}, 'Request taken back.'); } });
+    row.appendChild(h('span', { class: 'act-ico' }, icon('pencil')));
+    row.appendChild(h('div', { class: 'grow' }, h('span', { class: 'act-text', text: it.text }), h('div', { class: 'row' }, yes, no, back), msg));
+    row.appendChild(h('span', { class: 'small muted', text: timeAgo(it.at) }));
+    return row;
   }
 
   VIEWS.activity = async function (main, token) {
     main.appendChild(h('h1', { text: 'Activity' }));
-    main.appendChild(h('p', { class: 'muted small', text: 'Likes and comments on your posts, likes on your comments, when a post of yours is trending, and when someone new joins the family. These show while the app is open; the app cannot send alerts when it is closed.' }));
+    main.appendChild(h('p', { class: 'muted small', text: 'Likes and comments on your posts, likes on your comments, when a post of yours is trending, and when someone new joins the family, and name changes in the family tree. These show while the app is open; the app cannot send alerts when it is closed.' }));
     var box = h('div', { class: 'activity' }, spinnerLine('Loading…'));
     main.appendChild(box);
     var items = await getActivity();
@@ -2095,9 +2131,10 @@
     clear(box);
     if (!items.length) box.appendChild(h('div', { class: 'empty' }, h('p', { text: 'Nothing yet. When someone likes or comments on your post, or a new person joins the family, it shows up here.' })));
     items.forEach(function (it) {
-      var fresh = new Date(it.at).getTime() > seen;
+      var fresh = it.urgent || new Date(it.at).getTime() > seen;
+      if (it.type === 'namereq' || it.type === 'namewait') { box.appendChild(nameRequestItem(it, fresh)); return; }
       box.appendChild(h('a', { class: 'act-item' + (fresh ? ' fresh' : ''), href: it.href || ('#/post/' + it.postId) },
-        h('span', { class: 'act-ico' }, icon(it.type === 'comment' ? 'comment' : it.type === 'trend' ? 'flame' : it.type === 'join' ? 'users' : 'heart')),
+        h('span', { class: 'act-ico' }, icon(it.type === 'comment' ? 'comment' : it.type === 'trend' ? 'flame' : it.type === 'join' ? 'users' : it.type === 'namedone' ? 'pencil' : 'heart')),
         h('span', { class: 'act-text', text: it.text }),
         h('span', { class: 'small muted', text: timeAgo(it.at) })));
     });
@@ -2113,7 +2150,7 @@
     });
     main.appendChild(h('div', { class: 'row' }, demoBtn)); main.appendChild(demo);
     var now = new Date().toISOString();
-    S.badgeAt = Date.now(); setBadge(0);
+    S.badgeAt = Date.now(); setBadge(items.filter(function (i) { return i.urgent; }).length);
     try { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { notifSeen: now }) }); } catch (e) { /* badge will return; harmless */ }
   };
 
@@ -3833,6 +3870,15 @@
     if (p.gender) bits.push(p.gender);
     if (a && a.n >= 0) bits.push((a.approx ? 'about ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'under 1') : a.n + ' years old'));
     return bits.join(' \u00B7 ');
+  }
+  // Same rule as the server: approving a name change is for adults. No birthday = not an adult; a year alone counts only when certainly 18 or older.
+  function isAdultEntry(birthday) {
+    var b = String(birthday || ''), now = new Date();
+    if (/^\d{4}$/.test(b)) return now.getUTCFullYear() - Number(b) >= 19;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b)) return false;
+    var m = Number(b.slice(5, 7)), d = Number(b.slice(8, 10)), age = now.getUTCFullYear() - Number(b.slice(0, 4));
+    if (now.getUTCMonth() + 1 < m || (now.getUTCMonth() + 1 === m && now.getUTCDate() < d)) age -= 1;
+    return age >= 18;
   }
   function canEditTree() { return !!(S.isOwner || (S.profile && S.profile.treeAdmin === true)); }
   function famName() { var f = currentFamily(); return f ? f.name : 'this family'; }
@@ -5646,8 +5692,8 @@
     var name = h('input', { type: 'text', maxlength: 80, 'aria-label': 'Name', id: 'pname' });
     name.value = p ? p.name : '';
     var meId = S.user.$id, isSelf = !!(p && p.userId === meId), admin = canEditTree();
-    var locked = !!(p && p.userId && p.confirmed && !isSelf);   // after they accept, their name, gender and birthday are theirs alone
-    if (locked) name.disabled = true;
+    var locked = !!(p && p.userId && p.confirmed && !isSelf);   // after they accept, their gender and birthday are theirs alone. Their name: an owner changes it directly; a tree admin's change to an adult's name needs that adult's approval.
+    var nameNeedsOk = locked && !S.isOwner && isAdultEntry(p.birthday);
     var bd = h('input', { type: 'date', id: 'pbday', 'aria-label': 'Birthday' }); bd.value = p && p.birthday && String(p.birthday).length === 10 ? p.birthday : '';
     var gd = h('select', { id: 'pgender', 'aria-label': 'Gender' }, [['', 'Not set'], ['Female', 'Female'], ['Male', 'Male'], ['Nonbinary', 'Nonbinary'], ['Other', 'Other']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
     gd.value = p ? (p.gender || '') : '';
@@ -5759,11 +5805,12 @@
           if (!p || partnerList.slice().sort().join(',') !== prt.slice().sort().join(',')) payload.partnerIds = partnerList;
           }
           var id;
-          if (p) { payload.personId = p.$id; await api('treeEditPerson', payload); id = p.$id; }
+          var res = null;
+          if (p) { payload.personId = p.$id; res = await api('treeEditPerson', payload); id = p.$id; }
           else {
             id = (await api('treeAddPerson', payload)).personId;
           }
-          close(); toast('Saved.'); done(id);
+          close(); toast(res && res.pendingName ? 'Request sent. ' + p.name + ' will be asked to approve the new name. It stays the same until they accept.' : 'Saved.'); done(id);
         } catch (e) { showAlert(msg, 'error', errText(e)); }
       }, 'Saving…');
     } }, h('h2', { id: 'dlg-title', text: p ? 'Edit ' + p.name : (preset && preset.of ? 'Add ' + ({ parent: 'a parent', child: 'a child', partner: 'a partner', sibling: 'a sibling' }[preset.relation] || 'a relative') + ' of ' + preset.of.name : 'Add a person') }),
@@ -5775,7 +5822,11 @@
       h('div', { class: 'new-only' }, h('label', { for: 'pname', text: 'Name' }), name),
       h('div', { class: 'new-only' }, h('label', { for: 'pgender', text: 'Gender' }), gd),
       h('div', { class: 'new-only' }, h('label', { for: 'pbday', text: 'Birthday' }), bd),
-      locked ? h('p', { class: 'hint', text: 'Only ' + p.name + ' can change their name, gender and birthday, because it is their account.' }) : null,
+      locked ? h('p', { class: 'hint', text: S.isOwner
+        ? 'As an owner you can change this name and it changes right away. Only ' + p.name + ' can change their gender and birthday, because it is their account.'
+        : nameNeedsOk
+          ? 'If you change this name, ' + p.name + ' is asked to approve it. The name stays the same until they accept. Only ' + p.name + ' can change their gender and birthday, because it is their account.'
+          : 'This name changes right away. Only ' + p.name + ' can change their gender and birthday, because it is their account.' }) : null,
       (noOthers && !presetOn) ? h('p', { class: 'hint', text: 'No one else is in the tree yet. Add the first person, then add others.' }) : null,
       presetOn ? null : h('div', null, h('strong', { text: 'Parents' }), parentRows, addParentBtn,
         h('p', { class: 'hint', text: 'List everyone who is a parent to this person, and say how: birth, adoptive, step, foster or guardian. The tree can draw two parents at a time, so the tree page lets you switch between birth parents and the parents who raised them.' })),

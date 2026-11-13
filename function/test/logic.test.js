@@ -657,9 +657,10 @@ test('inviting a relative: relationship, details, claim on accept, and the invit
   assert.equal(claim.json.claimed, true);
   assert.equal(s.world.tables.people.get(r.json.personId).userId, 'bob');
   assert.equal(s.world.tables.people.get(r.json.personId).confirmed, true);
-  // Alice (inviter, owner) can no longer change his name, gender or birthday
+  // Alice (inviter, owner) can no longer change his gender or birthday. His NAME she may still change directly as owner (new rule; a tree admin would need his approval).
   const edit = (u, b) => s.call(u, { action: 'treeEditPerson', familyId: 'famA', personId: r.json.personId, ...b });
-  assert.equal((await edit(s.alice, { name: 'Robert' })).status, 403);
+  assert.equal((await edit(s.alice, { name: 'Roberto' })).status, 200);
+  assert.equal(s.world.tables.people.get(r.json.personId).name, 'Roberto');
   assert.equal((await edit(s.alice, { gender: 'Female' })).status, 403);
   // Bob can change everything about himself
   assert.equal((await edit(s.bob, { name: 'Robert', birthday: '2015-07-01', gender: 'Other' })).status, 200);
@@ -884,4 +885,140 @@ test('page style is stored when valid and refused when not', async () => {
   assert.equal((await save(['bg:red'])).status, 400);
   assert.equal((await save(['bwidth:9'])).status, 400);
   assert.equal((await save(['font:serif', 'font:mono'])).status, 400);
+});
+
+/* ---------- tree name changes: owner direct, tree admin by approval (adults only) ---------- */
+async function renameWorld() {
+  const w = makeWorld();
+  w.addTeam('famA', 'The Smiths', [owner('alice'), member('bob'), member('cara'), member('teen'), member('dan')]);
+  const users = { alice: w.user('alice'), bob: w.user('bob'), cara: w.user('cara'), teen: w.user('teen'), dan: w.user('dan') };
+  assert.equal((await w.call(users.alice, { action: 'registerFamily', teamId: 'famA' })).status, 200);
+  for (const [k, n] of [['alice', 'Alice'], ['bob', 'Bob'], ['cara', 'Cara'], ['teen', 'Teen'], ['dan', 'Dan']]) await w.call(users[k], { action: 'saveProfile', familyId: 'famA', displayName: n });
+  assert.equal((await w.call(users.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob' })).status, 200);
+  const add = async (b) => (await w.call(users.alice, { action: 'treeAddPerson', familyId: 'famA', ...b })).json.personId;
+  const ids = {
+    cara: await add({ name: 'Cara Smith', userId: 'cara', birthday: '1985-04-02' }),          // adult, linked
+    teen: await add({ name: 'Tee Smith', userId: 'teen', birthday: '2015-06-30' }),           // child, linked
+    dan: await add({ name: 'Dan Smith', userId: 'dan' }),                                     // linked, no birthday (unknown age)
+    gma: await add({ name: 'Grandma Rose', birthday: '1950-01-01' })                          // no account
+  };
+  for (const k of ['cara', 'teen', 'dan']) assert.equal((await w.call(users[k], { action: 'treeConfirm', familyId: 'famA', personId: ids[k] })).status, 200);
+  const edit = (u, personId, b) => w.call(u, { action: 'treeEditPerson', familyId: 'famA', personId, ...b });
+  const reqs = () => [...w.world.tables.nameRequests.values()];
+  return { ...w, ...users, ids, edit, reqs };
+}
+
+test('names: the owner renames anyone directly, even an adult who has accepted their entry, with no request', async () => {
+  const s = await renameWorld();
+  const r = await s.edit(s.alice, s.ids.cara, { name: 'Cara Jones' });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.pendingName, undefined);
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Jones');
+  assert.equal(s.reqs().length, 0);
+});
+
+test('names: a tree admin\'s change to an adult\'s name waits for that adult; nothing changes until they accept', async () => {
+  const s = await renameWorld();
+  const r = await s.edit(s.bob, s.ids.cara, { name: 'Cara Jones' });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.pendingName.to, 'Cara Jones');
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Smith');            // unchanged
+  const row = s.reqs()[0];
+  assert.deepEqual([row.status, row.oldName, row.newName, row.targetUserId, row.proposerId], ['open', 'Cara Smith', 'Cara Jones', 'cara', 'bob']);
+  // only the proposer and the adult can read it
+  assert.deepEqual([...row.$permissions].sort(), [Permission.read(Role.user('bob')), Permission.read(Role.user('cara'))].sort());
+  // someone else cannot answer it, not even the owner or the proposer
+  for (const who of [s.alice, s.bob, s.dan, s.teen]) assert.equal((await s.call(who, { action: 'treeNameRespond', familyId: 'famA', requestId: row.$id, accept: true })).status, 403);
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Smith');
+  // the adult accepts
+  const ok = await s.call(s.cara, { action: 'treeNameRespond', familyId: 'famA', requestId: row.$id, accept: true });
+  assert.equal(ok.status, 200);
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Jones');
+  assert.equal(s.reqs()[0].status, 'accepted');
+  // answering twice is refused
+  assert.equal((await s.call(s.cara, { action: 'treeNameRespond', familyId: 'famA', requestId: row.$id, accept: false })).status, 409);
+});
+
+test('names: declining keeps the name; a newer request replaces an older one; the proposer can take one back', async () => {
+  const s = await renameWorld();
+  await s.edit(s.bob, s.ids.cara, { name: 'Cara A' });
+  await s.edit(s.bob, s.ids.cara, { name: 'Cara B' });
+  const [first, second] = s.reqs();
+  assert.equal(first.status, 'replaced');
+  assert.equal(second.status, 'open');
+  assert.equal((await s.call(s.cara, { action: 'treeNameRespond', familyId: 'famA', requestId: first.$id, accept: true })).status, 409);   // replaced
+  const no = await s.call(s.cara, { action: 'treeNameRespond', familyId: 'famA', requestId: second.$id, accept: false });
+  assert.equal(no.json.status, 'rejected');
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Smith');
+  // cancel: only the proposer, only while open
+  await s.edit(s.bob, s.ids.cara, { name: 'Cara C' });
+  const third = s.reqs()[2];
+  assert.equal((await s.call(s.alice, { action: 'treeNameCancel', familyId: 'famA', requestId: third.$id })).status, 403);
+  assert.equal((await s.call(s.bob, { action: 'treeNameCancel', familyId: 'famA', requestId: third.$id })).json.status, 'cancelled');
+  assert.equal((await s.call(s.cara, { action: 'treeNameRespond', familyId: 'famA', requestId: third.$id, accept: true })).status, 409);
+  // a request about another family is not found
+  s.addTeam('famB', 'Other', [owner('carol')]);
+  assert.equal((await s.call(s.user('carol'), { action: 'registerFamily', teamId: 'famB' })).status, 200);
+  assert.equal((await s.call(s.user('carol'), { action: 'treeNameRespond', familyId: 'famB', requestId: third.$id, accept: true })).status, 404);
+});
+
+test('names: teens, children and entries with no birthday cannot accept or decline; their names are changed directly', async () => {
+  const s = await renameWorld();
+  // child (born 2015) and unknown age (no birthday): the tree admin changes the name at once, no request is created
+  for (const k of ['teen', 'dan']) {
+    const r = await s.edit(s.bob, s.ids[k], { name: k + ' renamed' });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.pendingName, undefined);
+    assert.equal(s.world.tables.people.get(s.ids[k]).name, k + ' renamed');
+  }
+  assert.equal(s.reqs().length, 0);
+  // even a request row that somehow exists for a child cannot be answered by the child
+  s.world.tables.nameRequests.set('forged', { $id: 'forged', familyId: 'famA', personId: s.ids.teen, proposerId: 'bob', targetUserId: 'teen', oldName: 'x', newName: 'Mean name', status: 'open' });
+  assert.equal((await s.call(s.teen, { action: 'treeNameRespond', familyId: 'famA', requestId: 'forged', accept: true })).status, 403);
+  assert.equal(s.world.tables.people.get(s.ids.teen).name, 'teen renamed');
+  // a birth year alone counts as an adult only when they are certainly 18 or older
+  const y = new Date().getUTCFullYear();
+  s.world.tables.people.get(s.ids.dan).birthday = String(y - 18);    // might be 17 still: not adult
+  assert.equal((await s.edit(s.bob, s.ids.dan, { name: 'Dan 18' })).json.pendingName, undefined);
+  s.world.tables.people.get(s.ids.dan).birthday = String(y - 19);    // certainly adult
+  assert.equal((await s.edit(s.bob, s.ids.dan, { name: 'Dan 19' })).json.pendingName.to, 'Dan 19');
+});
+
+test('names: no approval step where nobody can approve; self-edits stay direct; birthday and gender stay locked', async () => {
+  const s = await renameWorld();
+  // an entry with no account: a tree admin renames it directly
+  const g = await s.edit(s.bob, s.ids.gma, { name: 'Grandma R.' });
+  assert.equal(g.status, 200); assert.equal(s.world.tables.people.get(s.ids.gma).name, 'Grandma R.');
+  // Cara renames her own entry directly
+  assert.equal((await s.edit(s.cara, s.ids.cara, { name: 'Cara Own' })).status, 200);
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Own');
+  // nobody but the person changes a linked person's birthday or gender, owner included
+  for (const who of [s.alice, s.bob]) {
+    assert.equal((await s.edit(who, s.ids.cara, { birthday: '1990-01-01' })).status, 403);
+    assert.equal((await s.edit(who, s.ids.cara, { gender: 'Female' })).status, 403);
+  }
+  // a plain member cannot rename anyone
+  assert.equal((await s.edit(s.dan, s.ids.cara, { name: 'Nope' })).status, 403);
+  // the same name is not a change and makes no request
+  assert.equal((await s.edit(s.bob, s.ids.cara, { name: 'Cara Own' })).json.pendingName, undefined);
+  assert.equal(s.reqs().length, 0);
+});
+
+test('names: if the table is not set up yet the tree admin gets a clear message and the name is unchanged', async () => {
+  const s = await renameWorld();
+  s.world.rejectColumns.push('newName');
+  const r = await s.edit(s.bob, s.ids.cara, { name: 'Cara Jones' });
+  assert.equal(r.status, 400);
+  assert.match(r.json.message, /nameRequests table/);
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Smith');
+});
+
+test('names: if the adult is unlinked before answering, the request expires and nothing changes', async () => {
+  const s = await renameWorld();
+  await s.edit(s.bob, s.ids.cara, { name: 'Cara Jones' });
+  assert.equal((await s.call(s.cara, { action: 'treeConfirm', familyId: 'famA', personId: s.ids.cara, confirm: false })).status, 200);
+  const res = await s.call(s.cara, { action: 'treeNameRespond', familyId: 'famA', requestId: s.reqs()[0].$id, accept: true });
+  assert.equal(res.status, 409);
+  assert.equal(s.reqs()[0].status, 'expired');
+  assert.equal(s.world.tables.people.get(s.ids.cara).name, 'Cara Smith');
 });

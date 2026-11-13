@@ -23,6 +23,7 @@ export const TABLES = {
   bookmarks: 'bookmarks',
   people: 'people',
   suggestions: 'suggestions',
+  nameRequests: 'nameRequests',   // a tree admin's proposed new name for an adult's own tree entry; only the proposer and that adult can read a row
   addresses: 'addresses',      // private home addresses: NO client permissions at all, only this function reads or writes them
   shopDesigns: 'shopDesigns'   // optional shop: its print files share this bucket, so the cleanup must not delete them
 };
@@ -225,6 +226,19 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
     const prof = await firstRow(TABLES.profiles, [Query.equal('profileKey', [`${ctx.familyId}_${user.$id}`])]);
     if (!prof || prof.treeAdmin !== true) throw forbidden('Only the family owner or a tree admin can change the family tree. You can send a suggestion instead.');
   }
+  // Approval of a name change is for adults only. Age comes from the birthday on the tree entry. A missing birthday counts as NOT adult
+  // (unknown age is treated like a minor); a year alone counts as adult only when the person is certainly 18 or older.
+  function isAdultEntry(birthday, now = new Date()) {
+    const b = String(birthday || '');
+    if (/^\d{4}$/.test(b)) return now.getUTCFullYear() - Number(b) >= 19;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b)) return false;
+    const [y, m, d] = b.split('-').map(Number);
+    let age = now.getUTCFullYear() - y;
+    if (now.getUTCMonth() + 1 < m || (now.getUTCMonth() + 1 === m && now.getUTCDate() < d)) age -= 1;
+    return age >= 18;
+  }
+  const needsSetup = (e) => (sdkCode(e) === 404 || sdkCode(e) === 400)
+    ? bad('Name approval needs one more setup step: add the nameRequests table (see the Family Tree Guide).') : e;
   // Personal details on a tree entry: birthday ("2015-06-30" or just a year) and gender. Stored only when given.
   function cleanBirthday(v) {
     if (v === undefined || v === null || v === '') return '';
@@ -810,15 +824,25 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
       if (!p) throw missing('That person is not in this family tree.');
       const isSelf = p.userId === user.$id;
       if (!isSelf) await requireTreeAdmin(user, ctx);
-      // Once a person has accepted (their entry is linked and confirmed), their own details are theirs alone.
+      // Once a person has accepted (their entry is linked and confirmed), their birthday and gender are theirs alone.
+      // Their NAME: the owner may change it directly. A tree admin's change to an ADULT's name is only a request the person
+      // approves or declines. Teens, children and entries with no birthday cannot approve or decline, so an owner or tree admin
+      // changes those names directly.
       const locked = !!(p.userId && p.confirmed === true && !isSelf);
-      if (locked && (body.name !== undefined && body.name !== p.name || body.birthday !== undefined && String(body.birthday || '') !== String(p.birthday || '') || body.gender !== undefined && String(body.gender || '') !== String(p.gender || ''))) {
-        throw forbidden(`Only ${p.name} can change their own name, gender and birthday, because it is their account.`);
+      if (locked && (body.birthday !== undefined && String(body.birthday || '') !== String(p.birthday || '') || body.gender !== undefined && String(body.gender || '') !== String(p.gender || ''))) {
+        throw forbidden(`Only ${p.name} can change their own gender and birthday, because it is their account.`);
       }
       const data = {};
       const extras = {};
+      let pendingName = null;
+      if (body.name !== undefined) {
+        const newName = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
+        if (newName !== p.name) {
+          if (locked && !ctx.isOwner && isAdultEntry(p.birthday)) pendingName = newName;   // approval path (written after the other edits succeed)
+          else data.name = newName;
+        }
+      }
       if (!locked) {
-        if (body.name !== undefined) data.name = textOf(body.name, 'Name', { min: 1, max: LIMITS.personNameMax });
         if (body.birthday !== undefined) extras.birthday = cleanBirthday(body.birthday);
         if (body.gender !== undefined) extras.gender = cleanGender(body.gender);
       }
@@ -851,7 +875,52 @@ export function createApi({ users, teams, db, storage, cfg, now = () => Date.now
         for (const pid of partners.filter((x) => !before.includes(x))) await addPartner(all, pid, p.$id);
         for (const pid of before.filter((x) => !partners.includes(x))) await dropPartner(all, pid, p.$id);
       }
+      if (pendingName) {
+        try {
+          const open = await listRows(TABLES.nameRequests, [Query.equal('familyId', [ctx.familyId]), Query.equal('personId', [p.$id]), Query.equal('status', ['open']), Query.limit(25)]);
+          for (const r of open.rows) await updateRow(TABLES.nameRequests, r.$id, { status: 'replaced' });   // a newer request replaces an older one
+          const row = await createRow(TABLES.nameRequests, ID.unique(),
+            { familyId: ctx.familyId, personId: p.$id, proposerId: user.$id, targetUserId: p.userId, oldName: p.name, newName: pendingName, status: 'open' },
+            [Permission.read(Role.user(p.userId)), Permission.read(Role.user(user.$id))]);
+          return { ok: true, pendingName: { requestId: row.$id, to: pendingName } };
+        } catch (e) { throw needsSetup(e); }
+      }
       return { ok: true };
+    },
+
+    /** The adult whose name a tree admin wants to change says yes or no. Teens, children and unknown ages cannot (an owner or tree admin changes those directly). */
+    async treeNameRespond({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      let r;
+      try { r = await getRowOrNull(TABLES.nameRequests, idOf(body.requestId, 'requestId')); } catch (e) { throw needsSetup(e); }
+      if (!r || r.familyId !== ctx.familyId) throw missing('That name change was not found.');
+      if (r.targetUserId !== user.$id) throw forbidden('This name change is not about you.');
+      if (r.status !== 'open') throw new ApiError(409, 'closed', 'That name change has already been answered or replaced.');
+      const p = await getRowOrNull(TABLES.people, r.personId);
+      if (!p || p.userId !== user.$id || p.confirmed !== true) {
+        await updateRow(TABLES.nameRequests, r.$id, { status: 'expired' });
+        throw new ApiError(409, 'closed', 'That tree entry is no longer linked to your account.');
+      }
+      if (!isAdultEntry(p.birthday)) throw forbidden('Only adults can approve or decline a name change.');
+      if (body.accept === true) {
+        await updateRow(TABLES.people, p.$id, { name: textOf(r.newName, 'Name', { min: 1, max: LIMITS.personNameMax }) });
+        await updateRow(TABLES.nameRequests, r.$id, { status: 'accepted' });
+        return { status: 'accepted', name: r.newName };
+      }
+      await updateRow(TABLES.nameRequests, r.$id, { status: 'rejected' });
+      return { status: 'rejected' };
+    },
+
+    /** The tree admin who asked can take the request back while it is still open. */
+    async treeNameCancel({ user, body }) {
+      const ctx = await requireMember(user, body.familyId);
+      let r;
+      try { r = await getRowOrNull(TABLES.nameRequests, idOf(body.requestId, 'requestId')); } catch (e) { throw needsSetup(e); }
+      if (!r || r.familyId !== ctx.familyId) throw missing('That name change was not found.');
+      if (r.proposerId !== user.$id) throw forbidden('Only the person who asked can take this request back.');
+      if (r.status !== 'open') throw new ApiError(409, 'closed', 'That name change has already been answered or replaced.');
+      await updateRow(TABLES.nameRequests, r.$id, { status: 'cancelled' });
+      return { status: 'cancelled' };
     },
 
     async treeDeletePerson({ user, body }) {

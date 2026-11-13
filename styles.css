@@ -610,6 +610,8 @@ dialog form input[type="text"] { margin: 8px 0; }
 .activity { display: flex; flex-direction: column; }
 .act-item { display: flex; align-items: center; gap: 12px; padding: 12px 8px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; }
 .act-item.fresh { background: var(--surface-2); }
+.act-name { align-items: flex-start; }
+.act-name .row { margin-top: 8px; gap: 8px; flex-wrap: wrap; }
 .act-ico { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 50%; background: var(--surface-2); flex: none; }
 .act-ico svg { width: 18px; height: 18px; }
 .act-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
