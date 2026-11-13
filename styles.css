@@ -1605,6 +1605,14 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .hub-original { border-style: dashed; }
 .hub-ext { flex: none; color: var(--muted); }
 .hub-ext svg { width: 18px; height: 18px; }
+.hub-grid > li { display: flex; flex-direction: column; gap: 8px; }
+.hub-grid > li > .hub-card { flex: 1 1 auto; }
+button.hub-card { box-sizing: border-box; font: inherit; text-align: left; width: 100%; cursor: pointer; }
+.hub-planned { border-style: dotted; }
+.main[data-view="hub"] .hub-grid > li > .hub-card { height: auto; }   /* cards share a row's height via flex, so a opened note never spills outside its cell */
+.hub-badge { align-self: flex-start; margin: 2px 0; padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: .75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text); background: var(--surface-2); }
+.hub-note { margin: 0; padding: 10px 14px; border-left: 3px solid var(--accent); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: .92rem; }
+.hub-note[hidden] { display: none; }
 .hub-back { margin: 0 12px 8px; }
 .hub-back .back-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
 /* the arrow is drawn by .back-btn::before, so the link holds text only */
