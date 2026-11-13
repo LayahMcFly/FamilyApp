@@ -4605,7 +4605,13 @@
     });
     // Banner: a colour, or a picture / looping GIF. Saved as soon as it is chosen, like the profile picture.
     var banBox = h('div', { class: 'ban-edit' }), banFile = h('input', { id: 'newBanner', type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', 'aria-label': 'Choose a banner picture' });
-    var banColor = h('input', { type: 'color', id: 'banColor', 'aria-label': 'Banner colour' }); banColor.value = (bannerValue(S.profile) && bannerValue(S.profile).color) || '#7c5cff';
+    var banPal = h('div', { class: 'ban-pal' });
+    async function pickBannerColor(col, btn) {   // a picture banner is deleted when a colour replaces it, so ask first
+      var bv = bannerValue(S.profile);
+      if (bv && bv.type === 'file' && !(await confirmDialog('Switch to a colour?', 'Your banner picture will be deleted and replaced by this colour. This cannot be undone.', 'Switch'))) return;
+      busy(btn || banPal, async function () { try { await saveBanner('color:' + col); paintBanPal(); toast('Banner saved.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); } });
+    }
+    function paintBanPal() { var bv = bannerValue(S.profile); clear(banPal); banPal.appendChild(colorPalette(bv && bv.type === 'color' ? bv.color : '', function (hex) { pickBannerColor(hex); }, 'Banner color')); }
     var banRemove = h('button', { class: 'btn secondary small', type: 'button', text: 'No banner (remove it for everyone)' });
     var banReco = h('div', { class: 'ban-reco', role: 'group', 'aria-label': 'Colours from your picture' });
     if (S.profile.avatarFileId) avatarUrl(S.profile.avatarFileId).then(paletteFrom).then(function (cols) {
@@ -4614,23 +4620,21 @@
       cols.forEach(function (col) {
         var sw = h('button', { class: 'ban-sw', type: 'button', 'aria-label': 'Use the colour ' + col + ' for the banner', title: col });
         sw.style.setProperty('background-color', col);
-        sw.addEventListener('click', function () { banColor.value = col; busy(sw, async function () { try { await saveBanner('color:' + col); toast('Banner saved.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); } }); });
+        sw.addEventListener('click', function () { pickBannerColor(col, sw); });
         banReco.appendChild(sw);
       });
     }).catch(function () { /* no suggestions */ });
-    var banUseColor = h('button', { class: 'btn secondary small', type: 'button', text: 'Use this colour' });
     function paintBanner() { clear(banBox); banBox.appendChild(bannerEl(S.profile, 'on-page', true) || h('div', { class: 'banner on-page banner-empty', text: 'No banner yet' })); }
-    paintBanner();
+    paintBanner(); paintBanPal();
     async function saveBanner(item) {
       var list = visibleAbout(S.profile).concat(hiddenCats(S.profile, [BANNER_KEY]), item ? [{ key: BANNER_KEY, title: 'Banner', items: [item] }] : []);
       var r = await api('saveAbout', { familyId: fid, about: list });
-      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); paintBanner();
+      S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile); paintBanner(); paintBanPal();
     }
-    banUseColor.addEventListener('click', function () { busy(banUseColor, async function () {
-      try { await saveBanner('color:' + banColor.value.toLowerCase()); toast('Banner saved.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); }
-    }); });
-    banRemove.addEventListener('click', function () {
-      if (!bannerValue(S.profile)) return toast('You have no banner to remove.');
+    banRemove.addEventListener('click', async function () {
+      var bv0 = bannerValue(S.profile);
+      if (!bv0) return toast('You have no banner to remove.');
+      if (bv0.type === 'file' && !(await confirmDialog('Remove your banner?', 'Your banner picture will be deleted for everyone. This cannot be undone.', 'Remove'))) return;
       busy(banRemove, async function () { try { await saveBanner(''); toast('Banner removed.'); } catch (e) { showAlert(pmsg, 'error', errText(e)); } });
     });
     banFile.addEventListener('change', async function () {
@@ -4687,7 +4691,7 @@
       avatarBox,
       h('div', null, h('label', { for: 'newAvatar', text: 'Profile picture' }), h('div', { class: 'file-row' }, file, removeAv), h('div', { class: 'hint', text: 'Shrunk to a small square before upload. Optional.' })),
       h('div', { class: 'ban-section' }, h('label', { for: 'newBanner', text: 'Banner' }), banBox,
-        banReco, h('div', { class: 'row' }, banColor, banUseColor), banFile,
+        banReco, banPal, banFile,
         h('div', { class: 'hint', text: 'A colour, a picture or a looping GIF (GIFs up to 3 MB). It shows on your profile and your profile card.' }),
         h('div', { class: 'stack' }, banRemove)),
       form));
