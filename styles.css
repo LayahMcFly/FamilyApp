@@ -1555,3 +1555,12 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 /* Spacing: a form (for example the Sign in button) must never touch the row of links right below it. */
 .card > form + :is(.row, .stack, .btn, .link-btn, p, .hint) { margin-top: 16px; }
 .card > .row.between { row-gap: 12px; }
+
+/* Tree dialog: parent/partner rows. Name picker gets its own full-width line; relationship + Remove share the next one. */
+.parent-rows > .row, .partner-rows > .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.parent-rows > .row > .grow, .partner-rows > .row > .grow { grid-column: 1 / -1; min-width: 0; }
+.parent-rows > .row > div:nth-child(2) { min-width: 0; }
+.parent-rows > .row select, .partner-rows > .row select { width: 100%; min-width: 0; }
+.parent-rows > .row > .btn, .partner-rows > .row > .btn { white-space: nowrap; }
+.partner-rows > .row > .grow { grid-column: 1; }
+.partner-rows > .row { grid-template-columns: minmax(0, 1fr) auto; }
