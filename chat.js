@@ -586,12 +586,9 @@
     c.dms.sort(function (a, b) { return String(b.lastAt || '').localeCompare(String(a.lastAt || '')); });
   }
   async function switchFamilyTo(id) {
-    var target = c0hash();
     closeSheets(); stop();                         // old family's messages, subscription and timers are gone before the new one loads
-    await X.switchFamily(id);
-    location.hash = target;
+    await X.switchFamily(id);                      // loads the new family and opens its Hub (#/hub)
   }
-  function c0hash() { return /^#\/dms/.test(location.hash) ? '#/dms' : '#/chat'; }
   function familySheet() {
     var list = h('div', { class: 'cs-list' });
     X.S.families.forEach(function (f) {

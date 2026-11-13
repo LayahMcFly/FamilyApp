@@ -649,7 +649,7 @@
 
   // Full-screen photo viewer: pinch, scroll wheel, double-tap or the + / - buttons to zoom; drag to move; Close, Esc or a tap on the dark area to leave.
   function openPhotoViewer(src, alt) {
-    var scale = 1, tx = 0, ty = 0, MAX = 6, pts = new Map(), lastDist = 0, lastMid = null, moved = false;
+    var scale = 1, tx = 0, ty = 0, MAX = 6, pts = new Map(), lastDist = 0, lastMid = null, moved = false, downOnDark = false;
     var img = h('img', { src: src, alt: alt || 'Photo', draggable: 'false' });
     var stage = h('div', { class: 'pv-stage' }, img);
     function paint() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')'; stage.classList.toggle('zoomed', scale > 1); }
@@ -663,7 +663,7 @@
     stage.addEventListener('wheel', function (ev) { ev.preventDefault(); var p = rel(ev); zoomAt(scale * (ev.deltaY < 0 ? 1.2 : 1 / 1.2), p.x, p.y); }, { passive: false });
     stage.addEventListener('dblclick', function (ev) { var p = rel(ev); zoomAt(scale > 1 ? 1 : 2.5, p.x, p.y); });
     stage.addEventListener('pointerdown', function (ev) {
-      pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); moved = false;
+      pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); moved = false; downOnDark = (ev.target === stage);   // pointer capture makes the later click look like it hit the dark area, so remember where the press began
       try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* fine */ }
       if (pts.size === 2) { var a = Array.from(pts.values()); lastDist = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); lastMid = null; }
     });
@@ -683,7 +683,7 @@
     });
     function up(ev) { pts.delete(ev.pointerId); lastDist = 0; lastMid = null; }
     stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
-    stage.addEventListener('click', function (ev) { if (ev.target === stage && !moved) close(); });
+    stage.addEventListener('click', function () { if (downOnDark && !moved) close(); });
     var dlg = h('dialog', { class: 'photo-viewer', 'aria-label': 'Photo, enlarged' }, stage,
       h('div', { class: 'pv-tools' },
         h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom out', text: '\u2212', onclick: function () { zoomAt(scale / 1.4, 0, 0); } }),
@@ -1260,6 +1260,7 @@
       var next = pickFamily();
       clearFamilyData();
       if (next) await enterFamily(next);
+      history.replaceState(null, '', location.pathname + '#/hub');   // never reopen the old family's page (a post, chat or tree link) in another family
       S.notice = { kind: 'error', text: 'You are no longer a member of that family.' };
       return false;
     }
@@ -1648,8 +1649,8 @@
       var tok = ++S.nav;
       clear(S.main); S.main.appendChild(h('div', { class: 'empty' }, spinnerLine('Checking your access…', 'site')));
       revalidate().then(function (ok) {
+        if (!ok) return render();            // access was removed: revalidate() already cleared the family and moved the counter, so always redraw (family choice or onboarding)
         if (tok !== S.nav) return;
-        if (!ok) return render();
         route(first);
       }).catch(function (e) {
         if (tok === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
