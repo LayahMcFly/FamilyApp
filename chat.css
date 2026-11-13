@@ -840,3 +840,7 @@ dialog.bb-dialog h2 { margin: 0; font-family: Georgia, "Times New Roman", serif;
 .btn.bb-t:has(> svg) { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .btn.bb-t > svg { width: 20px; height: 20px; flex: none; }
 .pd-line.pd-end { justify-content: flex-end; }
+
+/* Customize my page: Save, Reset and Cancel sit in one slim row instead of three tall bars */
+.designer .pd-actions { display: flex; gap: 8px; margin-top: 10px; }
+.designer .pd-actions > .btn { flex: 1 1 0; min-width: 0; min-height: 40px; margin: 0; padding: 6px 8px; font-size: .9rem; }

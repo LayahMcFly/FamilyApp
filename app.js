@@ -4228,7 +4228,7 @@
     dlg.appendChild(h('h2', { id: 'pd-title', text: 'Customize my page' }));
     dlg.appendChild(h('p', { class: 'small muted', text: 'Changes show on your page right away. Nothing is saved until you press Save.' }));
     dlg.appendChild(prev); dlg.appendChild(body); dlg.appendChild(msg);
-    dlg.appendChild(h('div', { class: 'stack' }, saveB, resetB, h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: function () { close(true); } })));
+    dlg.appendChild(h('div', { class: 'pd-actions' }, saveB, resetB, h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: function () { close(true); } })));
     applyPageStyle(prev, st); paint(); document.body.appendChild(dlg); dlg.showModal();
   }
 
