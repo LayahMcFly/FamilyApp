@@ -3322,11 +3322,11 @@
     }
     function personDetails(p, prof) {
       var box = h('div', { class: 'tree-details' }), a = ageOf(p), rows = [];
-      if (!opts.noBio && prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
+      if (prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
       if (a && a.n >= 0) rows.push(['Age', (a.approx ? 'About ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'Under 1') : a.n + ' years old')]);
       if (p.gender) rows.push(['Gender', p.gender]);
       var bd = fmtBirthday(p.birthday); if (bd) rows.push(['Birthday', bd]);
-      var ad = prof && !opts.noAddress ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
+      var ad = prof ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
       if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
       var cats = prof ? visibleAbout(prof).filter(function (c) { return c.items && c.items.length; }) : [];
       cats.forEach(function (c) {
@@ -4023,14 +4023,14 @@
     function fill(tree) {
       clear(box);
       var prof = S.profiles.get(uid) || null, p = personFor(tree, uid), rows = [];
-      if (prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
+      if (!opts.noBio && prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
       var a = p ? ageOf(p) : null;
       if (a && a.n >= 0) rows.push(['Age', (a.approx ? 'About ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'Under 1') : a.n + ' years old')]);
       if (p && p.gender) rows.push(['Gender', p.gender]);
       var b = p && p.birthday ? String(p.birthday) : '', bd = '';
       if (b.length === 4) bd = 'Born in ' + b; else if (b.length === 10) { var d = new Date(Number(b.slice(0, 4)), Number(b.slice(5, 7)) - 1, Number(b.slice(8, 10))); if (!isNaN(d)) bd = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }); }
       if (bd) rows.push(['Birthday', bd]);
-      var ad = prof ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
+      var ad = prof && !opts.noAddress ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
       var mem = (S.memberList || []).filter(function (m) { return m.userId === uid; })[0];
       if (mem && mem.joined) { var jd = new Date(mem.joined); if (!isNaN(jd)) rows.push(['Member since', jd.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })]); }
       if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
