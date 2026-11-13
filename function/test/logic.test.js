@@ -137,7 +137,7 @@ function makeWorld() {
       ]
     };
   };
-  return { world, call, user, addTeam, addFile };
+  return { world, call, user, addTeam, addFile, api };
 }
 
 const owner = (u) => ({ userId: u, roles: ['owner'], confirm: true });
@@ -884,4 +884,71 @@ test('page style is stored when valid and refused when not', async () => {
   assert.equal((await save(['bg:red'])).status, 400);
   assert.equal((await save(['bwidth:9'])).status, 400);
   assert.equal((await save(['font:serif', 'font:mono'])).status, 400);
+});
+
+/* ---------- Checkpoint 3: access hardening ---------- */
+import fs from 'node:fs';
+const LOGIC_ACTIONS = [...fs.readFileSync(new URL('../src/logic.js', import.meta.url), 'utf8').matchAll(/\n    async (\w+)\(\{ user/g)].map((m) => m[1]).filter((a) => !['listFamilies', 'registerFamily'].includes(a));
+const attemptBody = (action, familyId) => ({ action, familyId, postId: 'p1', commentId: 'c1', personId: 'x1', suggestionId: 's1', userId: 'bob', admin: true, name: 'Zed', displayName: 'Zed', kind: 'text', body: 'hi', text: 'hello there', status: 'done', confirm: true, collection: 'c', parentId: '', fileId: 'f1', pinned: true, teamId: familyId });
+
+test('EVERY family action (read from the source, none skipped) refuses an outsider, a member of another family and a removed member', async () => {
+  assert.ok(LOGIC_ACTIONS.length >= 25, 'found the action list: ' + LOGIC_ACTIONS.length);
+  const s = await setup();
+  s.world.teams.famA.members.push(member('erin'));
+  const erin = s.user('erin');
+  assert.equal((await s.call(erin, { action: 'saveProfile', familyId: 'famA', displayName: 'Erin' })).status, 200);
+  const results = [];
+  const round = async (who, label) => { for (const a of LOGIC_ACTIONS) { const r = await s.call(who, attemptBody(a, 'famA')); results.push(`${label} ${a} -> ${r.status}`); assert.equal(r.status, 403, `${label}: ${a} must be refused with 403, got ${r.status} ${JSON.stringify(r.json)}`); } };
+  await round(s.dave, 'outsider');
+  await round(s.carol, 'member of another family');
+  s.world.teams.famA.members = s.world.teams.famA.members.filter((m) => m.userId !== 'erin');   // removed while signed in: the very next request is checked against the live membership list
+  await round(erin, 'removed member');
+  assert.equal(results.length, LOGIC_ACTIONS.length * 3);
+});
+
+test('role changes are read live: a demoted owner and a removed tree admin lose their powers on the very next request', async () => {
+  const s = await setup();
+  assert.equal((await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' })).status, 200);
+  assert.equal((await s.call(s.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob', admin: true })).status, 200);
+  assert.equal((await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Cousin' })).status, 200);
+  assert.equal((await s.call(s.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob', admin: false })).status, 200);
+  assert.equal((await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Cousin 2' })).status, 403, 'tree admin switched off: refused at once');
+  s.world.teams.famA.members.find((m) => m.userId === 'alice').roles = ['member'];   // alice is no longer an owner
+  assert.equal((await s.call(s.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob', admin: true })).status, 403, 'a demoted owner cannot choose tree admins');
+  assert.equal((await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famA', name: 'No' })).status, 403, 'and is not a tree editor either');
+});
+
+test('a tree admin of family A has no powers in family B, and the owner of A is only a plain outsider in B', async () => {
+  const s = await setup();
+  s.world.teams.famB.members.push(member('bob'));          // bob is in both families; admin only in A
+  assert.equal((await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' })).status, 200);
+  assert.equal((await s.call(s.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob', admin: true })).status, 200);
+  assert.equal((await s.call(s.bob, { action: 'saveProfile', familyId: 'famB', displayName: 'Bob B' })).status, 200);
+  assert.equal((await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famB', name: 'Nope' })).status, 403, 'tree admin of A cannot edit the tree of B');
+  assert.equal((await s.call(s.alice, { action: 'treeAddPerson', familyId: 'famB', name: 'Nope' })).status, 403, 'owner of A cannot edit the tree of B');
+  assert.equal((await s.call(s.alice, { action: 'deleteFamily', familyId: 'famB' })).status, 403);
+});
+
+test('DEFECT CHECK: admin powers granted in an earlier membership do not come back when the same person is re-invited', async () => {
+  const s = await setup();
+  assert.equal((await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' })).status, 200);
+  assert.equal((await s.call(s.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob', admin: true })).status, 200);
+  s.world.teams.famA.members = s.world.teams.famA.members.filter((m) => m.userId !== 'bob');      // removed (or left)
+  await s.api.handleEvent({ event: 'teams.famA.memberships.m9.delete', payload: { teamId: 'famA', userId: 'bob' }, deadline: Number.MAX_SAFE_INTEGER });   // what Appwrite sends
+  assert.equal((await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'x' })).status, 403);
+  s.world.teams.famA.members.push(member('bob'));                                                 // later re-invited as an ordinary member
+  const r = await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Sneaky' });
+  assert.equal(r.status, 403, 'a re-invited member must start with NO admin powers; got ' + r.status);
+});
+
+test('the owner\'s reconcile call (sent by the app right after a removal) also switches the removed person\'s admin flags off, and never touches a current member', async () => {
+  const s = await setup();
+  await s.call(s.bob, { action: 'saveProfile', familyId: 'famA', displayName: 'Bob' });
+  await s.call(s.alice, { action: 'setTreeAdmin', familyId: 'famA', userId: 'bob', admin: true });
+  await s.call(s.alice, { action: 'chatReconcile', familyId: 'famA', userId: 'bob' });                 // bob is still a member: nothing changes
+  assert.equal((await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Still admin' })).status, 200);
+  s.world.teams.famA.members = s.world.teams.famA.members.filter((m) => m.userId !== 'bob');
+  await s.call(s.alice, { action: 'chatReconcile', familyId: 'famA', userId: 'bob' });
+  s.world.teams.famA.members.push(member('bob'));
+  assert.equal((await s.call(s.bob, { action: 'treeAddPerson', familyId: 'famA', name: 'Sneaky' })).status, 403);
 });

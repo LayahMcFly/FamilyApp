@@ -217,10 +217,22 @@ export function createChat(c) {
   }
 
   /* ---------- leaving a family: close that person's DMs ---------- */
+  /** Admin powers (tree admin, chat admin) are stored on the person's profile row, which outlives the membership.
+   *  Switch them off when the person is gone, so being invited back later starts with ordinary member powers. */
+  async function dropAdminFlags(familyId, userId) {
+    const prof = await firstRow(profilesTable, [Query.equal('profileKey', [`${familyId}_${userId}`])]);
+    if (!prof || (prof.treeAdmin !== true && prof.chatAdmin !== true)) return;
+    const data = {};
+    if (prof.treeAdmin === true) data.treeAdmin = false;
+    if (prof.chatAdmin === true) data.chatAdmin = false;
+    await updateRow(profilesTable, prof.$id, data);
+  }
+
   /** Safe to call about anyone: it does nothing unless `userId` is really NOT a confirmed member of the family any more.
    *  The DM row and every message/reaction in it then become readable only by the person who stayed. */
   async function closeDmsFor(familyId, userId, deadline) {
     if (await isMemberOf(familyId, userId)) return { done: true, closed: 0 };
+    await dropAdminFlags(familyId, userId);
     let closed = 0;
     const dms = await listRows(T.dms, [Query.equal('familyId', [familyId]), Query.or([Query.equal('userA', [userId]), Query.equal('userB', [userId])]), Query.limit(100)]);
     for (const dm of dms.rows) {

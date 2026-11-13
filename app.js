@@ -402,9 +402,22 @@
     }
     if (!json.ok) {
       var err = new Error(json.message || 'Something went wrong.');
-      err.code = ex.responseStatusCode; err.apiCode = json.error; throw err;
+      err.code = ex.responseStatusCode; err.apiCode = json.error;
+      noteDenied(err, body.familyId);
+      throw err;
     }
     return json;
+  }
+
+  // The server says I am not a member of the family I am looking at (removed while the app was open): check access right now
+  // instead of waiting for the next scheduled check, so the old family's content is replaced at once.
+  var deniedTimer = null;
+  function noteDenied(err, familyId) {
+    if (err.code !== 403 || !/not a member of this family/i.test(err.message || '')) return;
+    if (!S.familyId || (familyId && familyId !== S.familyId)) return;   // an answer about some other family is not news about this one
+    S.validatedAt = 0;
+    clearTimeout(deniedTimer);
+    deniedTimer = setTimeout(function () { route(false); }, 50);
   }
 
   // Permissions the browser attaches to a file it uploads. "update" for my own user id is the
@@ -474,6 +487,8 @@
     S.shop = null;   // carts, designs, orders and the catalog belong to one person in one family
     S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.origs = new Map(); S.saved = new Map(); S.usage = null;
     S.familyId = null; S.role = null; S.isOwner = false; S.ringRole = new Map();
+    S.tree = null; S.memberList = null; S.trend = null; S.memberCache = null; S.syncing = false; S.badgeAt = 0;   // the previous family's tree, member names, trending list and activity count
+    setBadge(0);
     if (S.main) clear(S.main);
   }
 
@@ -2051,8 +2066,10 @@
     if (!S.user || !S.familyId) return;
     if (!force && S.badgeAt && Date.now() - S.badgeAt < 60000) return;
     S.badgeAt = Date.now();
+    var fid0 = S.familyId, nav0 = S.nav;
     try {
       var items = await getActivity(), seen = seenAt();
+      if (fid0 !== S.familyId) return;   // I switched family (or lost access) while this was loading: do not show the old family's count
       setBadge(items.filter(function (i) { return new Date(i.at).getTime() > seen; }).length);
     } catch (e) { /* quiet */ }
   }
@@ -3980,7 +3997,7 @@
     if (!force && c && c.fid === S.familyId && Date.now() - c.at < 20000) return c;
     var fid = S.familyId;
     var people = await listAllRows('people', [Query.equal('familyId', [fid])], 400);
-    try { S.memberList = (await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] })).memberships.filter(function (m) { return m.confirm; }); } catch (e) { S.memberList = S.memberList || []; }
+    try { var ml = (await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] })).memberships.filter(function (m) { return m.confirm; }); if (fid === S.familyId) S.memberList = ml; } catch (e) { if (fid === S.familyId) S.memberList = S.memberList || []; }
     if (canEditTree() && people.some(function (x) { return x.inviteMembershipId && !x.userId; }) && !S.syncing) {   // someone joined: connect their invitation entry
       S.syncing = true;
       try { var sy = await api('treeSyncInvites', { familyId: fid }); if (sy && sy.linked) people = await listAllRows('people', [Query.equal('familyId', [fid])], 400); } catch (e) { /* older server: ignore */ }
@@ -5791,7 +5808,7 @@
       uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
-      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
+      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, noteDenied: noteDenied, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
     if (window.FCHub) window.FCHub.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, icon: icon, famName: famName, familySwitcher: familySwitcher, shopEnabled: shopEnabled });
     var action = readActionParams();

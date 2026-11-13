@@ -32,7 +32,7 @@
       var bad = new Error('The shop did not answer. It may not be set up yet, or it may be starting up. Please try again in a moment.');
       bad.code = ex.responseStatusCode || 500; throw bad;
     }
-    if (!json.ok) { var err = new Error(json.message || 'Something went wrong.'); err.code = ex.responseStatusCode; err.apiCode = json.error; err.data = json; throw err; }
+    if (!json.ok) { var err = new Error(json.message || 'Something went wrong.'); err.code = ex.responseStatusCode; err.apiCode = json.error; err.data = json; if (X.noteDenied) X.noteDenied(err, body.familyId); throw err; }
     return json;
   }
   function msgOf(e) { return e && e.message ? e.message : X.friendly(e); }
