@@ -656,8 +656,8 @@
       sc.appendChild(h('h2', { class: 'side-h', text: 'Direct messages' }));
       if (!ppl.length) sc.appendChild(h('p', { class: 'muted small side-note', text: 'No one else is in this family yet. Invite people from Settings, then message them here.' }));
       if (onl.length) { sc.appendChild(h('h3', { class: 'side-h2', text: 'Online now (' + onl.length + ')' })); onl.forEach(function (it) { sc.appendChild(personRow(it)); }); }
-      if (off.length) { sc.appendChild(h('h3', { class: 'side-h2', text: onl.length ? 'Offline' : 'Family members' })); off.forEach(function (it) { sc.appendChild(personRow(it)); }); }
-      sc.appendChild(h('div', { class: 'row side-actions' }, h('a', { class: 'btn secondary small', href: '#/chat', text: 'Family channels' })));
+      if (off.length) { if (onl.length) sc.appendChild(h('h3', { class: 'side-h2', text: 'Offline' })); off.forEach(function (it) { sc.appendChild(personRow(it)); }); }
+      sc.appendChild(h('div', { class: 'row side-actions' }, h('a', { class: 'btn secondary small', href: '#/chat', text: 'Go to channels' })));
     } else {
       sc.appendChild(h('h2', { class: 'side-h', text: 'Text channels' }));
       var active = c.channels.filter(function (x) { return !x.archived; }), arch = c.channels.filter(function (x) { return x.archived; });
