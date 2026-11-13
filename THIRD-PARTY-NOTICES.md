@@ -56,3 +56,7 @@ The optional GIF picker calls the GIPHY API directly from each person's browser 
 ## Calls (`vendor/livekit-client.umd.js`, `vendor/mediapipe/`)
 
 LiveKit client SDK 2.23.0 (npm `livekit-client`) and the two MediaPipe legacy solution packages (npm `@mediapipe/selfie_segmentation` and `@mediapipe/face_mesh`) are unmodified copies, Apache-2.0. The license text is in `vendor/LICENSE-livekit-client.txt`; the Apache-2.0 text is the same for the MediaPipe packages (https://www.apache.org/licenses/LICENSE-2.0). Only the SIMD WebAssembly builds are included, so phones too old for WebAssembly SIMD cannot use the effects. The face model needs `eval`, which the site's security rules forbid, so it runs in its own page `face-frame.html` (no network access, its own stricter-for-network policy). Video is relayed by LiveKit's servers when someone makes a call; the family-api function only issues passes.
+
+## Page fonts (`fonts/*.woff2`, `fonts.css`)
+
+Lora, Nunito, Courier Prime, Merriweather, EB Garamond, Poppins, Montserrat, Bebas Neue, Fredoka, Pacifico, Playfair Display, Quicksand, Roboto Slab, Roboto Condensed and Permanent Marker (Latin subset), from the npm packages `@fontsource/*`. They are open fonts under the SIL Open Font License 1.1 (Roboto Slab and Roboto Condensed: Apache-2.0). They are used for the font choice in Customize my page and download only when a page uses them.
