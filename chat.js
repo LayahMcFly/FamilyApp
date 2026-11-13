@@ -528,7 +528,7 @@
     var e = c.error, denied = e && (e.apiCode === 'forbidden' || e.code === 403);
     var msg = denied ? 'You are not a member of this family, so chat is not available.' : (e && e.apiCode === 'server_error' ? 'Chat is not ready yet. The family owner needs to finish the chat setup (see CHAT-GUIDE.md), then try again.' : msgOf(e));
     return h('div', { class: 'chat-empty' }, X.alertBox('error', msg), h('div', { class: 'row' },
-      denied ? h('a', { class: 'btn', href: '#/home', text: 'Back to Home' }) : h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { retryOpen(c); } }), h('a', { class: 'btn secondary', href: '#/home', text: 'Home' })));
+      denied ? h('a', { class: 'btn', href: '#/hub', text: 'Back to Hub' }) : h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { retryOpen(c); } }), h('a', { class: 'btn secondary', href: '#/home', text: 'Home' })));
   }
   async function retryOpen(c) { c.error = null; render(X.S.main); try { await loadOverview(c); } catch (e) { c.error = e; } if (C === c) { render(X.S.main); if (c.loaded) startConv(c); } }
 
@@ -586,12 +586,9 @@
     c.dms.sort(function (a, b) { return String(b.lastAt || '').localeCompare(String(a.lastAt || '')); });
   }
   async function switchFamilyTo(id) {
-    var target = c0hash();
     closeSheets(); stop();                         // old family's messages, subscription and timers are gone before the new one loads
-    await X.switchFamily(id);
-    location.hash = target;
+    await X.switchFamily(id);                      // loads the new family and opens its Hub (#/hub)
   }
-  function c0hash() { return /^#\/dms/.test(location.hash) ? '#/dms' : '#/chat'; }
   function familySheet() {
     var list = h('div', { class: 'cs-list' });
     X.S.families.forEach(function (f) {
@@ -637,7 +634,7 @@
     var side = h('aside', { class: 'chat-side', 'aria-label': 'Channels' });
     var multi = X.S.families.length > 1;
     side.appendChild(h('div', { class: 'side-head' },
-      h('a', { class: 'btn secondary small only-narrow', href: '#/home', 'aria-label': 'Back to Home' }, icon('back')),
+      h('a', { class: 'btn secondary small only-narrow', href: '#/hub', 'aria-label': 'Back to Hub' }, icon('back')),
       h('button', { class: 'fam-btn', type: 'button', 'aria-label': 'Family: ' + famLabel() + (multi ? '. Switch family' : ''), disabled: multi ? null : true, onclick: familySheet }, h('strong', { text: famLabel() }), multi ? icon('more') : null),
       h('button', { class: 'btn secondary small', type: 'button', 'aria-label': 'Chat settings', onclick: function () { settingsSheet(c); } }, icon('gear'))));
     var sc = h('div', { class: 'side-scroll' }); side.appendChild(sc);
