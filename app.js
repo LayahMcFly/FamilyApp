@@ -4343,10 +4343,10 @@
       h('div', { class: 'profile-avatar' }, avatarEl(prof, 'lg')),
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
-    if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/profile/edit', text: 'Edit profile' }));
-    if (mine) main.appendChild(h('button', { class: 'btn secondary block bb-t', type: 'button', text: 'Customize my page', onclick: function () { pageDesigner(S.profile, main); } }));
-    if (mine) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/settings/privacy', text: 'My address (private)' }));
-    if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/orders', text: 'My orders', onclick: function () { S.ordersFrom = '#/profile'; } }));
+    if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/profile/edit' }, icon('edit'), h('span', { text: 'Edit profile' })));
+    if (mine) main.appendChild(h('button', { class: 'btn secondary block bb-t', type: 'button', onclick: function () { pageDesigner(S.profile, main); } }, icon('palette'), h('span', { text: 'Customize my page' })));
+    if (mine) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/settings/privacy' }, icon('home'), h('span', { text: 'My address (private)' })));
+    if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/orders', onclick: function () { S.ordersFrom = '#/profile'; } }, icon('bag'), h('span', { text: 'My orders' })));
     if (!own && !preview) { var addrHolder = h('div'); main.appendChild(addrHolder); addressOnProfile(addrHolder, token, uid); }
     // Switching families (or starting another one) lives here, not in the top bar.
     if (mine) main.appendChild(h('section', { class: 'card profile-fam', 'aria-label': 'Family' }, h('h2', { text: 'Family' }), h('p', { class: 'muted small', text: 'You are in ' + famName() + '.' + (S.families.length > 1 || S.canCreateFamily ? ' Switch to another family, or start a new one:' : '') }), familySwitcher()));
