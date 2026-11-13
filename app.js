@@ -269,7 +269,7 @@
     finally {
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
-      btn.textContent = label;
+      if (busyText) btn.textContent = label;   // only put the words back if they were swapped (icon buttons keep their icon)
     }
   }
 
