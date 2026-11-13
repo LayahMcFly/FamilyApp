@@ -106,6 +106,7 @@
     pause: ['M8 5v14', 'M16 5v14'],
     fullscreen: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'],
     up: ['M12 19V5', 'M6 11l6-6 6 6'], down: ['M12 5v14', 'M6 13l6 6 6-6'], left: ['M15 6l-6 6 6 6'], right: ['M9 6l6 6-6 6'],
+    check: ['M5 12.5l4.5 4.5L19 7.5'], reset: ['M4 12a8 8 0 1 0 2.6-5.9', 'M4 4v5h5'],
     pencil: ['M4 20l1-4 11-11 3 3L8 19z', 'M14 7l3 3'], x: ['M6 6l12 12', 'M18 6 6 18'],
     flame: ['M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .2 1.2.8 2 1.7 2.3C10.2 8.5 10.5 5.5 12 3z']
   };
@@ -4123,7 +4124,7 @@
     box.appendChild(h('div', { class: 'cp-note small muted', text: 'Tap a color, or the rainbow circle to pick your own.' }));
     return box;
   }
-  window.FCColorPalette = colorPalette;   // the border picker (borders.js) uses the same palette
+  window.FCColorPalette = colorPalette; window.FCIcon = icon;   // the border picker (borders.js) uses the same palette
   function pageDesigner(prof, page) {
     var saved = pageStyleOf(prof), st = Object.assign({}, saved), done = false, cols = [];
     var dlg = h('dialog', { class: 'sheet-dialog designer', 'aria-labelledby': 'pd-title' }), msg = h('div');
@@ -4283,14 +4284,14 @@
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
       S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
     }
-    var saveB = h('button', { class: 'btn', type: 'button', text: 'Save', 'aria-label': 'Save my page', onclick: function () { busy(saveB, async function () {
+    var saveB = h('button', { class: 'btn', type: 'button', 'aria-label': 'Save my page', title: 'Save', onclick: function () { busy(saveB, async function () {
       try { await save(pageItems(st)); saved = Object.assign({}, st); done = true; close(false); toast('Your page is saved.'); } catch (e) { showAlert(msg, 'error', errText(e)); }
-    }, 'Saving…'); } });
-    var resetB = h('button', { class: 'btn secondary', type: 'button', text: 'Reset', 'aria-label': 'Reset to default', onclick: function () { st = {}; live(); paint(); } });
+    }); } }, icon('check'));
+    var resetB = h('button', { class: 'btn secondary', type: 'button', 'aria-label': 'Reset to default', title: 'Reset to default', onclick: function () { st = {}; live(); paint(); } }, icon('reset'));
     dlg.appendChild(h('h2', { id: 'pd-title', text: 'Customize my page' }));
     dlg.appendChild(h('p', { class: 'small muted', text: 'Changes show on your page right away. Nothing is saved until you press Save.' }));
     dlg.appendChild(prev); dlg.appendChild(body); dlg.appendChild(msg);
-    dlg.appendChild(h('div', { class: 'pd-actions' }, saveB, resetB, h('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: function () { close(true); } })));
+    dlg.appendChild(h('div', { class: 'pd-actions' }, saveB, resetB, h('button', { class: 'btn secondary', type: 'button', 'aria-label': 'Cancel', title: 'Cancel', onclick: function () { close(true); } }, icon('x'))));
     applyPageStyle(prev, st); paint(); document.body.appendChild(dlg); dlg.showModal();
   }
 

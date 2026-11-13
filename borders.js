@@ -243,6 +243,7 @@
     for (i = 2; i < arguments.length; i++) { c = arguments[i]; if (c == null) continue; e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); }
     return e;
   }
+  function ico(n) { return window.FCIcon ? window.FCIcon(n) : document.createTextNode({ check: '\u2713', x: '\u2715', reset: '\u21ba' }[n] || ''); }
   function nameOf(cfg) { return cfg && BY[cfg.id] ? BY[cfg.id].name : 'Default (no border)'; }
   /* opts: { saved: choice|null (what is saved now), label: text on the big preview, onLive(choice|null), onSave(choice|null) -> Promise, onClose() } */
   function picker(opts) {
@@ -328,11 +329,11 @@
     // actions
     function finish() { try { dlg.close(); } catch (e) { /* closed */ } if (dlg.parentNode) dlg.parentNode.removeChild(dlg); if (opts.onClose) opts.onClose(); }
     function cancel() { if (busy) return; if (opts.onLive) opts.onLive(saved ? Object.assign({}, saved) : null); finish(); }
-    var saveB = el('button', { class: 'btn', type: 'button', text: 'Save', onclick: function () {
+    var saveB = el('button', { class: 'btn', type: 'button', 'aria-label': 'Save', title: 'Save', onclick: function () {
       if (busy) return; busy = true; saveB.disabled = true; msg.textContent = '';
       Promise.resolve(opts.onSave ? opts.onSave(cur ? Object.assign({}, cur) : null) : null).then(function () { busy = false; saved = cur ? Object.assign({}, cur) : null; finish(); }, function (e) { busy = false; saveB.disabled = false; msg.textContent = (e && e.message) || 'Could not save. Try again.'; msg.className = 'bb-msg error'; });
-    } });
-    dlg.appendChild(el('div', { class: 'bb-actions' }, saveB, el('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: cancel }), el('button', { class: 'btn secondary', type: 'button', text: 'Reset', 'aria-label': 'Reset to default', onclick: function () { cur = null; live(); } })));
+    } }, ico('check'));
+    dlg.appendChild(el('div', { class: 'bb-actions' }, saveB, el('button', { class: 'btn secondary', type: 'button', 'aria-label': 'Cancel', title: 'Cancel', onclick: cancel }, ico('x')), el('button', { class: 'btn secondary', type: 'button', 'aria-label': 'Reset to default', title: 'Reset to default', onclick: function () { cur = null; live(); } }, ico('reset'))));
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); cancel(); });
     document.body.appendChild(dlg); dlg.showModal();
     paintSelected(); drawCtl(); tabBtns[CATS[0].id].setAttribute('aria-current', 'true');

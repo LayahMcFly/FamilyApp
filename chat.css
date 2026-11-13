@@ -904,3 +904,4 @@ dialog.designer .pd-actions > .btn { margin: 0 !important; height: 42px; min-hei
 .ft-name { font-size: .85rem; overflow-wrap: anywhere; text-align: center; }
 .bb-pal { display: grid; gap: 4px; }
 .bb-pal-h { font-weight: 700; font-size: .9rem; }
+.pd-actions > .btn svg, .bb-actions > .btn svg { width: 22px; height: 22px; }
