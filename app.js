@@ -106,7 +106,7 @@
     pause: ['M8 5v14', 'M16 5v14'],
     fullscreen: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'],
     up: ['M12 19V5', 'M6 11l6-6 6 6'], down: ['M12 5v14', 'M6 13l6 6 6-6'], left: ['M15 6l-6 6 6 6'], right: ['M9 6l6 6-6 6'],
-    check: ['M5 12.5l4.5 4.5L19 7.5'], reset: ['M4 12a8 8 0 1 0 2.6-5.9', 'M4 4v5h5'],
+    arrow: ['M12 19V5', 'M6 11l6-6 6 6'], check: ['M5 12.5l4.5 4.5L19 7.5'], reset: ['M4 12a8 8 0 1 0 2.6-5.9', 'M4 4v5h5'],
     pencil: ['M4 20l1-4 11-11 3 3L8 19z', 'M14 7l3 3'], x: ['M6 6l12 12', 'M18 6 6 18'],
     flame: ['M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 .2 1.2.8 2 1.7 2.3C10.2 8.5 10.5 5.5 12 3z']
   };
@@ -4167,6 +4167,23 @@
       inp.addEventListener('change', function () { paint(); });
       return inp;
     }
+    var dirOpen = false;
+    function arrowIc(deg) { var a = icon('arrow'); a.style.setProperty('transform', 'rotate(' + deg + 'deg)'); return a; }   // an up arrow turned to the gradient's direction
+    function dirPicker() {   // a decorated drop-down: one arrow per direction
+      var cur = PAGE_DIRS[st.gd] ? st.gd : '135', wrap = h('div', { class: 'dp' });
+      var btn = h('button', { class: 'dp-btn', type: 'button', 'aria-haspopup': 'listbox', 'aria-expanded': dirOpen ? 'true' : 'false', 'aria-label': 'Gradient direction: ' + PAGE_DIRS[cur][0], onclick: function () { dirOpen = !dirOpen; paint(); } }, arrowIc(cur), h('span', { text: PAGE_DIRS[cur][0] }), h('span', { class: 'dp-chev', 'aria-hidden': 'true', text: '\u25be' }));
+      wrap.appendChild(btn);
+      if (dirOpen) {
+        var list = h('div', { class: 'dp-list', role: 'listbox', 'aria-label': 'Gradient direction' });
+        Object.keys(PAGE_DIRS).sort(function (a, b) { return a - b; }).forEach(function (d) {
+          var on = d === cur;
+          list.appendChild(h('button', { class: 'dp-opt' + (on ? ' on' : ''), type: 'button', role: 'option', 'aria-selected': on ? 'true' : 'false', onclick: function () { dirOpen = false; setKey('gd', d === '135' ? '' : d); } }, arrowIc(d), h('span', { text: PAGE_DIRS[d][0] })));
+        });
+        wrap.appendChild(list);
+        wrap.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); dirOpen = false; paint(); } });
+      }
+      return wrap;
+    }
     function select(key, map, label, dflt) {
       var sel = h('select', { 'aria-label': label });
       Object.keys(map).forEach(function (k) { sel.appendChild(h('option', { value: k, text: Array.isArray(map[k]) ? map[k][0] : map[k] })); });
@@ -4221,7 +4238,7 @@
       if (!hasG) gB.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Make my own gradient', onclick: function () { delete st.bg; st.gc1 = '#ff9a8b'; st.gc2 = '#7c5cff'; delete st.gd; live(); paint(); } }));
       else {
         gB.appendChild(colorSlots('grad', [{ key: 'gc1', label: 'First color', fallback: '#ff9a8b' }, { key: 'gc2', label: 'Second color', fallback: '#7c5cff' }]));
-        gB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Direction' }), select('gd', PAGE_DIRS, 'Gradient direction', '135')));
+        gB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Direction' }), dirPicker()));
         gB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Remove my gradient', onclick: function () { delete st.gc1; delete st.gc2; delete st.gd; live(); paint(); } })));
       }
       bgB.appendChild(gB);
@@ -4262,7 +4279,14 @@
         fGrid.appendChild(h('button', { class: 'ft-tile' + (on ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', onclick: function () { setKey('font', k === 'sans' ? '' : k); } }, sample, nm, h('span', { class: 'bb-check', 'aria-hidden': 'true', text: '\u2713' })));
       });
       fB.appendChild(fGrid);
-      fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Corners' }), select('round', PAGE_ROUND, 'Corner shape', 'md')));
+      fB.appendChild(h('div', { class: 'pd-sub-h', text: 'Buttons and cards' }));
+      var cGrid = h('div', { class: 'cn-grid', role: 'radiogroup', 'aria-label': 'Corner shape' });
+      Object.keys(PAGE_ROUND).forEach(function (k) {   // each tile shows a small button with that shape at its ends
+        var on = (st.round || 'md') === k, shape = h('span', { class: 'cn-shape', 'aria-hidden': 'true', text: 'Button' });
+        shape.style.setProperty('border-radius', PAGE_ROUND[k][1]);
+        cGrid.appendChild(h('button', { class: 'ft-tile' + (on ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', onclick: function () { setKey('round', k === 'md' ? '' : k); } }, shape, h('span', { class: 'ft-name', text: PAGE_ROUND[k][0] }), h('span', { class: 'bb-check', 'aria-hidden': 'true', text: '\u2713' })));
+      });
+      fB.appendChild(cGrid);
       body.appendChild(fB);
       body.scrollTop = keepTop;
     }
