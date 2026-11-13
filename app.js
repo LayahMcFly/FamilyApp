@@ -3477,9 +3477,9 @@
       }));
     });
     main.appendChild(h('section', { class: 'card', 'aria-label': 'What each role can do' }, h('h2', { text: 'What each role can do' }),
-      h('p', { class: 'muted small', text: 'Use this when you choose who gets extra powers. Tree admin and chat admin are add-ons that an owner gives to a member, and a person can have both. Owners already have both. There is no separate parent or adult role, so give powers to the people you trust with them.' }),
+      h('p', { class: 'muted small', text: 'Use this when you choose who gets extra powers. Roles can be combined: tree admin and chat admin are add-ons that an owner gives to a member, and one person can have both. Owners already have everything in both columns. There is no separate parent or adult role, so give powers to the people you trust with them. This table only explains what already exists. It does not change anyone’s access.' }),
       h('div', { class: 'roles-wrap' }, h('table', { class: 'roles-table' }, h('caption', { class: 'sr-only', text: 'Powers by family role' }), h('thead', null, head), h('tbody', null, rows))),
-      h('p', { class: 'muted small', text: 'The shop is managed separately by the site’s shop manager and is not a family role. The author of a post can also delete comments on their own post.' })));
+      h('p', { class: 'muted small', text: 'Managing the shop (products, orders, Printify sync) is separate from family roles. It is set up on the site by whoever runs the shop, so it is not a column here and nothing on this page grants it. The author of a post can also delete comments on their own post.' })));
   }
 
   // Settings > Family and members: everything about managing who belongs to the active family.

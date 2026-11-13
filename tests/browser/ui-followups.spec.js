@@ -86,6 +86,7 @@ let PORT;
     check('3 automatic update report appears and is labelled automatic', /Latest automatic update/.test(rep) && /new products always start switched off/.test(rep), rep);
     check('3 counts: reported 3, read 3, 0 new / 3 updated / 0 skipped, on 1', /reported 3 products/.test(rep) && /0 new, 3 updated, 0 skipped/.test(rep) && /Switched on: 1/.test(rep), rep);
     check('3 automatic update sent enableNew false and made no toggle calls', (await page.evaluate(() => window.__MOCK.bodies.every(b => b.enableNew === false))) && !(await page.evaluate(() => window.__MOCK.log.some(l => /Toggle/.test(l)))), '');
+    await page.locator('.sync-report[aria-label="Latest sync results"]').screenshot({ path: path.join(shots, 'auto-update-card.png') });
     check('3 no page errors', errors.length === 0, errors.join('|')); await ctx.close(); }
 
   // 4. Settings > Family and members: roles and powers table (owner and plain member both see it)
@@ -103,6 +104,8 @@ let PORT;
     check('4 ' + role + ': choosing admins = owner only', (await cell('Choose who is a tree admin')) === 'YNNN', '');
     check('4 ' + role + ': basic family use = everyone', (await cell('See the feed and the family tree')) === 'YYYY', '');
     check('4 ' + role + ': every power row has one cell per role', await page.locator('.roles-table tbody tr:has(th[scope="row"])').evaluateAll(rs => rs.every(r => r.querySelectorAll('td').length === 4)), '');
+    check('4 ' + role + ': says roles can be combined and shop management is separate', /Roles can be combined/.test(await page.locator('[aria-label="What each role can do"]').innerText()) && /Managing the shop[^.]*is separate from family roles/.test(await page.locator('[aria-label="What each role can do"]').innerText()), '');
+    check('4 ' + role + ': the table is read-only (no buttons or inputs inside it)', (await page.locator('[aria-label="What each role can do"] button, [aria-label="What each role can do"] input, [aria-label="What each role can do"] select').count()) === 0, '');
     check('4 ' + role + ': says there is no parent/adult role', /no separate parent or adult role/.test(await page.locator('[aria-label="What each role can do"]').innerText()), '');
     if (role === 'owner') { const t = await page.locator('body').innerText(); check('4 owner: table sits above the Tree admins list', t.indexOf('What each role can do') > -1 && t.indexOf('What each role can do') < t.indexOf('Family tree admins'), ''); await page.locator('[aria-label="What each role can do"]').screenshot({ path: path.join(shots, 'roles-table-mobile.png') }); }
     check('4 ' + role + ': no page errors', errors.length === 0, errors.join('|'));
