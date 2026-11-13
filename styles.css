@@ -1551,3 +1551,7 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .crop-zoom input { flex: 1; }
 .crop-body .btn { width: 280px; max-width: 100%; }
 .cc-btn.none { opacity: .75; }
+
+/* Spacing: a form (for example the Sign in button) must never touch the row of links right below it. */
+.card > form + :is(.row, .stack, .btn, .link-btn, p, .hint) { margin-top: 16px; }
+.card > .row.between { row-gap: 12px; }
