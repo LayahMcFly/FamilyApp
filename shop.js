@@ -1259,6 +1259,55 @@
   }
 
   /* ================= SHOP OWNER ================= */
+  /* ---------- Printify sync report (read-only diagnostics) ---------- */
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+  /** Counts from one sync run. Each result has exactly ONE action (new, updated or skipped), so those three add up to the number read. "Flagged" and "switched off" are labels that overlap with them. */
+  function syncCounts(ls) {
+    var c = { read: ls.results.length, reported: ls.reported, added: 0, updated: 0, skipped: 0, flagged: 0, off: 0, on: 0 };
+    ls.results.forEach(function (x) {
+      if (x.action === 'skipped') { c.skipped++; return; }
+      if (x.action === 'new') c.added++; else c.updated++;
+      if (!x.supported) c.flagged++;
+      if (x.enabled) c.on++; else c.off++;
+    });
+    return c;
+  }
+  function syncReportCard(ls) {
+    var c = syncCounts(ls), when = new Date(ls.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    var card = h('div', { class: 'card inner sync-report', role: 'region', 'aria-label': 'Latest sync results' },
+      h('h3', { text: 'Latest sync results (' + when + ')' }),
+      h('p', { class: 'small muted', text: 'This is what the sync did just now. It is not a check of what customers can see in the shop.' }),
+      h('ul', { class: 'ticks' },
+        h('li', { text: 'Printify reported ' + plural(c.reported, 'product') + ' in your shop. This sync read ' + c.read + '.' + (c.reported !== c.read ? ' The difference is not explained by this screen (products tagged fc-preview are left out on purpose).' : '') }),
+        h('li', { text: 'Of the ' + c.read + ' read, each is exactly one of: ' + c.added + ' new, ' + c.updated + ' updated, ' + c.skipped + ' skipped. Those three add up to ' + c.read + '.' }),
+        h('li', { text: 'Flagged (cannot be sold through the photo editor): ' + c.flagged + '. A flagged product is also new or updated, so this is not a fourth group to add up. Flagged products are always left switched off.' }),
+        h('li', { text: 'Left switched off after this sync: ' + c.off + ' of the ' + (c.read - c.skipped) + ' that were saved. This includes every flagged product. Switched on: ' + c.on + '.' })),
+      ls.newShown ? h('p', { class: 'small muted', text: '“Show NEW products” was ticked. It applies only to the ' + c.added + ' new ' + (c.added === 1 ? 'product' : 'products') + '. The ' + c.updated + ' updated ' + (c.updated === 1 ? 'product kept' : 'products kept') + ' the on/off setting it already had.' }) : null);
+    var rows = ls.results.slice().sort(function (a, b) { var ra = a.action === 'skipped' ? 0 : (a.supported ? 2 : 1), rb = b.action === 'skipped' ? 0 : (b.supported ? 2 : 1); return ra - rb; });
+    var list = h('ul', { class: 'sync-rows' });
+    rows.forEach(function (x) {
+      var state = x.action === 'skipped' ? 'skipped, not saved' : x.action + ', ' + (x.enabled ? 'switched on' : 'left switched off') + (x.supported ? '' : ', flagged');
+      list.appendChild(h('li', null, h('strong', { text: x.title || '(no title)' }), h('div', { class: 'small muted', text: state }),
+        x.reason ? h('div', { class: 'small ' + (x.action === 'skipped' || !x.supported ? 'danger-text' : 'muted'), text: x.reason }) : null,
+        (x.notes || []).map(function (n) { return h('div', { class: 'small muted', text: n }); })));
+    });
+    card.appendChild(h('details', null, h('summary', { text: 'Every product in this sync (' + c.read + ')' }), list));
+    return card;
+  }
+  /** Classifies the saved products so each one is counted once, in this order: missing, flagged, switched on, switched off. */
+  function savedSummaryCard(imp) {
+    var n = { missing: 0, flagged: 0, on: 0, off: 0 };
+    imp.forEach(function (p) { if (p.missing) n.missing++; else if (!p.supported) n.flagged++; else if (p.enabled) n.on++; else n.off++; });
+    return h('div', { class: 'card inner sync-report', role: 'region', 'aria-label': 'Saved products now' },
+      h('h3', { text: 'Saved products right now (' + imp.length + ')' }),
+      h('p', { class: 'small muted', text: 'Each saved product is counted once, so these add up to ' + imp.length + '. “Switched on” means the shop is allowed to list it. This screen cannot confirm what a customer sees, so open the Shop as a family member to check.' }),
+      h('ul', { class: 'ticks' },
+        h('li', { text: 'Switched on: ' + n.on }),
+        h('li', { text: 'Switched off (can be switched on with “Show to customers”): ' + n.off }),
+        h('li', { text: 'Flagged, cannot be sold through the photo editor: ' + n.flagged }),
+        h('li', { text: 'No longer in your Printify shop: ' + n.missing })));
+  }
+
   async function viewAdmin(main, token) {
     main.appendChild(head('Manage the shop', '#/shop', 'Photo Gifts'));
     var holder = h('div', null, X.spinnerLine('Loading…')); main.appendChild(holder);
@@ -1290,17 +1339,18 @@
       var report = h('div');
       var syncBtn = h('button', { class: 'btn', type: 'button', text: 'Sync from Printify', onclick: function () {
         X.busy(syncBtn, async function () {
-          clear(report); var seen = [], counts = { new: 0, updated: 0, flagged: 0, skipped: 0 }, page = 1, last = 1, total = 0, shopInfo = null;
+          clear(report); var seen = [], counts = { new: 0, updated: 0, flagged: 0, skipped: 0 }, page = 1, last = 1, total = 0, shopInfo = null, allResults = [];
           try {
             do {
               progress.textContent = 'Reading page ' + page + (last > 1 ? ' of ' + last : '') + ' from Printify…';
               var r = await shopApi('shopAdminSync', { page: page, enableNew: newCb.checked });
               last = r.lastPage; total = r.total; if (r.shop) shopInfo = r.shop;
               if (r.diagnosis) { progress.textContent = ''; report.appendChild(X.alertBox('error', r.diagnosis.message)); return; }
-              r.results.forEach(function (x) { if (x.key) seen.push(x.key); if (x.action === 'skipped') counts.skipped++; else counts[x.action]++; if (x.action !== 'skipped' && !x.supported) counts.flagged++; });
+              r.results.forEach(function (x) { allResults.push(x); if (x.key) seen.push(x.key); if (x.action === 'skipped') counts.skipped++; else counts[x.action]++; if (x.action !== 'skipped' && !x.supported) counts.flagged++; });
               page++;
             } while (page <= last);
             await shopApi('shopAdminSyncFinish', { seen: seen });
+            st().lastSync = { at: Date.now(), reported: total, results: allResults, newShown: newCb.checked };
             progress.textContent = '';
             toast('Synced ' + total + ' product' + (total === 1 ? '' : 's') + '.');
             await reload();
@@ -1321,6 +1371,9 @@
       sc.appendChild(h('div', { class: 'row' }, syncBtn, checkBtn)); sc.appendChild(progress); sc.appendChild(report);
       var imp = ov.imported || [];
       if (!imp.length) sc.appendChild(h('p', { class: 'muted', text: 'Nothing synced yet. Press “Sync from Printify”.' }));
+      /* Diagnostic only: shows what the sync just did and how the saved products are classified. It changes nothing. */
+      if (st().lastSync) sc.appendChild(syncReportCard(st().lastSync));
+      if (imp.length) sc.appendChild(savedSummaryCard(imp));
       var picked = {}, boxes = [];
       var pickInfo = h('span', { class: 'small muted', text: '0 selected' });
       function eligible(p) { return p.supported && !p.missing; }

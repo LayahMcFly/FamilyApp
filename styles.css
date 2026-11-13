@@ -1599,3 +1599,9 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .hub-back svg { width: 18px; height: 18px; }
 /* the Back to Hub link must not crowd chat or the feed's own top spacing */
 .main[data-view="home"] > .hub-back { margin-bottom: 0; }
+
+/* Shop Manager: Printify sync report (diagnostic only) */
+.sync-report h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.sync-rows { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .6rem; }
+.sync-rows li { padding-bottom: .5rem; border-bottom: 1px solid var(--line, rgba(128,128,128,.25)); }
+.sync-report summary { cursor: pointer; font-weight: 600; }

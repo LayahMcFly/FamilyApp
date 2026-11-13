@@ -17,6 +17,7 @@
   function Functions() { return svc({ createExecution: function (a) {
     var body = JSON.parse(a.body || '{}'), act = body.action, out = { ok: true };
     M.log.push('api ' + act + (body.familyId ? ' ' + body.familyId : ''));
+    if (M.api && M.api[act]) { var custom = M.api[act](body); return Promise.resolve({ responseBody: JSON.stringify(Object.assign({ ok: true }, custom)), responseStatusCode: 200 }); }
     if (act === 'chatOpen') { var tag = (body.familyId || '').replace('fam', '').toLowerCase(); out.role = 'owner'; out.channels = [{ id: 'ch-' + tag, name: 'channel-of-' + tag, kind: 'channel' }]; out.dms = []; out.unread = {}; out.blocked = []; out.allowDms = true; }
     if (act === 'listFamilies') { out.families = M.families.filter(function (f) { return !(M.revoked || []).includes(f.id); }); out.canCreateFamily = !!M.canCreateFamily; }
     return Promise.resolve({ responseBody: JSON.stringify(out), responseStatusCode: 200 });
