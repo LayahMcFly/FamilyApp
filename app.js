@@ -71,6 +71,11 @@
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var ICONS = {
+    hub: ['M4 4h6.5v6.5H4z', 'M13.5 4H20v6.5h-6.5z', 'M4 13.5h6.5V20H4z', 'M13.5 13.5H20V20h-6.5z'],
+    feed: ['M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M8 9h8', 'M8 13h8', 'M8 17h5'],
+    calendar: ['M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z', 'M4 10h16', 'M8 3v4', 'M16 3v4'],
+    book: ['M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z', 'M5 17a3 3 0 0 1 3-3h11'],
+    external: ['M14 4h6v6', 'M20 4l-9 9', 'M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'],
     link: ['M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1', 'M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'],
     globe: ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0', 'M3 12h18', 'M12 3c3 3 3 15 0 18', 'M12 3c-3 3-3 15 0 18'],
     search: ['M11 4a7 7 0 1 0 0 14a7 7 0 0 0 0-14z', 'M20 20l-4-4'],
@@ -1267,7 +1272,7 @@
     var id = pickFamily();
     clearFamilyData();
     if (id) await enterFamily(id);
-    history.replaceState(null, '', location.pathname + '#/home');
+    history.replaceState(null, '', location.pathname + '#/hub');
     render();
   }
 
@@ -1282,7 +1287,7 @@
         if (fallback) await enterFamily(fallback);
         S.notice = { kind: 'error', text: 'You are not a member of that family.' };
       }
-      history.replaceState(null, '', location.pathname + '#/home');
+      history.replaceState(null, '', location.pathname + '#/hub');
     } catch (e) { S.memberError = e; }
     if (tok > S.nav) S.nav = tok;
     render();
@@ -1529,7 +1534,7 @@
     S.preferFamily = team.$id;
     await loadFamilies();
     await enterFamily(team.$id);
-    history.replaceState(null, '', location.pathname + '#/home');
+    history.replaceState(null, '', location.pathname + '#/hub');
     render();
   }
 
@@ -1586,14 +1591,15 @@
    * ===================================================================== */
 
   var NAV = [
-    { id: 'home', label: 'Home', icon: 'home' },
+    { id: 'hub', label: 'Hub', icon: 'hub' },
     { id: 'shorts', label: 'Shorts', icon: 'shorts' },
     { id: 'create', label: 'Create', icon: 'plus' },
-    { id: 'tree', label: 'Family Tree', icon: 'tree' },
-    { id: 'saved', label: 'Saved', icon: 'bookmark' },
+    { id: 'home', label: 'Feed', icon: 'feed' },       // the social feed; the #/home route name is kept so old links still work
+    { id: 'saved', label: 'Saved', icon: 'bookmark' },   // shown in the desktop sidebar only; phones use the bookmark icon in the top bar
     { id: 'profile', label: 'Profile', icon: 'user' }
   ];
   var VIEWS = {};
+  var HUB_MODULES = { home: 1, tree: 1, shop: 1, orders: 1 };   // screens that get a Back to Hub link at the top (chat has its own layout and its own link)
 
   function familySwitcher() {
     var cur = currentFamily();
@@ -1622,10 +1628,10 @@
     })));
     if (chatOn) window.FCChat.mountPanel();
     var top = h('header', { class: 'topbar' }, h('div', { class: 'topbar-inner' },
-      h('a', { class: 'brand', href: '#/home', 'aria-label': (CFG.appName || 'Family Circle') + ', go to Home', onclick: function () { if (/^#\/home\/?$/.test(location.hash)) window.scrollTo({ top: 0, behavior: 'smooth' }); } }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
+      h('a', { class: 'brand', href: '#/hub', 'aria-label': (CFG.appName || 'Family Circle') + ', go to the Hub', onclick: function () { if (/^#\/hub\/?$/.test(location.hash)) window.scrollTo({ top: 0, behavior: 'smooth' }); } }, h('img', { src: 'favicon.svg', alt: '' }), h('span', { text: CFG.appName || 'Family Circle' })),
       shopEnabled() ? h('a', { class: 'bell shop-btn', id: 'shop-btn', href: '#/shop', 'aria-label': 'Shop for photo gifts', title: 'Shop' }, icon('bag'), h('span', { class: 'shop-btn-label', text: 'Shop' })) : null,
       h('a', { class: 'bell', id: 'bell', href: '#/activity', 'aria-label': 'Activity', onclick: function (ev) {
-        if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/home'; }
+        if (/^#\/activity/.test(location.hash)) { ev.preventDefault(); location.hash = S.beforeActivity || '#/hub'; }
       } }, icon('bell'), h('span', { class: 'bell-badge', id: 'bell-badge', hidden: true, text: '0' })),
       h('a', { class: 'bell theme-btn', id: 'theme-btn', href: '#/settings/appearance', 'aria-label': 'Change theme: light or dark, style and color', title: 'Theme' }, icon('palette')),
       h('a', { class: 'bell saved-btn', id: 'saved-btn', href: '#/saved', 'aria-label': 'Saved posts', title: 'Saved' }, icon('bookmark'))));
@@ -1650,9 +1656,9 @@
       });
       return;
     }
-    var segs = (location.hash.replace(/^#\/?/, '') || 'home').split('?')[0].split('/');
+    var segs = (location.hash.replace(/^#\/?/, '') || 'hub').split('?')[0].split('/');
     var name = segs[0], param = segs[1] || '', param2 = segs[2] || '', param3 = segs[3] || '';
-    if (!VIEWS[name]) name = 'home';
+    if (!VIEWS[name]) name = 'hub';
     S.nav++;
     var token = S.nav;
     revokeBlobs();
@@ -1661,20 +1667,21 @@
     S.main.setAttribute('data-view', name || '');
     document.body.classList.remove('sheet-open', 'chat-mode');
     if (window.FCChat && name !== 'chat' && name !== 'dms') window.FCChat.stop();   // leaving chat closes its realtime connection
-    var navName = name === 'settings' ? 'profile' : (name === 'chat' || name === 'dms') ? 'create' : name;
+    var navName = name === 'settings' ? 'profile' : (name === 'chat' || name === 'dms') ? 'create' : (name === 'tree' || name === 'shop' || name === 'orders') ? 'hub' : name;   // Tree and Shop are Hub modules
     var savedBtn = document.getElementById('saved-btn');
     if (savedBtn) { if (name === 'saved') savedBtn.setAttribute('aria-current', 'page'); else savedBtn.removeAttribute('aria-current'); }
     Array.prototype.forEach.call(document.querySelectorAll('.nav [data-route]'), function (a) {
       if (a.getAttribute('data-route') === navName) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
-    document.title = ((window.FC_UNREAD > 0) ? '(' + (window.FC_UNREAD > 99 ? '99+' : window.FC_UNREAD) + ') ' : '') + (meta ? meta.label : ({ activity: 'Activity', post: 'Post', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
+    document.title = ((window.FC_UNREAD > 0) ? '(' + (window.FC_UNREAD > 99 ? '99+' : window.FC_UNREAD) + ') ' : '') + (meta ? meta.label : ({ hub: 'Hub', tree: 'Family Tree', shop: 'Shop', activity: 'Activity', post: 'Post', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
+    if (HUB_MODULES[name]) S.main.appendChild(h('p', { class: 'hub-back' }, h('a', { class: 'link-btn back-btn', href: '#/hub' }, icon('back'), h('span', { text: 'Back to Hub' }))));
     Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2, param3); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });
     if (!first) { S.main.focus({ preventScroll: true }); window.scrollTo(0, 0); }
-    if (name !== 'activity') S.beforeActivity = location.hash || '#/home';
-    var hNow = location.hash || '#/home';   // remember the page I came from, so "back" on a settings page returns there
+    if (name !== 'activity') S.beforeActivity = location.hash || '#/hub';
+    var hNow = location.hash || '#/hub';   // remember the page I came from, so "back" on a settings page returns there
     if (hNow !== S.curHash) { S.prevHash = S.curHash || ''; S.curHash = hNow; }
     refreshBadge(false);
   }
@@ -2090,7 +2097,7 @@
       location.hash = '#/post/' + id;
       return;
     }
-    main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/home', text: 'Back to Home' })));
+    main.appendChild(h('p', null, h('a', { class: 'link-btn back-btn', href: '#/home', text: 'Back to Feed' })));
     var holder = h('div', null, spinnerLine('Loading…'));
     main.appendChild(holder);
     var rows = id ? (await listRows('posts', [Query.equal('$id', [id]), Query.limit(1)])).rows : [];
@@ -2124,7 +2131,7 @@
   };
   VIEWS.shorts = function (main, token) {
     main.appendChild(h('h1', { class: 'sr-only', text: 'Shorts' }));
-    main.appendChild(h('div', { class: 'reels-top' }, h('a', { class: 'reels-back', href: '#/home', 'aria-label': 'Back to Home' }, icon('back')), h('span', { text: 'Shorts' })));
+    main.appendChild(h('div', { class: 'reels-top' }, h('a', { class: 'reels-back', href: '#/home', 'aria-label': 'Back to Feed' }, icon('back')), h('span', { text: 'Shorts' })));
     return pagedFeed(token, main, function (c) { return fetchPostsPage(['short', 'video'], c); }, {
       className: 'shorts', variant: 'short', infinite: true, emptyTitle: 'No videos yet.', emptyHint: 'Post a video or record a short vertical video (up to ' + (L.shortMaxSeconds || 60) + ' seconds) and share it.',
       emptyAction: h('a', { class: 'btn', href: '#/create', text: 'Create a Short' })
@@ -3322,11 +3329,11 @@
     }
     function personDetails(p, prof) {
       var box = h('div', { class: 'tree-details' }), a = ageOf(p), rows = [];
-      if (!opts.noBio && prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
+      if (prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
       if (a && a.n >= 0) rows.push(['Age', (a.approx ? 'About ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'Under 1') : a.n + ' years old')]);
       if (p.gender) rows.push(['Gender', p.gender]);
       var bd = fmtBirthday(p.birthday); if (bd) rows.push(['Birthday', bd]);
-      var ad = prof && !opts.noAddress ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
+      var ad = prof ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
       if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
       var cats = prof ? visibleAbout(prof).filter(function (c) { return c.items && c.items.length; }) : [];
       cats.forEach(function (c) {
@@ -4023,14 +4030,14 @@
     function fill(tree) {
       clear(box);
       var prof = S.profiles.get(uid) || null, p = personFor(tree, uid), rows = [];
-      if (prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
+      if (!opts.noBio && prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
       var a = p ? ageOf(p) : null;
       if (a && a.n >= 0) rows.push(['Age', (a.approx ? 'About ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'Under 1') : a.n + ' years old')]);
       if (p && p.gender) rows.push(['Gender', p.gender]);
       var b = p && p.birthday ? String(p.birthday) : '', bd = '';
       if (b.length === 4) bd = 'Born in ' + b; else if (b.length === 10) { var d = new Date(Number(b.slice(0, 4)), Number(b.slice(5, 7)) - 1, Number(b.slice(8, 10))); if (!isNaN(d)) bd = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }); }
       if (bd) rows.push(['Birthday', bd]);
-      var ad = prof ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
+      var ad = prof && !opts.noAddress ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
       var mem = (S.memberList || []).filter(function (m) { return m.userId === uid; })[0];
       if (mem && mem.joined) { var jd = new Date(mem.joined); if (!isNaN(jd)) rows.push(['Member since', jd.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })]); }
       if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
@@ -5750,6 +5757,7 @@
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
       textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
+    if (window.FCHub) window.FCHub.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, icon: icon, famName: famName, familySwitcher: familySwitcher, shopEnabled: shopEnabled });
     var action = readActionParams();
     if (action) await handleAction(action);
     await loadSession();
