@@ -96,12 +96,15 @@
       var hi = tint(c1, 0.55), lo = shade(c1, 0.25);
       E = '<path d="M30 ' + CL + 'H60" stroke="' + c1 + '" stroke-width="6" fill="none"/><path d="M30 ' + (CL - 1.8) + 'H60" stroke="' + hi + '" stroke-width="1.3" fill="none"/><path d="M30 ' + (CL + 2) + 'H60" stroke="' + lo + '" stroke-width="1" fill="none" stroke-opacity=".7"/>';
       C = '<path d="M' + CL + ' 30A17 17 0 0 1 30 ' + CL + '" stroke="' + c1 + '" stroke-width="6" fill="none"/><path d="M' + (CL - 1.8) + ' 30A18.8 18.8 0 0 1 30 ' + (CL - 1.8) + '" stroke="' + hi + '" stroke-width="1.3" fill="none"/><path d="M' + (CL + 2) + ' 30A15 15 0 0 1 30 ' + (CL + 2) + '" stroke="' + lo + '" stroke-width="1" fill="none" stroke-opacity=".7"/>';
-      T = C + '<g fill="' + c1 + '" stroke="' + lo + '" stroke-width=".8"><ellipse cx="6.5" cy="9" rx="6.8" ry="3.2" transform="rotate(-32 6.5 9)"/><ellipse cx="10" cy="20" rx="6.8" ry="3.2" transform="rotate(62 10 20)"/></g><path d="M13 13L8 27M13 13L19 26" stroke="' + c1 + '" stroke-width="2.6" stroke-linecap="round" fill="none"/><circle cx="13" cy="13" r="3.2" fill="' + lo + '"/>';
+      T = C + '<g fill="' + c1 + '" stroke="' + lo + '" stroke-width=".8"><ellipse cx="23" cy="13" rx="6.6" ry="3.9" transform="rotate(-45 23 13)"/><ellipse cx="13" cy="23" rx="6.6" ry="3.9" transform="rotate(-45 13 23)"/></g><path d="M18 18L23.5 28M18 18L28 23.5" stroke="' + c1 + '" stroke-width="3" stroke-linecap="round" fill="none"/><circle cx="18" cy="18" r="3.9" fill="' + lo + '"/><circle cx="17" cy="17" r="1.3" fill="' + hi + '"/>';
     } else if (id === 'clouds') {
-      var fill = '#eaf2ff';
-      var cs = 'M30 30V12' + SC + 'V30z';
-      E = '<path d="' + cs + '" stroke="' + c1 + '" stroke-width="3.2" fill="none"/><path d="' + cs + '" fill="' + fill + '"/><path d="M30 30V19a5 5 0 0 1 10 0a5 5 0 0 1 10 0a5 5 0 0 1 10 0V30z" fill="#fff"/>';
-      C = circles(fill, c1, 3.2) + circles(fill) + '<rect x="9" y="9" width="21" height="21" fill="' + fill + '"/><circle cx="12" cy="12" r="4.5" fill="#fff"/>';
+      var fill = '#eef5ff', ce = [[37.5, 9], [52.5, 9]], cc = [[9, 9, 9], [22.5, 9, 7.5], [9, 22.5, 7.5]];
+      var puff = function (list, f) { return list.map(function (c) { return f(c[0], c[1], c[2] || 7.5); }).join(''); };
+      var cstroke = function (x, y, r) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" stroke="' + c1 + '" stroke-width="2" fill="' + fill + '"/>'; };
+      var cfill = function (x, y, r) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + fill + '"/>'; };
+      var shine = function (x, y, r) { return '<circle cx="' + (x - r * 0.25) + '" cy="' + (y - r * 0.25) + '" r="' + (r * 0.45).toFixed(1) + '" fill="#fff"/>'; };
+      E = puff(ce, cstroke) + '<rect x="30" y="9" width="30" height="21" fill="' + fill + '"/>' + puff(ce, cfill) + puff(ce, shine);
+      C = puff(cc, cstroke) + '<rect x="9" y="9" width="21" height="21" fill="' + fill + '"/>' + puff(cc, cfill) + puff(cc, shine);
     } else if (id === 'pearls') {
       var pearl = function (x, y) { return '<circle cx="' + x + '" cy="' + y + '" r="3.5" fill="url(#bbpearl)" stroke="#cdbf9a" stroke-width=".6"/>'; };
       E = '<path d="M30 ' + CL + 'H60" stroke="#d6c9a8" stroke-width=".9" fill="none"/>' + rep(4, function (k) { return pearl(33.75 + 7.5 * k, CL); });
