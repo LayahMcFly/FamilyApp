@@ -4097,6 +4097,29 @@
     }).filter(Boolean).slice(0, 12);
   }
   async function savePageLib(list) { S.user = await account.updatePrefs({ prefs: Object.assign({}, S.user.prefs || {}, { pageLib: list }) }); }
+  /* A decorated color picker: 20 ready colors in a soft panel, plus a rainbow "Custom" tile that opens the phone's own color chooser.
+     onPick(hex) is called with a lowercase #rrggbb. Used for the circle, the card glow and the custom gradient. */
+  var PALETTE20 = [['Red', '#ff3b30'], ['Coral', '#ff6b6b'], ['Orange', '#ff9500'], ['Gold', '#ffcc00'], ['Lemon', '#ffe97a'], ['Lime', '#a8e063'], ['Green', '#34c759'], ['Emerald', '#00a86b'], ['Teal', '#2ec4b6'], ['Sky', '#5ad1ff'],
+    ['Blue', '#0a84ff'], ['Indigo', '#3f51b5'], ['Violet', '#7c5cff'], ['Purple', '#af52de'], ['Pink', '#ff6bb5'], ['Hot pink', '#ff2d78'], ['Brown', '#8b4513'], ['White', '#ffffff'], ['Grey', '#8e8e93'], ['Black', '#1c1c1e']];
+  function colorPalette(current, onPick, label) {
+    var cur = /^#[0-9a-f]{6}$/i.test(current || '') ? current.toLowerCase() : '';
+    var box = h('div', { class: 'cp', role: 'group', 'aria-label': label || 'Pick a color' }), grid = h('div', { class: 'cp-grid' }), found = false;
+    PALETTE20.forEach(function (c) {
+      var on = cur === c[1]; if (on) found = true;
+      var b = h('button', { class: 'cp-sw' + (on ? ' on' : ''), type: 'button', 'aria-pressed': on ? 'true' : 'false', 'aria-label': c[0], title: c[0] }, h('span', { class: 'cp-check', 'aria-hidden': 'true', text: '\u2713' }));
+      b.style.setProperty('--sw', c[1]);
+      b.addEventListener('click', function () { onPick(c[1]); });
+      grid.appendChild(b);
+    });
+    var inp = h('input', { type: 'color', class: 'cp-in', 'aria-label': 'Choose your own color' }); inp.value = cur || '#7c5cff';
+    inp.addEventListener('change', function () { onPick(inp.value.toLowerCase()); });
+    var custom = h('label', { class: 'cp-sw cp-custom' + (cur && !found ? ' on' : ''), title: 'Your own color' }, h('span', { class: 'cp-plus', 'aria-hidden': 'true', text: cur && !found ? '\u2713' : '+' }), inp);
+    if (cur && !found) custom.style.setProperty('--sw', cur);
+    grid.appendChild(custom);
+    box.appendChild(grid);
+    box.appendChild(h('div', { class: 'cp-note small muted', text: 'Tap a color, or the rainbow circle to pick your own.' }));
+    return box;
+  }
   function pageDesigner(prof, page) {
     var saved = pageStyleOf(prof), st = Object.assign({}, saved), done = false, cols = [];
     var dlg = h('dialog', { class: 'sheet-dialog designer', 'aria-labelledby': 'pd-title' }), msg = h('div');
@@ -4118,6 +4141,20 @@
         b.style.setProperty('background-color', col); row.appendChild(b);
       });
       return row;
+    }
+    var slotSel = {};   // which color slot is selected in each group (kept while the window repaints)
+    function colorSlots(id, slots) {   // slots: [{ key, label, fallback }]; chips on top, one decorated palette below that changes the selected chip
+      var i = slotSel[id] || 0; if (i >= slots.length) i = 0;
+      var wrap = h('div', { class: 'cs' }), chips = h('div', { class: 'cs-chips', role: 'group', 'aria-label': 'Which color to change' });
+      slots.forEach(function (sl, k) {
+        var col = /^#[0-9a-f]{6}$/i.test(st[sl.key] || '') ? st[sl.key] : sl.fallback;
+        var chip = h('button', { class: 'cs-chip', type: 'button', 'aria-pressed': k === i ? 'true' : 'false', onclick: function () { slotSel[id] = k; paint(); } }, h('span', { class: 'cs-dot' }), h('span', { text: sl.label }));
+        chip.firstChild.style.setProperty('background-color', col); chips.appendChild(chip);
+      });
+      wrap.appendChild(chips);
+      var cs = slots[i];
+      wrap.appendChild(colorPalette(st[cs.key] || cs.fallback, function (hex) { st[cs.key] = hex; if (cs.key === 'bg') { delete st.gc1; delete st.gc2; delete st.gd; } live(); paint(); }, 'Pick the ' + cs.label.toLowerCase() + ' color'));
+      return wrap;
     }
     function colorInput(key, label, fallback) {
       var inp = h('input', { type: 'color', 'aria-label': label }); inp.value = /^#[0-9a-f]{6}$/i.test(st[key] || '') ? st[key] : fallback;
@@ -4178,8 +4215,7 @@
       var gB = h('div', { class: 'pd-sub' }, h('h4', { class: 'pd-sub-h', text: 'Custom gradient' }));
       if (!hasG) gB.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Make my own gradient', onclick: function () { delete st.bg; st.gc1 = '#ff9a8b'; st.gc2 = '#7c5cff'; delete st.gd; live(); paint(); } }));
       else {
-        gB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'First color' }), colorInput('gc1', 'Gradient first color', '#ff9a8b')));
-        gB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Second color' }), colorInput('gc2', 'Gradient second color', '#7c5cff')));
+        gB.appendChild(colorSlots('grad', [{ key: 'gc1', label: 'First color', fallback: '#ff9a8b' }, { key: 'gc2', label: 'Second color', fallback: '#7c5cff' }]));
         gB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Direction' }), select('gd', PAGE_DIRS, 'Gradient direction', '135')));
         gB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Remove my gradient', onclick: function () { delete st.gc1; delete st.gc2; delete st.gd; live(); paint(); } })));
       }
@@ -4198,9 +4234,7 @@
         b.style.setProperty('background-image', 'linear-gradient(90deg,' + r[1] + ',' + r[2] + ',' + r[3] + ')'); rRow.appendChild(b);
       });
       rB.appendChild(rRow);
-      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Left' }), colorInput('fa', 'Rainbow left color', '#ff6bb5')));
-      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Middle' }), colorInput('fb', 'Rainbow middle color', '#ffb347')));
-      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Right' }), colorInput('fc', 'Rainbow right color', '#5ad1ff')));
+      rB.appendChild(colorSlots('rain', [{ key: 'fa', label: 'Left', fallback: '#ff6bb5' }, { key: 'fb', label: 'Middle', fallback: '#ffb347' }, { key: 'fc', label: 'Right', fallback: '#5ad1ff' }]));
       rB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { delete st.fa; delete st.fb; delete st.fc; live(); paint(); } })));
       body.appendChild(rB);
       // button borders: opens the gallery
@@ -4727,6 +4761,7 @@
       if (mode !== 'custom') return;
       var row = h('div', { class: 'ring-colors' });
       if (recoSlot >= picks.length) recoSlot = 0;
+      var ringPal = colorPalette(picks[recoSlot], function (hex) { picks[recoSlot] = hex; paintRing(); paintControls(); }, 'Pick a color for circle color ' + (recoSlot + 1));
       picks.forEach(function (c, i) {
         // One tap selects this colour (then tap a suggestion to change it). A double tap opens the full colour picker.
         var inp = h('input', { type: 'color', class: 'rc-input', tabindex: '-1', 'aria-hidden': 'true', value: c });
@@ -4744,6 +4779,7 @@
         row.appendChild(slot);
       });
       controls.appendChild(row);
+      controls.appendChild(ringPal);
       if (recoCols.length) {
         var recoGrid = h('div', { class: 'reco-grid' }), reco = h('div', { class: 'reco-box', role: 'group', 'aria-label': 'Colours from your picture' }, h('span', { class: 'small muted', text: 'Tap a colour above, then pick a colour from your picture:' }), recoGrid);
         recoCols.forEach(function (col) {

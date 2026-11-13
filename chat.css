@@ -855,3 +855,22 @@ dialog.designer .pd-actions { padding-top: 6px; }
 @media (max-height: 700px) { dialog.designer > p.small { display: none; } dialog.designer .pd-preview { max-height: 20dvh; } }
 .pd-sub { display: grid; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
 .pd-sub-h { margin: 0; font-size: .95rem; }
+
+/* decorated color picker (circle, card glow, custom gradient) */
+.cp { display: grid; gap: 6px; padding: 10px; border-radius: 16px; border: 1px solid var(--border); background: linear-gradient(180deg, var(--surface), var(--surface-2)); }
+.cp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 8px; justify-items: center; }
+.cp-sw { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 2px solid #fff; background: var(--sw, #888); box-shadow: 0 0 0 1px var(--border), 0 2px 5px rgba(0,0,0,.18); cursor: pointer; overflow: hidden; }
+.cp-sw::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 32% 26%, rgba(255,255,255,.55), rgba(255,255,255,0) 55%); pointer-events: none; }
+.cp-sw:focus-visible, .cp-custom:focus-within { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 2px; }
+.cp-sw.on { box-shadow: 0 0 0 3px var(--accent), 0 2px 6px rgba(0,0,0,.25); transform: scale(1.06); }
+.cp-check, .cp-plus { position: relative; z-index: 1; font-weight: 800; font-size: 1rem; line-height: 1; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); opacity: 0; }
+.cp-sw.on .cp-check, .cp-plus { opacity: 1; }
+.cp-custom { background: conic-gradient(#ff3b30, #ffcc00, #34c759, #5ad1ff, #7c5cff, #ff2d78, #ff3b30); }
+.cp-custom[style*="--sw"] { background: var(--sw); }
+.cp-in { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.cp-note { text-align: center; }
+.cs { display: grid; gap: 8px; }
+.cs-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cs-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px 4px 6px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; font-size: .9rem; cursor: pointer; }
+.cs-chip[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); font-weight: 700; }
+.cs-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border); }
