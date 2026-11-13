@@ -4191,7 +4191,7 @@
         libB.appendChild(grid);
       } else libB.appendChild(h('p', { class: 'small muted', text: 'Nothing saved yet.' }));
       var nameIn = h('input', { type: 'text', maxlength: 30, placeholder: 'Name this look', 'aria-label': 'Name for this look', autocomplete: 'off' });
-      var saveLook = h('button', { class: 'btn secondary small', type: 'button', text: 'Save this look', onclick: function () {
+      var saveLook = h('button', { class: 'btn secondary small', type: 'button', text: 'Save', 'aria-label': 'Save this look', onclick: function () {
         if (!Object.keys(st).length) return toast('Change something first, then save the look.');
         if (lib.length >= 12) return toast('You can save up to 12 looks. Delete one first.');
         var nm = nameIn.value.replace(/\s+/g, ' ').trim() || ('My look ' + (lib.length + 1));
@@ -4268,10 +4268,10 @@
       var r = await api('saveAbout', { familyId: S.familyId, about: list });
       S.profile = Object.assign({}, S.profile, { about: r.about }); S.profiles.set(S.user.$id, S.profile);
     }
-    var saveB = h('button', { class: 'btn', type: 'button', text: 'Save my page', onclick: function () { busy(saveB, async function () {
+    var saveB = h('button', { class: 'btn', type: 'button', text: 'Save', 'aria-label': 'Save my page', onclick: function () { busy(saveB, async function () {
       try { await save(pageItems(st)); saved = Object.assign({}, st); done = true; close(false); toast('Your page is saved.'); } catch (e) { showAlert(msg, 'error', errText(e)); }
     }, 'Saving…'); } });
-    var resetB = h('button', { class: 'btn secondary', type: 'button', text: 'Reset to default', onclick: function () { st = {}; live(); paint(); } });
+    var resetB = h('button', { class: 'btn secondary', type: 'button', text: 'Reset', 'aria-label': 'Reset to default', onclick: function () { st = {}; live(); paint(); } });
     dlg.appendChild(h('h2', { id: 'pd-title', text: 'Customize my page' }));
     dlg.appendChild(h('p', { class: 'small muted', text: 'Changes show on your page right away. Nothing is saved until you press Save.' }));
     dlg.appendChild(prev); dlg.appendChild(body); dlg.appendChild(msg);

@@ -271,7 +271,7 @@
       if (busy) return; busy = true; saveB.disabled = true; msg.textContent = '';
       Promise.resolve(opts.onSave ? opts.onSave(cur ? Object.assign({}, cur) : null) : null).then(function () { busy = false; saved = cur ? Object.assign({}, cur) : null; finish(); }, function (e) { busy = false; saveB.disabled = false; msg.textContent = (e && e.message) || 'Could not save. Try again.'; msg.className = 'bb-msg error'; });
     } });
-    dlg.appendChild(el('div', { class: 'bb-actions' }, saveB, el('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: cancel }), el('button', { class: 'btn secondary', type: 'button', text: 'Reset to default', onclick: function () { cur = null; live(); } })));
+    dlg.appendChild(el('div', { class: 'bb-actions' }, saveB, el('button', { class: 'btn secondary', type: 'button', text: 'Cancel', onclick: cancel }), el('button', { class: 'btn secondary', type: 'button', text: 'Reset', 'aria-label': 'Reset to default', onclick: function () { cur = null; live(); } })));
     dlg.addEventListener('cancel', function (e) { e.preventDefault(); cancel(); });
     document.body.appendChild(dlg); dlg.showModal();
     paintSelected(); drawCtl(); tabBtns[CATS[0].id].setAttribute('aria-current', 'true');
