@@ -4063,7 +4063,32 @@
   var PAGE_FONTS = { sans: ['Clean', 'inherit'], serif: ['Storybook', 'Lora, Georgia, "Times New Roman", serif'], rounded: ['Rounded', 'Nunito, "Trebuchet MS", system-ui, sans-serif'], script: ['Handwritten', '"Dancing Script", "Segoe Script", cursive'], mono: ['Typewriter', '"Courier Prime", ui-monospace, Menlo, Consolas, monospace'],
     book: ['Book', 'Merriweather, Palatino, serif'], classic: ['Classic', '"EB Garamond", Garamond, "Times New Roman", serif'], friendly: ['Friendly', 'Poppins, "Trebuchet MS", sans-serif'], wide: ['Wide', 'Montserrat, Verdana, sans-serif'],
     bold: ['Poster', '"Bebas Neue", Impact, "Arial Black", sans-serif'], playful: ['Playful', 'Fredoka, "Comic Sans MS", cursive'], fancy: ['Fancy', 'Pacifico, "Brush Script MT", cursive'],
-    news: ['Newspaper', '"Playfair Display", Didot, "Times New Roman", serif'], soft: ['Soft', 'Quicksand, Optima, Candara, sans-serif'], slab: ['Slab', '"Roboto Slab", Rockwell, serif'], narrow: ['Narrow', '"Roboto Condensed", "Arial Narrow", sans-serif'], marker: ['Marker', '"Permanent Marker", "Marker Felt", cursive'] };
+    news: ['Newspaper', '"Playfair Display", Didot, "Times New Roman", serif'], soft: ['Soft', 'Quicksand, Optima, Candara, sans-serif'], slab: ['Slab', '"Roboto Slab", Rockwell, serif'], narrow: ['Narrow', '"Roboto Condensed", "Arial Narrow", sans-serif'], marker: ['Marker', '"Permanent Marker", "Marker Felt", cursive'],
+    caveat: ['Caveat', '"Caveat", cursive'],
+    sacramento: ['Sacramento', '"Sacramento", cursive'],
+    greatvibes: ['Great Vibes', '"Great Vibes", cursive'],
+    satisfy: ['Satisfy', '"Satisfy", cursive'],
+    lobster: ['Lobster', '"Lobster", cursive'],
+    shadows: ['Shadows', '"Shadows Into Light", cursive'],
+    indie: ['Indie Flower', '"Indie Flower", cursive'],
+    patrick: ['Patrick Hand', '"Patrick Hand", cursive'],
+    amatic: ['Amatic', '"Amatic SC", cursive'],
+    chewy: ['Chewy', '"Chewy", cursive'],
+    cormorant: ['Cormorant', '"Cormorant Garamond", serif'],
+    cinzel: ['Cinzel', '"Cinzel", serif'],
+    abril: ['Abril', '"Abril Fatface", serif'],
+    josefin: ['Josefin', '"Josefin Sans", sans-serif'],
+    righteous: ['Righteous', '"Righteous", sans-serif'],
+    bangers: ['Bangers', '"Bangers", cursive'],
+    special: ['Typed', '"Special Elite", monospace'],
+    yeseva: ['Yeseva', '"Yeseva One", serif'],
+    courgette: ['Courgette', '"Courgette", cursive'],
+    pangolin: ['Pangolin', '"Pangolin", cursive'],
+    kalam: ['Kalam', '"Kalam", cursive'],
+    handlee: ['Handlee', '"Handlee", cursive'],
+    dmserif: ['DM Serif', '"DM Serif Display", serif'],
+    raleway: ['Raleway', '"Raleway", sans-serif'] };
+  var PAGE_FONTS_BASE = ['sans', 'serif', 'rounded', 'script', 'mono', 'book', 'classic', 'friendly', 'wide', 'bold', 'playful', 'fancy', 'news', 'soft', 'slab', 'narrow', 'marker'];   // shown at first; the rest appear with "Load more fonts"
   var PAGE_ROUND = { sm: ['Square', '6px'], md: ['Soft', '16px'], lg: ['Round', '28px'] };
   function pageStyleOf(profile) {
     var c = aboutOf(profile).filter(function (x) { return x && x.key === PAGE_KEY; })[0], st = {};
@@ -4091,7 +4116,7 @@
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
   var PAGE_DIRS = { '180': ['Top to bottom'], '0': ['Bottom to top'], '90': ['Left to right'], '270': ['Right to left'], '135': ['Top-left to bottom-right'], '225': ['Top-right to bottom-left'], '45': ['Bottom-left to top-right'], '315': ['Bottom-right to top-left'] };
-  var PAGE_OK = /^(gc[12]:#[0-9a-fA-F]{6}|gd:(0|45|90|135|180|225|270|315)|bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|txt:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono|book|classic|friendly|wide|bold|playful|fancy|news|soft|slab|narrow|marker)|round:(sm|md|lg))$/;
+  var PAGE_OK = /^(gc[12]:#[0-9a-fA-F]{6}|gd:(0|45|90|135|180|225|270|315)|bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|txt:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:[a-z0-9]{2,16}|round:(sm|md|lg))$/;
   function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
     var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
     return l.map(function (x) {
@@ -4168,6 +4193,7 @@
       return inp;
     }
     var dirOpen = false;
+    var fontsMore = false;
     function arrowIc(deg) { var a = icon('arrow'); a.style.setProperty('transform', 'rotate(' + deg + 'deg)'); return a; }   // an up arrow turned to the gradient's direction
     function dirPicker() {   // a decorated drop-down: one arrow per direction
       var cur = PAGE_DIRS[st.gd] ? st.gd : '135', wrap = h('div', { class: 'dp' });
@@ -4272,13 +4298,14 @@
       fB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('txt', ''); } })));
       fB.appendChild(h('div', { class: 'pd-sub-h', text: 'Font' }));
       var fGrid = h('div', { class: 'ft-grid', role: 'radiogroup', 'aria-label': 'Font' });
-      Object.keys(PAGE_FONTS).forEach(function (k) {   // each tile shows its own name in that font
+      Object.keys(PAGE_FONTS).filter(function (k) { return fontsMore || PAGE_FONTS_BASE.indexOf(k) >= 0 || st.font === k; }).forEach(function (k) {   // each tile shows its own name in that font
         var on = (st.font || 'sans') === k;
         var sample = h('span', { class: 'ft-aa', 'aria-hidden': 'true', text: 'Aa' }), nm = h('span', { class: 'ft-name', text: PAGE_FONTS[k][0] });
         sample.style.setProperty('font-family', PAGE_FONTS[k][1]); nm.style.setProperty('font-family', PAGE_FONTS[k][1]);
         fGrid.appendChild(h('button', { class: 'ft-tile' + (on ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', onclick: function () { setKey('font', k === 'sans' ? '' : k); } }, sample, nm, h('span', { class: 'bb-check', 'aria-hidden': 'true', text: '\u2713' })));
       });
       fB.appendChild(fGrid);
+      if (!fontsMore) fB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Load more fonts', onclick: function () { fontsMore = true; paint(); } })));
       fB.appendChild(h('div', { class: 'pd-sub-h', text: 'Buttons and cards' }));
       var cGrid = h('div', { class: 'cn-grid', role: 'radiogroup', 'aria-label': 'Corner shape' });
       Object.keys(PAGE_ROUND).forEach(function (k) {   // each tile shows a small button with that shape at its ends

@@ -60,3 +60,5 @@ LiveKit client SDK 2.23.0 (npm `livekit-client`) and the two MediaPipe legacy so
 ## Page fonts (`fonts/*.woff2`, `fonts.css`)
 
 Lora, Nunito, Courier Prime, Merriweather, EB Garamond, Poppins, Montserrat, Bebas Neue, Fredoka, Pacifico, Playfair Display, Quicksand, Roboto Slab, Roboto Condensed and Permanent Marker (Latin subset), from the npm packages `@fontsource/*`. They are open fonts under the SIL Open Font License 1.1 (Roboto Slab and Roboto Condensed: Apache-2.0). They are used for the font choice in Customize my page and download only when a page uses them.
+
+More page fonts (shown under "Load more fonts"), all SIL Open Font License 1.1 and from `@fontsource/*`: Caveat, Sacramento, Great Vibes, Satisfy, Lobster, Shadows Into Light, Indie Flower, Patrick Hand, Amatic SC, Chewy, Cormorant Garamond, Cinzel, Abril Fatface, Josefin Sans, Righteous, Bangers, Special Elite, Yeseva One, Courgette, Pangolin, Kalam, Handlee, DM Serif Display and Raleway.

@@ -870,7 +870,7 @@ test('page style is stored when valid and refused when not', async () => {
   assert.equal((await save(['btn:classic', 'btnc:#112233', 'btnw:6'])).status, 200);
   assert.equal((await save(['btn:fringe'])).status, 200);
   assert.equal((await save(['font:marker'])).status, 200);
-  assert.equal((await save(['font:comicsans'])).status, 400);
+  assert.equal((await save(['font:Comic Sans'])).status, 400);
   assert.equal((await save(['bg:#112233', 'gc1:#ff9a8b', 'gc2:#7c5cff', 'gd:90', 'accent:#0b84f3', 'fa:#ff6bb5', 'fb:#ffb347', 'fc:#5ad1ff', 'txt:#222222', 'font:serif', 'round:lg', 'btn:lace', 'btnc:#c9a46a', 'btnw:3', 'btns:3'])).status, 200);   // 15 settings: more than a normal category's 12, allowed for the page look
 
   assert.equal((await save(['gc1:#ff9a8b', 'gc2:#7c5cff', 'gd:225'])).status, 200);
