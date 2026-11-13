@@ -4187,7 +4187,8 @@
       rB.appendChild(rRow);
       rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Left' }), colorInput('fa', 'Rainbow left color', '#ff6bb5')));
       rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Middle' }), colorInput('fb', 'Rainbow middle color', '#ffb347')));
-      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Right' }), colorInput('fc', 'Rainbow right color', '#5ad1ff'), h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { delete st.fa; delete st.fb; delete st.fc; live(); paint(); } })));
+      rB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Right' }), colorInput('fc', 'Rainbow right color', '#5ad1ff')));
+      rB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { delete st.fa; delete st.fb; delete st.fc; live(); paint(); } })));
       body.appendChild(rB);
       // button borders: opens the gallery
       var bbB = block('Button borders', 'A frame for Edit profile and the other wide buttons on your page.'), bbNow = window.FCBorders ? window.FCBorders.read(st) : null;

@@ -839,3 +839,4 @@ dialog.bb-dialog h2 { margin: 0; font-family: Georgia, "Times New Roman", serif;
 /* icons on the wide profile buttons */
 .btn.bb-t:has(> svg) { display: flex; align-items: center; justify-content: center; gap: 10px; }
 .btn.bb-t > svg { width: 20px; height: 20px; flex: none; }
+.pd-line.pd-end { justify-content: flex-end; }
