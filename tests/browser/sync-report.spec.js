@@ -108,6 +108,7 @@ let PORT;
     check('2 reported 6 but read 5, difference flagged as unexplained', /reported 6 products/.test(rep) && /read 5/.test(rep) && /not explained by this screen/.test(rep), rep);
     check('2 2 new + 2 updated + 1 skipped = 5', /2 new, 2 updated, 1 skipped/.test(rep) && /add up to 5/.test(rep), rep);
     check('2 flagged 2 and overlap explanation; off 4 of 4 saved; on 1', /Flagged[^\n]*: 2\./.test(rep) && /switched off after this sync: 3 of the 4 that were saved/.test(rep) && /Switched on: 1/.test(rep), rep);
+    check('2 results without the published field (older server) show no unpublished line', !/Not published on Printify/.test(rep), rep);
     check('2 no Show NEW note when it was not ticked', !/Show NEW products/.test(rep), rep);
     await page.locator('.sync-report details summary').click();
     const rows = await page.locator('.sync-rows li').allInnerTexts();
@@ -123,6 +124,23 @@ let PORT;
     const { ctx, page } = await run(imp, { ok: true, page: 1, lastPage: 1, total: 0, results: [] });
     const saved = await text(page, '.sync-report[aria-label="Saved products now"]');
     check('3 each product counted once (1 on, 1 off, 1 flagged, 1 missing)', /Switched on: 1/.test(saved) && /Switched off[^\n]*: 1/.test(saved) && /Flagged[^\n]*: 1/.test(saved) && /No longer in your Printify shop: 1/.test(saved), saved);
+    await ctx.close(); }
+
+  // 4. Unpublished products: counted, explained, and shown per product
+  { const imp = mkImported().slice(0, 3);
+    const sync = { ok: true, page: 1, lastPage: 1, total: 3, results: [
+      { key: 'p-0', title: 'Oval Pendant', action: 'updated', supported: true, published: true, reason: '', notes: [], enabled: true, variants: 1 },
+      { key: 'p-1', title: 'Was On Now Draft', action: 'updated', supported: true, published: false, reason: '', notes: [], enabled: false, variants: 1 },
+      { key: 'p-2', title: 'Brand New Draft', action: 'new', supported: true, published: false, reason: '', notes: [], enabled: false, variants: 1 } ] };
+    const { ctx, page } = await run(imp, sync);
+    await page.locator('#sync-new').check();
+    await page.getByRole('button', { name: 'Sync from Printify' }).click();
+    await page.waitForSelector('.sync-report[aria-label="Latest sync results"]', { timeout: 8000 });
+    const rep = await text(page, '.sync-report[aria-label="Latest sync results"]');
+    check('4 counts products Printify has not published, with the always-off rule', /Not published on Printify: 2\./.test(rep) && /always left switched off/.test(rep) && /overlaps/.test(rep), rep);
+    await page.locator('.sync-report details summary').click();
+    const rows = await all(page, '.sync-rows li');
+    check('4 each unpublished product says so', (rows.match(/not published on Printify/g) || []).length === 2, rows);
     await ctx.close(); }
 
   await browser.close(); server.close();

@@ -1024,10 +1024,11 @@ export function createShop({ users, db, storage, square, printify, cj = null, cf
       const data = {
         title: plan.title, blurb: plan.blurb, blueprintId: plan.blueprintId, providerId: plan.providerId, position: plan.position,
         variants: packVariants(plan, { shopId: String(cfg.printifyShopId), syncedAt, sectionLocal: !!(prev && prev.sectionLocal), kindLocal: !!(prev && prev.kindLocal) }),
-        enabled: existing ? (existing.enabled === true && plan.support.ok) : (body.enableNew === true && plan.support.ok), verifiedAt: syncedAt
+        // A product Printify has not published is always left switched off, whatever it was before and whatever "show new" says.
+        enabled: plan.visible === true && (existing ? (existing.enabled === true && plan.support.ok) : (body.enableNew === true && plan.support.ok)), verifiedAt: syncedAt
       };
       if (existing) await updateRow(T.catalog, plan.key, data); else await createRow(T.catalog, plan.key, data, []);
-      return { key: plan.key, title: plan.title, action: existing ? 'updated' : 'new', supported: plan.support.ok, reason: plan.support.reason, notes: plan.notes.slice(0, 4), enabled: data.enabled, variants: plan.variants.length };
+      return { key: plan.key, title: plan.title, action: existing ? 'updated' : 'new', supported: plan.support.ok, published: plan.visible === true, reason: plan.support.reason, notes: plan.notes.slice(0, 4), enabled: data.enabled, variants: plan.variants.length };
     };
     for (let i = 0; i < list.length; i += 5) out.results.push(...(await Promise.all(list.slice(i, i + 5).map(one))));
     return out;

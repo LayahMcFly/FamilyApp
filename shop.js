@@ -1263,11 +1263,12 @@
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   /** Counts from one sync run. Each result has exactly ONE action (new, updated or skipped), so those three add up to the number read. "Flagged" and "switched off" are labels that overlap with them. */
   function syncCounts(ls) {
-    var c = { read: ls.results.length, reported: ls.reported, added: 0, updated: 0, skipped: 0, flagged: 0, off: 0, on: 0 };
+    var c = { read: ls.results.length, reported: ls.reported, added: 0, updated: 0, skipped: 0, flagged: 0, unpublished: 0, off: 0, on: 0 };
     ls.results.forEach(function (x) {
       if (x.action === 'skipped') { c.skipped++; return; }
       if (x.action === 'new') c.added++; else c.updated++;
       if (!x.supported) c.flagged++;
+      if (x.published === false) c.unpublished++;
       if (x.enabled) c.on++; else c.off++;
     });
     return c;
@@ -1281,12 +1282,13 @@
         h('li', { text: 'Printify reported ' + plural(c.reported, 'product') + ' in your shop. This sync read ' + c.read + '.' + (c.reported !== c.read ? ' The difference is not explained by this screen (products tagged fc-preview are left out on purpose).' : '') }),
         h('li', { text: 'Of the ' + c.read + ' read, each is exactly one of: ' + c.added + ' new, ' + c.updated + ' updated, ' + c.skipped + ' skipped. Those three add up to ' + c.read + '.' }),
         h('li', { text: 'Flagged (cannot be sold through the photo editor): ' + c.flagged + '. A flagged product is also new or updated, so this is not a fourth group to add up. Flagged products are always left switched off.' }),
+        c.unpublished ? h('li', { text: 'Not published on Printify: ' + c.unpublished + '. These are always left switched off by the sync, even if they were on before. Publish them in Printify, sync, then use “Show to customers”. This overlaps with the groups above.' }) : null,
         h('li', { text: 'Left switched off after this sync: ' + c.off + ' of the ' + (c.read - c.skipped) + ' that were saved. This includes every flagged product. Switched on: ' + c.on + '.' })),
       ls.newShown ? h('p', { class: 'small muted', text: '“Show NEW products” was ticked. It applies only to the ' + c.added + ' new ' + (c.added === 1 ? 'product' : 'products') + '. The ' + c.updated + ' updated ' + (c.updated === 1 ? 'product kept' : 'products kept') + ' the on/off setting it already had.' }) : null);
     var rows = ls.results.slice().sort(function (a, b) { var ra = a.action === 'skipped' ? 0 : (a.supported ? 2 : 1), rb = b.action === 'skipped' ? 0 : (b.supported ? 2 : 1); return ra - rb; });
     var list = h('ul', { class: 'sync-rows' });
     rows.forEach(function (x) {
-      var state = x.action === 'skipped' ? 'skipped, not saved' : x.action + ', ' + (x.enabled ? 'switched on' : 'left switched off') + (x.supported ? '' : ', flagged');
+      var state = x.action === 'skipped' ? 'skipped, not saved' : x.action + ', ' + (x.enabled ? 'switched on' : 'left switched off') + (x.supported ? '' : ', flagged') + (x.published === false ? ', not published on Printify' : '');
       list.appendChild(h('li', null, h('strong', { text: x.title || '(no title)' }), h('div', { class: 'small muted', text: state }),
         x.reason ? h('div', { class: 'small ' + (x.action === 'skipped' || !x.supported ? 'danger-text' : 'muted'), text: x.reason }) : null,
         (x.notes || []).map(function (n) { return h('div', { class: 'small muted', text: n }); })));

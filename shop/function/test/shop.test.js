@@ -469,7 +469,7 @@ test('webhook registration is admin only and uses the function URL', async () =>
 /* ---------- sync from the owner's own Printify shop ---------- */
 const PID = 'a1b2c3d4e5f6a1b2c3d4e5f6', PID2 = 'b1b2c3d4e5f6a1b2c3d4e5f7';
 const mkProduct = (over = {}) => ({
-  id: PID, title: 'Personalized Photo Mug', description: '<p>Hello &amp; welcome</p>', blueprint_id: 68, print_provider_id: 5, visible: false,
+  id: PID, title: 'Personalized Photo Mug', description: '<p>Hello &amp; welcome</p>', blueprint_id: 68, print_provider_id: 5, visible: true,
   options: [{ name: 'Size', type: 'size', values: [{ id: 1, title: '11oz' }, { id: 2, title: '15oz' }] }],
   variants: [{ id: 501, title: '11oz', price: 1999, is_enabled: true, is_available: true, options: [1] }, { id: 502, title: '15oz', price: 2299, is_enabled: true, is_available: true, options: [2] }, { id: 503, title: '20oz', price: 2599, is_enabled: false, is_available: true, options: [] }],
   images: [{ src: 'https://images-api.printify.com/mockup/a.jpg', is_default: false, variant_ids: [501], position: 'front' }, { src: 'https://images-api.printify.com/mockup/b.jpg', is_default: true, variant_ids: [502], position: 'front' }, { src: 'http://evil.test/c.jpg', variant_ids: [501], is_default: true }],
@@ -512,7 +512,7 @@ test('sync reads EVERY page of the shop products, is admin only, and stores a st
 });
 
 test('imported product: title, text, picture, enabled variants, prices and IDs are copied; new products start hidden', async () => {
-  const w = world(); await seed(w); fakeShop(w, [mkProduct()]);
+  const w = world(); await seed(w); fakeShop(w, [mkProduct({ visible: false })]);
   await syncAll(w);
   const p = (await w.ok(w.O, 'shopAdminOverview')).imported[0];
   assert.equal(p.key, 'pf_' + PID); assert.equal(p.title, 'Personalized Photo Mug'); assert.equal(p.enabled, false);
@@ -910,4 +910,41 @@ test('sync removes a Printify product that is gone, but never deletes when Print
   const id = await cjSeed(w); w.cjs.calls.length = 0;
   const orig = w.db.tab(T.cjProducts).get(id); orig.pid = 'GONE';
   const s = await w.ok(w.O, 'shopAdminCjSync', { id }); assert.equal(s.deleted, true); assert.equal(w.db.tab(T.cjProducts).size, 0);
+});
+
+/* ---------- sync hides products Printify has not published ---------- */
+test('a product Printify has not published is switched off by the sync, even with "show new" ticked', async () => {
+  const w = world(); await seed(w);
+  fakeShop(w, [mkProduct({ visible: true }), mkProduct({ id: PID2, title: 'Draft one', visible: false })]);
+  const first = await syncAll(w, { enableNew: true });
+  const res = first.results, pub = res.find((x) => x.key === 'pf_' + PID), draft = res.find((x) => x.key === 'pf_' + PID2);
+  assert.equal(pub.published, true); assert.equal(pub.enabled, true, 'a published, supported new product is switched on when show-new is ticked');
+  assert.equal(draft.published, false); assert.equal(draft.enabled, false, 'an unpublished product stays off');
+  const ov = (await w.ok(w.O, 'shopAdminOverview')).imported;
+  assert.equal(ov.find((x) => x.key === 'pf_' + PID2).enabled, false);
+});
+
+test('a product that was switched on is hidden again at the next sync if Printify no longer has it published', async () => {
+  const w = world(); await seed(w);
+  fakeShop(w, [mkProduct({ visible: true })]); await syncAll(w);
+  await w.ok(w.O, 'shopAdminToggle', { key: 'pf_' + PID, enabled: true });
+  assert.equal((await w.ok(w.O, 'shopAdminOverview')).imported[0].enabled, true);
+  fakeShop(w, [mkProduct({ visible: false })]); await syncAll(w);
+  const row = (await w.ok(w.O, 'shopAdminOverview')).imported[0];
+  assert.equal(row.enabled, false, 'hidden because Printify has not published it');
+  assert.equal(row.visible, false);
+  const cat = await w.ok(w.A, 'shopCatalog', { familyId: 'famA' }).catch(() => null);
+  if (cat) assert.ok(!cat.products.some((p) => p.id === 'pf_' + PID), 'it is no longer offered in the shop');
+  // publishing it again in Printify does NOT switch it back on by itself
+  fakeShop(w, [mkProduct({ visible: true })]); await syncAll(w);
+  assert.equal((await w.ok(w.O, 'shopAdminOverview')).imported[0].enabled, false, 'it stays off until the owner shows it');
+});
+
+test('the sync still never changes prices or variants beyond what Printify sends, and a published supported product keeps its on/off choice', async () => {
+  const w = world(); await seed(w);
+  fakeShop(w, [mkProduct({ visible: true })]); await syncAll(w);
+  await w.ok(w.O, 'shopAdminToggle', { key: 'pf_' + PID, enabled: true });
+  await syncAll(w);
+  const row = (await w.ok(w.O, 'shopAdminOverview')).imported[0];
+  assert.equal(row.enabled, true); assert.equal(row.minCents, 1999); assert.equal(row.maxCents, 2299);
 });
