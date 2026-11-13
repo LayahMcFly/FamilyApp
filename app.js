@@ -402,9 +402,25 @@
     }
     if (!json.ok) {
       var err = new Error(json.message || 'Something went wrong.');
-      err.code = ex.responseStatusCode; err.apiCode = json.error; throw err;
+      err.code = ex.responseStatusCode; err.apiCode = json.error;
+      noteDenied(err, body.familyId);
+      throw err;
     }
     return json;
+  }
+
+  // The server says I am not a member of the family I am looking at (removed while the app was open): check access right now
+  // instead of waiting for the next scheduled check, so the old family's content is replaced at once.
+  var deniedTimer = null, deniedAt = 0;
+  var NOT_MEMBER = 'You are not a member of this family.';   // the exact sentence the server sends for a failed membership check
+  function noteDenied(err, familyId) {
+    if (!err || err.code !== 403 || err.apiCode !== 'forbidden' || err.message !== NOT_MEMBER) return;   // other 403s ("only the owner can...") and every other error are NOT membership news
+    if (!S.familyId || familyId !== S.familyId) return;            // only an answer about the family that is open right now counts
+    if (Date.now() - deniedAt < 30000) return;                     // at most one early check per 30 seconds: if the family list still says I belong, the normal 5-minute check applies
+    deniedAt = Date.now();
+    S.validatedAt = 0;
+    clearTimeout(deniedTimer);
+    deniedTimer = setTimeout(function () { route(false); }, 50);
   }
 
   // Permissions the browser attaches to a file it uploads. "update" for my own user id is the
@@ -466,7 +482,7 @@
 
   // Forget everything that belongs to the active family (used when switching, leaving, signing out).
   function clearFamilyData() {
-    S.nav++;
+    S.nav++; S.famGen = (S.famGen || 0) + 1;   // answers that were requested for an earlier family context (even the same family, A -> B -> A) are ignored
     revokeBlobs();
     S.avatarUrls.forEach(function (p) { p.then(function (u) { URL.revokeObjectURL(u); }).catch(function () {}); });
     S.avatarUrls = new Map();
@@ -474,6 +490,8 @@
     S.shop = null;   // carts, designs, orders and the catalog belong to one person in one family
     S.profile = null; S.profiles = new Map(); S.profilesAt = 0; S.origs = new Map(); S.saved = new Map(); S.usage = null;
     S.familyId = null; S.role = null; S.isOwner = false; S.ringRole = new Map();
+    S.tree = null; S.memberList = null; S.trend = null; S.memberCache = null; S.syncing = false; S.badgeAt = 0;   // the previous family's tree, member names, trending list and activity count
+    setBadge(0);
     if (S.main) clear(S.main);
   }
 
@@ -1192,18 +1210,18 @@
    * ===================================================================== */
 
   async function loadSaved() {
-    var fid = S.familyId;
+    var fid = S.familyId, gen = S.famGen;
     var rows = await listAllRows('bookmarks', [Query.equal('userId', [S.user.$id]), Query.equal('familyId', [fid]), Query.orderAsc('$createdAt')], 1000);
-    if (fid !== S.familyId) return;
+    if (gen !== S.famGen) return;
     S.saved = new Map();
     rows.forEach(function (r) { S.saved.set(r.postId, r.collectionId || ''); });   // value = which library ('' = Saved for later)
   }
 
   // Everyone's profile in the ACTIVE family (names and pictures). Rows from other families are never requested.
   async function loadProfiles() {
-    var fid = S.familyId;
+    var fid = S.familyId, gen = S.famGen;
     var rows = await listAllRows('profiles', [Query.equal('familyId', [fid]), Query.orderAsc('$createdAt')], 500);
-    if (fid !== S.familyId) return;
+    if (gen !== S.famGen) return;
     var m = new Map();
     rows.forEach(function (r) { m.set(r.userId, r); });
     S.profiles = m; S.profilesAt = Date.now();
@@ -1234,6 +1252,7 @@
     var f = S.families.filter(function (x) { return x.id === id; })[0];
     if (!f) return false;
     S.familyId = id; S.role = f.role; S.isOwner = f.role === 'owner';
+    var gen = S.famGen;
     try { localStorage.setItem(FAM_KEY, id); } catch (e) {}
     try {
       var tr = await loadTree(false);   // the tree decides ring colors
@@ -1244,7 +1263,7 @@
       }
     } catch (e) { S.ringRole = S.ringRole || new Map(); }
     await loadProfiles();
-    if (S.familyId !== id) return false;
+    if (gen !== S.famGen) return false;
     if (S.profile) await loadSaved();
     S.validatedAt = Date.now();
     return true;
@@ -1946,9 +1965,10 @@
   async function memberCount() {
     var c = S.memberCache;
     if (c && c.fid === S.familyId && Date.now() - c.at < 5 * 60 * 1000) return c.n;
-    var res = await teams.listMemberships({ teamId: S.familyId, queries: [Query.limit(100)] });
+    var fid = S.familyId, gen = S.famGen;
+    var res = await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] });
     var n = res.memberships.filter(function (m) { return m.confirm; }).length;
-    S.memberCache = { fid: S.familyId, at: Date.now(), n: n };
+    if (gen === S.famGen) S.memberCache = { fid: fid, at: Date.now(), n: n };
     return n;
   }
 
@@ -1956,13 +1976,14 @@
   async function getTrending(force) {
     var c = S.trend;
     if (!force && c && c.fid === S.familyId && Date.now() - c.at < 60000) return c;
-    var out = { fid: S.familyId, at: Date.now(), items: [], ids: new Set() };
+    var fid = S.familyId, gen = S.famGen;
+    var out = { fid: fid, at: Date.now(), items: [], ids: new Set() };
     try {
       var others = Math.max(0, (await memberCount()) - 1);
       if (others >= 1) {
         var need = Math.min(others, Math.max(L.trendingMin || 2, Math.ceil(others * (L.trendingShare || 0.5))));
         var since = Date.now() - (L.trendingDays || 14) * 86400000;
-        var rows = await listAllRows('reactions', [Query.equal('familyId', [S.familyId]), Query.orderDesc('$createdAt')], 300);
+        var rows = await listAllRows('reactions', [Query.equal('familyId', [fid]), Query.orderDesc('$createdAt')], 300);
         var per = {};
         rows.forEach(function (r) { if (new Date(r.$createdAt).getTime() >= since) (per[r.postId] = per[r.postId] || []).push(r); });
         var cand = Object.keys(per).filter(function (id) { return per[id].length >= need; }).slice(0, 100);
@@ -1970,7 +1991,7 @@
           var posts = (await listRows('posts', [Query.equal('$id', cand), Query.limit(100)])).rows;
           await ensureProfiles(posts.map(function (p) { return p.authorId; }));
           posts.forEach(function (p) {
-            if (p.familyId !== S.familyId) return;
+            if (p.familyId !== fid) return;
             var likes = (per[p.$id] || []).filter(function (r) { return r.userId !== p.authorId; })
               .sort(function (a, b) { return new Date(a.$createdAt) - new Date(b.$createdAt); });
             if (likes.length < need) return;
@@ -1981,7 +2002,7 @@
         }
       }
     } catch (e) { /* trending is a bonus; never block the feed */ }
-    S.trend = out;
+    if (gen === S.famGen) S.trend = out;   // a late answer for an earlier family context is handed back but never stored
     return out;
   }
 
@@ -2051,8 +2072,10 @@
     if (!S.user || !S.familyId) return;
     if (!force && S.badgeAt && Date.now() - S.badgeAt < 60000) return;
     S.badgeAt = Date.now();
+    var gen0 = S.famGen;
     try {
       var items = await getActivity(), seen = seenAt();
+      if (gen0 !== S.famGen) return;   // I switched family (or lost access) while this was loading: do not show the old family's count
       setBadge(items.filter(function (i) { return new Date(i.at).getTime() > seen; }).length);
     } catch (e) { /* quiet */ }
   }
@@ -3978,18 +4001,18 @@
   async function loadTree(force) {
     var c = S.tree;
     if (!force && c && c.fid === S.familyId && Date.now() - c.at < 20000) return c;
-    var fid = S.familyId;
+    var fid = S.familyId, gen = S.famGen;
     var people = await listAllRows('people', [Query.equal('familyId', [fid])], 400);
-    try { S.memberList = (await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] })).memberships.filter(function (m) { return m.confirm; }); } catch (e) { S.memberList = S.memberList || []; }
-    if (canEditTree() && people.some(function (x) { return x.inviteMembershipId && !x.userId; }) && !S.syncing) {   // someone joined: connect their invitation entry
+    try { var ml = (await teams.listMemberships({ teamId: fid, queries: [Query.limit(100)] })).memberships.filter(function (m) { return m.confirm; }); if (gen === S.famGen) S.memberList = ml; } catch (e) { if (gen === S.famGen) S.memberList = S.memberList || []; }
+    if (canEditTree() && people.some(function (x) { return x.inviteMembershipId && !x.userId; }) && !S.syncing && gen === S.famGen) {   // someone joined: connect their invitation entry
       S.syncing = true;
       try { var sy = await api('treeSyncInvites', { familyId: fid }); if (sy && sy.linked) people = await listAllRows('people', [Query.equal('familyId', [fid])], 400); } catch (e) { /* older server: ignore */ }
-      S.syncing = false;
+      if (gen === S.famGen) S.syncing = false;   // a clear already reset it; do not touch the new context's flag
     }
     var sug = [];
     try { sug = await listAllRows('suggestions', [Query.equal('familyId', [fid]), Query.orderDesc('$createdAt')], 200); } catch (e) { sug = []; }
     var out = { fid: fid, at: Date.now(), people: people, suggestions: sug };
-    if (fid === S.familyId) { S.tree = out; S.ringRole = ringRoles(people); applyRingTheme(); }
+    if (gen === S.famGen) { S.tree = out; S.ringRole = ringRoles(people); applyRingTheme(); }   // every tree-related write (tree, ring colors, theme) is skipped for a stale request
     return out;
   }
   // My own circle color also tints the Create button and the tab icon.
@@ -5791,7 +5814,7 @@
       uploadPicture: async function (file) { var f = await avatarFile(file, 'family.jpg'); if (!f) throw new Error('Picture not changed.'); var up = await uploadFile(f); return up.$id; },
       deletePicture: function (id) { return storage.deleteFile({ bucketId: CFG.bucketId, fileId: id }).catch(function () {}); } });
     if (window.FCShop) window.FCShop.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, clear: clear, icon: icon, toast: toast, spinnerLine: spinnerLine, alertBox: alertBox, showAlert: showAlert, busy: busy, friendly: friendly,
-      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, route: route,
+      textDialog: textDialog, confirmDialog: confirmDialog, api: api, famName: famName, listRows: listRows, fetchMedia: fetchMedia, blobUrl: blobUrl, getJwt: getJwt, noteDenied: noteDenied, route: route,
       functions: functions, storage: storage, Query: Query, ID: ID, Permission: Permission, Role: Role });
     if (window.FCHub) window.FCHub.install({ S: S, VIEWS: VIEWS, CFG: CFG, h: h, icon: icon, famName: famName, familySwitcher: familySwitcher, shopEnabled: shopEnabled });
     var action = readActionParams();
