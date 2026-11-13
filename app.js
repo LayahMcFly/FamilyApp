@@ -4203,7 +4203,7 @@
         var list = h('div', { class: 'dp-list', role: 'listbox', 'aria-label': 'Gradient direction' });
         Object.keys(PAGE_DIRS).sort(function (a, b) { return a - b; }).forEach(function (d) {
           var on = d === cur;
-          list.appendChild(h('button', { class: 'dp-opt' + (on ? ' on' : ''), type: 'button', role: 'option', 'aria-selected': on ? 'true' : 'false', onclick: function () { dirOpen = false; setKey('gd', d === '135' ? '' : d); } }, arrowIc(d), h('span', { text: PAGE_DIRS[d][0] })));
+          list.appendChild(h('button', { class: 'dp-opt' + (on ? ' on' : ''), type: 'button', role: 'option', 'aria-selected': on ? 'true' : 'false', 'aria-label': PAGE_DIRS[d][0], title: PAGE_DIRS[d][0], onclick: function () { dirOpen = false; setKey('gd', d === '135' ? '' : d); } }, arrowIc(d)));
         });
         wrap.appendChild(list);
         wrap.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); dirOpen = false; paint(); } });
@@ -4264,7 +4264,7 @@
       if (!hasG) gB.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Make my own gradient', onclick: function () { delete st.bg; st.gc1 = '#ff9a8b'; st.gc2 = '#7c5cff'; delete st.gd; live(); paint(); } }));
       else {
         gB.appendChild(colorSlots('grad', [{ key: 'gc1', label: 'First color', fallback: '#ff9a8b' }, { key: 'gc2', label: 'Second color', fallback: '#7c5cff' }]));
-        gB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Direction' }), dirPicker()));
+        gB.appendChild(h('div', { class: 'pd-col' }, h('span', { text: 'Direction' }), dirPicker()));
         gB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Remove my gradient', onclick: function () { delete st.gc1; delete st.gc2; delete st.gd; live(); paint(); } })));
       }
       bgB.appendChild(gB);
