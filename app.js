@@ -3453,7 +3453,7 @@
   var ROLE_POWERS = [
     ['Everyone in the family', null],
     ['See the feed and the family tree, post, comment and message', [1, 1, 1, 1]],
-    ['Edit or delete their own posts, comments and messages', [1, 1, 1, 1]],
+    ['Edit or delete their own posts and chat messages, and delete their own comments', [1, 1, 1, 1]],
     ['Send a suggestion about the family tree', [1, 1, 1, 1]],
     ['Family tree', null],
     ['Add, edit or delete people in the tree, link relatives to accounts, and answer suggestions', [1, 1, 0, 0]],
