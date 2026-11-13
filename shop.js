@@ -348,15 +348,15 @@
     var changed = 0, parts = [], failed = false;
     try {
       try {
-        var seen = [], page = 1, last = 1, total = 0, bad = '';
+        var seen = [], page = 1, last = 1, total = 0, bad = '', autoResults = [];
         do {
           var r = await shopApi('shopAdminSync', { page: page, enableNew: false });
           if (r.diagnosis) { bad = r.diagnosis.message; break; }
-          last = r.lastPage; total = r.total; r.results.forEach(function (x) { if (x.key) seen.push(x.key); if (x.action === 'new' || x.action === 'updated') changed++; });
+          last = r.lastPage; total = r.total; r.results.forEach(function (x) { autoResults.push(x); if (x.key) seen.push(x.key); if (x.action === 'new' || x.action === 'updated') changed++; });
           page++;
         } while (page <= last);
         if (bad) { failed = true; parts.push('Printify: ' + bad); }
-        else { var f = await shopApi('shopAdminSyncFinish', { seen: seen }); changed += (f.deleted || 0); parts.push('Printify: ' + total + ' products read' + (f.deleted ? ', ' + f.deleted + ' removed' : '')); }
+        else { var f = await shopApi('shopAdminSyncFinish', { seen: seen }); st().lastSync = { at: Date.now(), reported: total, results: autoResults, newShown: false, auto: true }; changed += (f.deleted || 0); parts.push('Printify: ' + total + ' products read' + (f.deleted ? ', ' + f.deleted + ' removed' : '')); }
       } catch (e) { failed = true; parts.push('Printify: ' + msgOf(e)); }
       if (cjOn) try {
         var ov = await shopApi('shopAdminCjList');
@@ -1275,8 +1275,8 @@
   function syncReportCard(ls) {
     var c = syncCounts(ls), when = new Date(ls.at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     var card = h('div', { class: 'card inner sync-report', role: 'region', 'aria-label': 'Latest sync results' },
-      h('h3', { text: 'Latest sync results (' + when + ')' }),
-      h('p', { class: 'small muted', text: 'This is what the sync did just now. It is not a check of what customers can see in the shop.' }),
+      h('h3', { text: (ls.auto ? 'Latest automatic update (' : 'Latest sync results (') + when + ')' }),
+      h('p', { class: 'small muted', text: (ls.auto ? 'This is what the automatic update did when the shop page opened (new products always start switched off). ' : 'This is what the sync did just now. ') + 'It is not a check of what customers can see in the shop.' }),
       h('ul', { class: 'ticks' },
         h('li', { text: 'Printify reported ' + plural(c.reported, 'product') + ' in your shop. This sync read ' + c.read + '.' + (c.reported !== c.read ? ' The difference is not explained by this screen (products tagged fc-preview are left out on purpose).' : '') }),
         h('li', { text: 'Of the ' + c.read + ' read, each is exactly one of: ' + c.added + ' new, ' + c.updated + ' updated, ' + c.skipped + ' skipped. Those three add up to ' + c.read + '.' }),

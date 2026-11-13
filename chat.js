@@ -528,7 +528,7 @@
     var e = c.error, denied = e && (e.apiCode === 'forbidden' || e.code === 403);
     var msg = denied ? 'You are not a member of this family, so chat is not available.' : (e && e.apiCode === 'server_error' ? 'Chat is not ready yet. The family owner needs to finish the chat setup (see CHAT-GUIDE.md), then try again.' : msgOf(e));
     return h('div', { class: 'chat-empty' }, X.alertBox('error', msg), h('div', { class: 'row' },
-      denied ? h('a', { class: 'btn', href: '#/hub', text: 'Back to Hub' }) : h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { retryOpen(c); } }), h('a', { class: 'btn secondary', href: '#/home', text: 'Home' })));
+      denied ? h('a', { class: 'btn chat-back-hub', href: '#/hub' }, icon('back'), h('span', { text: 'Back to Hub' })) : h('button', { class: 'btn', type: 'button', text: 'Try again', onclick: function () { retryOpen(c); } }), h('a', { class: 'btn secondary', href: '#/home', text: 'Home' })));
   }
   async function retryOpen(c) { c.error = null; render(X.S.main); try { await loadOverview(c); } catch (e) { c.error = e; } if (C === c) { render(X.S.main); if (c.loaded) startConv(c); } }
 
