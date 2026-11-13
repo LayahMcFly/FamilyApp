@@ -112,6 +112,26 @@ let PORT;
     await ctx.close();
   }
 
+  // 5. Roles table fits the screen: no sideways scrolling, nothing cut off, no extra blank space
+  for (const width of [320, 360, 390, 768, 1200]) {
+    const mock = world({ families: [{ id: 'famA', name: 'Alpha Family', role: 'owner' }], members: [{ $id: 'm1', userId: 'u1', confirm: true, roles: ['owner'], userName: 'Test Owner', userEmail: 't@example.com' }] });
+    const { ctx, page } = await open(browser, mock, '#/settings/family', { viewport: { width, height: 900 } });
+    await page.waitForSelector('.roles-table', { timeout: 8000 });
+    const m = await page.evaluate(() => {
+      const wrap = document.querySelector('.roles-wrap'), t = document.querySelector('.roles-table'), card = wrap.closest('section'), cr = card.getBoundingClientRect(), tr = t.getBoundingClientRect();
+      const cells = [...t.querySelectorAll('th, td')].map(c => c.getBoundingClientRect());
+      return { sw: wrap.scrollWidth, cw: wrap.clientWidth, scrollable: wrap.scrollWidth > wrap.clientWidth + 1, tl: tr.left, tr: tr.right, cl: cr.left, cr: cr.right, minL: Math.min(...cells.map(c => c.left)), maxR: Math.max(...cells.map(c => c.right)), docW: document.documentElement.scrollWidth, vw: window.innerWidth };
+    });
+    check('5 @' + width + ': the table does not scroll sideways', !m.scrollable, JSON.stringify(m));
+    check('5 @' + width + ': every cell is inside the card (nothing cut off left or right)', m.minL >= m.cl - 1 && m.maxR <= m.cr + 1, JSON.stringify(m));
+    check('5 @' + width + ': the table fills the card width (no extra space)', Math.abs(m.tr - m.tl - (m.cr - m.cl - 2 * (m.tl - m.cl))) <= 2 && m.tr <= m.cr, JSON.stringify(m));
+    const hdr = await page.evaluate(() => [...document.querySelectorAll('.roles-table thead th')].map(h => ({ t: h.textContent, over: h.scrollWidth > h.clientWidth + 1, lines: Math.round(h.getBoundingClientRect().height / parseFloat(getComputedStyle(h).lineHeight)) })));
+    check('5 @' + width + ': no column heading is cut or broken mid-word', hdr.every(h => !h.over), JSON.stringify(hdr));
+    check('5 @' + width + ': the page itself does not scroll sideways', m.docW <= m.vw + 1, JSON.stringify(m));
+    if (width === 360) { const bb = await page.evaluate(() => { const r = document.querySelector('[aria-label="What each role can do"]').getBoundingClientRect(); return { x: 0, y: r.top + window.scrollY, width: window.innerWidth, height: r.height }; }); await page.evaluate(() => { document.querySelectorAll('.topbar, header, .nav').forEach(e => { e.style.visibility = 'hidden'; }); }); await page.screenshot({ path: path.join(shots, 'roles-table-fit-360.png'), fullPage: true, clip: bb }); }
+    await ctx.close();
+  }
+
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

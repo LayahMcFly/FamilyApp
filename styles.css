@@ -1607,13 +1607,15 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .sync-rows li { padding-bottom: .5rem; border-bottom: 1px solid var(--line, rgba(128,128,128,.25)); }
 .sync-report summary { cursor: pointer; font-weight: 600; }
 
-/* Settings: roles and powers table */
-.roles-wrap { overflow-x: auto; margin: .5rem 0; }
-.roles-table { width: 100%; min-width: 440px; border-collapse: collapse; font-size: .9rem; }
-.roles-table th, .roles-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: center; vertical-align: top; }
-.roles-table thead th { font-size: .8rem; }
-.roles-table tbody th[scope="row"] { text-align: left; font-weight: 500; }
-.roles-table th:first-child { text-align: left; min-width: 170px; }
-.roles-table .roles-group th { text-align: left; background: var(--surface-2); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+/* Settings: roles and powers table. Fits the screen width (no sideways scrolling): the power text wraps and the four role columns stay narrow. */
+.roles-wrap { margin: .5rem 0; }
+.roles-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .9rem; }
+.roles-table th, .roles-table td { padding: 8px 4px; border-bottom: 1px solid var(--border); text-align: center; vertical-align: top; overflow-wrap: anywhere; }
+.roles-table thead th { font-size: .7rem; line-height: 1.2; padding: 8px 1px; overflow-wrap: normal; word-break: normal; hyphens: none; }
+@media (max-width: 340px) { .roles-table thead th { font-size: .62rem; } }
+.roles-table thead th:first-child, .roles-table tbody th[scope="row"] { width: 38%; text-align: left; }
+.roles-table tbody th[scope="row"] { font-weight: 500; font-size: .85rem; line-height: 1.3; padding-right: 8px; }
+.roles-table .roles-group th { text-align: left; background: var(--surface-2); font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .roles-yes { font-weight: 700; color: var(--accent-text, var(--text)); }
 .roles-no { color: var(--muted); }
+@media (min-width: 700px) { .roles-table thead th { font-size: .75rem; } .roles-table tbody th[scope="row"] { font-size: .9rem; } }
