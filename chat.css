@@ -932,3 +932,7 @@ dialog.designer .pd-actions > .btn { margin: 0 !important; height: 42px; min-hei
 .fm-state { flex: none; }
 .fm-state.is-on { color: #2e9e5b; font-weight: 600; }
 .fm-empty { padding: 4px 10px; }
+
+/* the "not a member" panel's Back to Hub button: one chevron icon, then the text */
+.chat-back-hub { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.chat-back-hub svg { width: 18px; height: 18px; flex: none; }
