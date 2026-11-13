@@ -671,7 +671,16 @@
         arch.forEach(function (ch) { var on = c.cur && c.cur.id === ch.id; det.appendChild(h('a', { class: 'side-item dim' + (on ? ' on' : ''), href: '#/chat/' + ch.id, 'aria-current': on ? 'page' : null }, h('span', { class: 'hash', 'aria-hidden': 'true', text: '#' }), h('span', { class: 'grow', text: ch.name }))); });
         sc.appendChild(det);
       }
-      sc.appendChild(h('div', { class: 'row side-actions' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Family members' + (hereCount(c) > 0 ? ' · ' + hereCount(c) + ' online' : ''), onclick: function () { membersSheet(c); } }), isManager(c) ? h('button', { class: 'btn secondary small', type: 'button', text: 'Manage channels', onclick: function () { channelsSheet(c); } }) : null));
+      var fm = memberList(c).filter(function (p) { return p.userId !== c.uid; }).sort(function (a, b) { return (isHere(c, b.userId) ? 1 : 0) - (isHere(c, a.userId) ? 1 : 0); });
+      var fmDet = h('details', { class: 'fm-drop' }, h('summary', { text: 'Family members' + (hereCount(c) > 0 ? ' · ' + hereCount(c) + ' online' : '') }));
+      if (!fm.length) fmDet.appendChild(h('p', { class: 'small muted fm-empty', text: 'No one else is here yet.' }));
+      fm.forEach(function (p) {
+        var on = isHere(c, p.userId);
+        fmDet.appendChild(h('button', { class: 'fm-row', type: 'button', title: 'Message ' + (p.displayName || 'this person'), onclick: function () { startDm(c, p.userId).catch(function (e) { toast(msgOf(e)); }); } },
+          avWrap(c, p.userId, 'sm'), h('span', { class: 'grow clamp', text: p.displayName || 'Family member' }), h('span', { class: 'fm-state small' + (on ? ' is-on' : ' muted'), text: on ? 'Online' : 'Offline' })));
+      });
+      sc.appendChild(fmDet);
+      sc.appendChild(h('div', { class: 'row side-actions' }, h('a', { class: 'btn secondary small', href: '#/dms' }, icon('send'), ' Go to direct messages')));
     }
     // People are in the rail on the left. Only conversations with someone who left the family are listed here, read-only.
     var closed = c.dms.filter(function (d) { return d.status !== 'open'; });
