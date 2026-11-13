@@ -90,6 +90,16 @@ input[type="text"], input[type="email"], input[type="password"], textarea, selec
 textarea { resize: vertical; min-height: 96px; }
 .hint { color: var(--muted); font-size: .85rem; margin-top: 4px; }
 
+/* Show/hide password: an eye button inside the box. A slash is drawn across the eye while the password is visible. */
+.pw-wrap { position: relative; }
+.pw-wrap input, .pw-wrap input[type] { padding-right: 52px; }
+.pw-eye { position: absolute; top: 0; right: 0; width: 48px; height: 100%; min-height: 44px; display: flex; align-items: center; justify-content: center; background: none; border: 0; border-radius: var(--radius-sm); color: var(--muted); cursor: pointer; }
+.pw-eye:hover { color: var(--text); }
+.pw-eye:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+.pw-eye .ic { width: 22px; height: 22px; }
+.pw-eye[aria-pressed="true"] { color: var(--accent-text); }
+.pw-eye[aria-pressed="true"]::after { content: ""; position: absolute; width: 24px; height: 2px; border-radius: 2px; background: currentColor; transform: rotate(-45deg); }
+
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 1px solid transparent; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 700; cursor: pointer; text-decoration: none; }
 .btn:hover { filter: brightness(1.06); }
 .btn[disabled], .btn[aria-busy="true"] { opacity: .65; cursor: progress; }

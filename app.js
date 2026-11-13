@@ -278,7 +278,23 @@
     var input = type === 'textarea'
       ? h('textarea', { id: id, name: id, rows: opts.rows || 4, maxlength: opts.maxlength, placeholder: opts.placeholder, required: opts.required })
       : h('input', { id: id, name: id, type: type, autocomplete: opts.autocomplete, maxlength: opts.maxlength, minlength: opts.minlength, placeholder: opts.placeholder, required: opts.required, value: opts.value });
-    return { wrap: h('div', null, h('label', { for: id, text: label }), input, opts.hint ? h('div', { class: 'hint', text: opts.hint }) : null), input: input };
+    var control = type === 'password' ? withEye(input, label) : input;   // password boxes get a show/hide eye button
+    return { wrap: h('div', null, h('label', { for: id, text: label }), control, opts.hint ? h('div', { class: 'hint', text: opts.hint }) : null), input: input };
+  }
+
+  // Puts an eye button inside a password box. Pressing it shows the typed password; pressing again hides it.
+  function withEye(input, label) {
+    var shown = false;
+    var btn = h('button', { class: 'pw-eye', type: 'button', 'aria-pressed': 'false', 'aria-label': 'Show ' + String(label || 'password').toLowerCase(), title: 'Show password' }, icon('eye'));
+    btn.addEventListener('click', function () {
+      shown = !shown;
+      input.type = shown ? 'text' : 'password';
+      btn.setAttribute('aria-pressed', shown ? 'true' : 'false');
+      btn.setAttribute('aria-label', (shown ? 'Hide ' : 'Show ') + String(label || 'password').toLowerCase());
+      btn.title = shown ? 'Hide password' : 'Show password';
+      input.focus();
+    });
+    return h('div', { class: 'pw-wrap' }, input, btn);
   }
 
   function timeAgo(iso) {
