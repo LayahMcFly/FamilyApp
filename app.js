@@ -1676,7 +1676,7 @@
     });
     var meta = NAV.filter(function (n) { return n.id === name; })[0];
     document.title = ((window.FC_UNREAD > 0) ? '(' + (window.FC_UNREAD > 99 ? '99+' : window.FC_UNREAD) + ') ' : '') + (meta ? meta.label : ({ hub: 'Hub', tree: 'Family Tree', shop: 'Shop', activity: 'Activity', post: 'Post', settings: 'Settings', chat: 'Family chat', dms: 'Direct messages' }[name] || 'New family')) + ' · ' + (CFG.appName || 'Family Circle');
-    if (HUB_MODULES[name]) S.main.appendChild(h('p', { class: 'hub-back' }, h('a', { class: 'link-btn back-btn', href: '#/hub' }, icon('back'), h('span', { text: 'Back to Hub' }))));
+    if (HUB_MODULES[name]) S.main.appendChild(h('p', { class: 'hub-back' }, h('a', { class: 'link-btn back-btn', href: '#/hub' }, h('span', { text: 'Back to Hub' }))));
     Promise.resolve().then(function () { return VIEWS[name](S.main, token, param, param2, param3); }).catch(function (e) {
       if (token === S.nav) clear(S.main).appendChild(alertBox('error', friendly(e)));
     });

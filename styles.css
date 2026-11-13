@@ -1580,7 +1580,8 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .hub-head { margin: 8px 12px 16px; }
 .hub-kicker { margin: 0; font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .hub-family { margin: 2px 0 8px; font-size: 1.6rem; line-height: 1.2; overflow-wrap: anywhere; }
-.hub-switch { display: flex; flex-direction: column; gap: 4px; max-width: 360px; }
+.hub-switch { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 360px; }
+.hub-switch .fam-select { margin: 0; width: 100%; max-width: none; }
 .hub-grid { list-style: none; margin: 0; padding: 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 .hub-card { display: flex; align-items: flex-start; gap: 14px; min-height: 84px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none; box-shadow: var(--shadow, none); }
 .hub-card:hover { background: var(--surface-2); }
@@ -1596,7 +1597,7 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .hub-ext svg { width: 18px; height: 18px; }
 .hub-back { margin: 0 12px 8px; }
 .hub-back .back-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
-.hub-back svg { width: 18px; height: 18px; }
+/* the arrow is drawn by .back-btn::before, so the link holds text only */
 /* the Back to Hub link must not crowd chat or the feed's own top spacing */
 .main[data-view="home"] > .hub-back { margin-bottom: 0; }
 
