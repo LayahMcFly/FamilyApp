@@ -266,9 +266,14 @@
       var any = false;
       if (s.color !== null) {
         any = true;
-        var ci = el('input', { type: 'color', id: 'bb-color', 'aria-label': 'Border color' }); ci.value = HEX.test(cur.c || '') ? cur.c : (s.color || '#3a3a3a');
-        ci.addEventListener('input', function () { cur.c = ci.value.toLowerCase(); apply(liveScope, cur); paintTiles(); if (opts.onLive) opts.onLive(Object.assign({}, cur)); });
-        ctl.appendChild(el('label', { class: 'bb-row', for: 'bb-color' }, el('span', { text: 'Border color' }), ci));
+        var curC = HEX.test(cur.c || '') ? cur.c : (s.color || '');
+        var pick = function (hex) { cur.c = hex.toLowerCase(); live(); };
+        if (window.FCColorPalette) { ctl.appendChild(el('div', { class: 'bb-pal' }, el('span', { class: 'bb-pal-h', text: 'Border color' }), window.FCColorPalette(curC, pick, 'Border color'))); }
+        else {
+          var ci = el('input', { type: 'color', id: 'bb-color', 'aria-label': 'Border color' }); ci.value = curC || '#3a3a3a';
+          ci.addEventListener('input', function () { cur.c = ci.value.toLowerCase(); apply(liveScope, cur); if (opts.onLive) opts.onLive(Object.assign({}, cur)); });
+          ctl.appendChild(el('label', { class: 'bb-row', for: 'bb-color' }, el('span', { text: 'Border color' }), ci));
+        }
       }
       if (s.w) {
         any = true;

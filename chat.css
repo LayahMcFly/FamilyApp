@@ -893,3 +893,14 @@ dialog.designer .cs-chip { min-height: 32px; font-size: .85rem; }
 dialog.designer .btn.small { min-height: 34px; padding: 4px 12px; }
 dialog.designer .pd-actions { align-items: center; }
 dialog.designer .pd-actions > .btn { margin: 0 !important; height: 42px; min-height: 42px; }
+
+/* font gallery and border colors */
+.ft-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ft-tile { position: relative; display: grid; gap: 2px; justify-items: center; padding: 8px 6px; border-radius: 12px; border: 2px solid var(--border); background: linear-gradient(180deg, var(--surface-2), var(--surface, var(--surface-2))); color: var(--text); cursor: pointer; min-width: 0; font: inherit; }
+.ft-tile.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+.ft-tile:focus-visible { outline: 3px solid var(--accent-text, var(--accent)); outline-offset: 2px; }
+.ft-tile.on .bb-check { display: flex; }
+.ft-aa { font-size: 1.6rem; line-height: 1.1; }
+.ft-name { font-size: .85rem; overflow-wrap: anywhere; text-align: center; }
+.bb-pal { display: grid; gap: 4px; }
+.bb-pal-h { font-weight: 700; font-size: .9rem; }

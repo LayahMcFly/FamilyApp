@@ -4059,7 +4059,10 @@
   /* ---------- "Customize my page": background, borders, accent, font and corners of a person's own profile page ---------- */
   var PAGE_GRADS = { g1: ['Sunset', 'linear-gradient(135deg,#ff9a8b,#ff6a88 55%,#ff99ac)'], g2: ['Ocean', 'linear-gradient(135deg,#2193b0,#6dd5ed)'], g3: ['Forest', 'linear-gradient(135deg,#5a8f4a,#a8e063)'],
     g4: ['Night', 'linear-gradient(135deg,#0f2027,#2c5364)'], g5: ['Candy', 'linear-gradient(135deg,#a18cd1,#fbc2eb)'], g6: ['Graphite', 'linear-gradient(135deg,#232526,#555a5c)'] };
-  var PAGE_FONTS = { sans: ['Clean', 'inherit'], serif: ['Storybook', 'Georgia, "Times New Roman", serif'], rounded: ['Rounded', 'Nunito, "Trebuchet MS", system-ui, sans-serif'], script: ['Handwritten', '"Dancing Script", "Segoe Script", cursive'], mono: ['Typewriter', 'ui-monospace, Menlo, Consolas, monospace'] };
+  var PAGE_FONTS = { sans: ['Clean', 'inherit'], serif: ['Storybook', 'Georgia, "Times New Roman", serif'], rounded: ['Rounded', 'Nunito, "Trebuchet MS", system-ui, sans-serif'], script: ['Handwritten', '"Dancing Script", "Segoe Script", cursive'], mono: ['Typewriter', 'ui-monospace, Menlo, Consolas, monospace'],
+    book: ['Book', 'Palatino, "Palatino Linotype", "Book Antiqua", serif'], classic: ['Classic', 'Garamond, "EB Garamond", "Times New Roman", serif'], friendly: ['Friendly', '"Trebuchet MS", "Segoe UI", sans-serif'], wide: ['Wide', 'Verdana, Geneva, sans-serif'],
+    bold: ['Poster', 'Impact, "Arial Black", "Franklin Gothic Heavy", sans-serif'], playful: ['Playful', '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive'], fancy: ['Fancy', '"Brush Script MT", "Lucida Handwriting", "Snell Roundhand", cursive'],
+    news: ['Newspaper', 'Didot, "Bodoni MT", "Times New Roman", serif'], soft: ['Soft', 'Optima, Candara, "Gill Sans", "Segoe UI", sans-serif'], slab: ['Slab', 'Rockwell, "Roboto Slab", "Courier New", serif'], narrow: ['Narrow', '"Arial Narrow", "Roboto Condensed", "Helvetica Neue", sans-serif'], marker: ['Marker', '"Marker Felt", "Chalkboard SE", "Segoe Print", cursive'] };
   var PAGE_ROUND = { sm: ['Square', '6px'], md: ['Soft', '16px'], lg: ['Round', '28px'] };
   function pageStyleOf(profile) {
     var c = aboutOf(profile).filter(function (x) { return x && x.key === PAGE_KEY; })[0], st = {};
@@ -4087,7 +4090,7 @@
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
   var PAGE_DIRS = { '180': ['Top to bottom'], '0': ['Bottom to top'], '90': ['Left to right'], '270': ['Right to left'], '135': ['Top-left to bottom-right'], '225': ['Top-right to bottom-left'], '45': ['Bottom-left to top-right'], '315': ['Bottom-right to top-left'] };
-  var PAGE_OK = /^(gc[12]:#[0-9a-fA-F]{6}|gd:(0|45|90|135|180|225|270|315)|bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|txt:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
+  var PAGE_OK = /^(gc[12]:#[0-9a-fA-F]{6}|gd:(0|45|90|135|180|225|270|315)|bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|txt:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono|book|classic|friendly|wide|bold|playful|fancy|news|soft|slab|narrow|marker)|round:(sm|md|lg))$/;
   function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
     var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
     return l.map(function (x) {
@@ -4120,6 +4123,7 @@
     box.appendChild(h('div', { class: 'cp-note small muted', text: 'Tap a color, or the rainbow circle to pick your own.' }));
     return box;
   }
+  window.FCColorPalette = colorPalette;   // the border picker (borders.js) uses the same palette
   function pageDesigner(prof, page) {
     var saved = pageStyleOf(prof), st = Object.assign({}, saved), done = false, cols = [];
     var dlg = h('dialog', { class: 'sheet-dialog designer', 'aria-labelledby': 'pd-title' }), msg = h('div');
@@ -4248,7 +4252,15 @@
       fB.appendChild(h('div', { class: 'pd-sub-h', text: 'Text color (optional)' }));
       fB.appendChild(colorPalette(st.txt, function (hex) { setKey('txt', hex); }, 'Text color'));
       fB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Default', onclick: function () { setKey('txt', ''); } })));
-      fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Font' }), select('font', PAGE_FONTS, 'Font', 'sans')));
+      fB.appendChild(h('div', { class: 'pd-sub-h', text: 'Font' }));
+      var fGrid = h('div', { class: 'ft-grid', role: 'radiogroup', 'aria-label': 'Font' });
+      Object.keys(PAGE_FONTS).forEach(function (k) {   // each tile shows its own name in that font
+        var on = (st.font || 'sans') === k;
+        var sample = h('span', { class: 'ft-aa', 'aria-hidden': 'true', text: 'Aa' }), nm = h('span', { class: 'ft-name', text: PAGE_FONTS[k][0] });
+        sample.style.setProperty('font-family', PAGE_FONTS[k][1]); nm.style.setProperty('font-family', PAGE_FONTS[k][1]);
+        fGrid.appendChild(h('button', { class: 'ft-tile' + (on ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', onclick: function () { setKey('font', k === 'sans' ? '' : k); } }, sample, nm, h('span', { class: 'bb-check', 'aria-hidden': 'true', text: '\u2713' })));
+      });
+      fB.appendChild(fGrid);
       fB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Corners' }), select('round', PAGE_ROUND, 'Corner shape', 'md')));
       body.appendChild(fB);
       body.scrollTop = keepTop;
