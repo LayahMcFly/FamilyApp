@@ -1540,3 +1540,4 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .crop-zoom { display: flex; align-items: center; gap: 10px; width: 280px; max-width: 100%; }
 .crop-zoom input { flex: 1; }
 .crop-body .btn { width: 280px; max-width: 100%; }
+.cc-btn.none { opacity: .75; }

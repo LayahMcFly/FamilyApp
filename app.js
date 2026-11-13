@@ -802,7 +802,15 @@
     Array.prototype.forEach.call(holder0.querySelectorAll('.cc-line'), function (x) { x.parentNode.removeChild(x); });
     var cues = window.Captions ? window.Captions.parse(post.captions) : [];
     post.__cc = { v: v, box: box };
-    if (!cues.length) return;
+    if (!cues.length) {
+      // No captions yet: the CC button is still there. The poster can make them right here; everyone else is told none exist yet.
+      var none = h('button', { class: 'cc-btn none', type: 'button', text: 'CC', 'aria-label': 'No captions yet', onclick: function (ev) {
+        ev.stopPropagation();
+        if (post.__makeCaptions) { if (window.confirm('This video has no captions. Make them now? The first time it downloads a speech model of about 80 MB.')) post.__makeCaptions(); }
+        else toast('No captions on this video yet. Only the person who posted it can add them.');
+      } });
+      box.appendChild(none); return;
+    }
     var tr = document.createElement('track');
     tr.kind = 'captions'; tr.srclang = 'en'; tr.label = 'English (automatic)';
     tr.__url = URL.createObjectURL(new Blob([window.Captions.toVtt(cues, box.classList.contains('reel-media') ? 'line:68% position:42% size:70% align:center' : '')], { type: 'text/vtt' }));
@@ -2461,6 +2469,7 @@
       var cues = await makeCaptionCues(blob);
       if (cues) await saveCaptions(cues, 'Captions saved.');
     }
+    if (isMine && (post.kind === 'video' || post.kind === 'short')) post.__makeCaptions = addCaptionsToPost;
     function openMore() {
       var dlg = h('dialog', { class: 'sheet-dialog', 'aria-label': 'More options' }, h('div', { class: 'stack' },
         post.mediaFileId ? h('button', { class: 'btn secondary block', type: 'button', text: post.kind === 'photo' ? 'Download photo' : 'Download video', onclick: function () { dlg.close(); downloadMedia(); } }) : null,
