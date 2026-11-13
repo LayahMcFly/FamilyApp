@@ -1606,3 +1606,14 @@ dialog form input[type="text"][inputmode="url"] { width: 100%; }
 .sync-rows { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .6rem; }
 .sync-rows li { padding-bottom: .5rem; border-bottom: 1px solid var(--line, rgba(128,128,128,.25)); }
 .sync-report summary { cursor: pointer; font-weight: 600; }
+
+/* Settings: roles and powers table */
+.roles-wrap { overflow-x: auto; margin: .5rem 0; }
+.roles-table { width: 100%; min-width: 440px; border-collapse: collapse; font-size: .9rem; }
+.roles-table th, .roles-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: center; vertical-align: top; }
+.roles-table thead th { font-size: .8rem; }
+.roles-table tbody th[scope="row"] { text-align: left; font-weight: 500; }
+.roles-table th:first-child { text-align: left; min-width: 170px; }
+.roles-table .roles-group th { text-align: left; background: var(--surface-2); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.roles-yes { font-weight: 700; color: var(--accent-text, var(--text)); }
+.roles-no { color: var(--muted); }

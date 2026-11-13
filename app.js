@@ -3449,6 +3449,39 @@
     });
   }
 
+  // Settings > Family and members: who can do what. Read-only; the powers listed are the ones the app and the family function actually check.
+  var ROLE_POWERS = [
+    ['Everyone in the family', null],
+    ['See the feed and the family tree, post, comment and message', [1, 1, 1, 1]],
+    ['Edit or delete their own posts, comments and messages', [1, 1, 1, 1]],
+    ['Send a suggestion about the family tree', [1, 1, 1, 1]],
+    ['Family tree', null],
+    ['Add, edit or delete people in the tree, link relatives to accounts, and answer suggestions', [1, 1, 0, 0]],
+    ['Chat', null],
+    ['Create, rename, reorder or archive chat channels, and set the chat picture', [1, 0, 1, 0]],
+    ['Delete other people’s messages in channels, post in read-only channels, and see the moderation log', [1, 0, 1, 0]],
+    ['Family owner only', null],
+    ['Delete other people’s posts and comments', [1, 0, 0, 0]],
+    ['Invite people, remove people, and rename the family', [1, 0, 0, 0]],
+    ['Make someone an owner', [1, 0, 0, 0]],
+    ['Choose who is a tree admin or a chat admin', [1, 0, 0, 0]],
+    ['Delete the whole family', [1, 0, 0, 0]]
+  ];
+  function renderRolesTable(main) {
+    var cols = ['Owner', 'Tree admin', 'Chat admin', 'Member'];
+    var head = h('tr', null, h('th', { scope: 'col', text: 'Power' }), cols.map(function (c) { return h('th', { scope: 'col', text: c }); }));
+    var rows = ROLE_POWERS.map(function (r) {
+      if (!r[1]) return h('tr', { class: 'roles-group' }, h('th', { scope: 'colgroup', colspan: String(cols.length + 1), text: r[0] }));
+      return h('tr', null, h('th', { scope: 'row', text: r[0] }), r[1].map(function (v, i) {
+        return h('td', { class: v ? 'roles-yes' : 'roles-no' }, h('span', { 'aria-hidden': 'true', text: v ? '✓' : '–' }), h('span', { class: 'sr-only', text: cols[i] + (v ? ': yes' : ': no') }));
+      }));
+    });
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'What each role can do' }, h('h2', { text: 'What each role can do' }),
+      h('p', { class: 'muted small', text: 'Use this when you choose who gets extra powers. Tree admin and chat admin are add-ons that an owner gives to a member, and a person can have both. Owners already have both. There is no separate parent or adult role, so give powers to the people you trust with them.' }),
+      h('div', { class: 'roles-wrap' }, h('table', { class: 'roles-table' }, h('caption', { class: 'sr-only', text: 'Powers by family role' }), h('thead', null, head), h('tbody', null, rows))),
+      h('p', { class: 'muted small', text: 'The shop is managed separately by the site’s shop manager and is not a family role. The author of a post can also delete comments on their own post.' })));
+  }
+
   // Settings > Family and members: everything about managing who belongs to the active family.
   async function settingsFamily(main, token) {
     main.appendChild(h('p', { class: 'muted small', text: 'For ' + famName() + '. Each family you belong to has its own settings.' }));
@@ -3465,6 +3498,7 @@
     clear(holder);
     if (S.isOwner) {
       renderAdminTools(main, token);
+      renderRolesTable(main);
       var ta = h('section', { class: 'card', 'aria-label': 'Family tree admins' }, h('h2', { text: 'Family tree admins' }),
         h('p', { class: 'muted small', text: 'Tree admins can change the family tree, the same as owners. They do not get any other owner powers.' }));
       var others = joined.filter(function (m) { return m.roles.indexOf('owner') < 0; });
@@ -3486,6 +3520,7 @@
       main.appendChild(ta);
     } else {
       main.appendChild(h('div', { class: 'card' }, h('p', { text: 'Only family owners can invite or remove people. To add a relative, ask an owner to invite their email address.' })));
+      renderRolesTable(main);
     }
     renderLeaveAndDelete(main, me, joined);
   }

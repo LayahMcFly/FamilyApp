@@ -88,6 +88,27 @@ let PORT;
     check('3 automatic update sent enableNew false and made no toggle calls', (await page.evaluate(() => window.__MOCK.bodies.every(b => b.enableNew === false))) && !(await page.evaluate(() => window.__MOCK.log.some(l => /Toggle/.test(l)))), '');
     check('3 no page errors', errors.length === 0, errors.join('|')); await ctx.close(); }
 
+  // 4. Settings > Family and members: roles and powers table (owner and plain member both see it)
+  for (const role of ['owner', 'member']) {
+    const mock = world({ families: [{ id: 'famA', name: 'Alpha Family', role }], members: [{ $id: 'm1', userId: 'u1', confirm: true, roles: role === 'owner' ? ['owner'] : [], userName: 'Test Owner', userEmail: 't@example.com' }] });
+    const { ctx, page, errors } = await open(browser, mock, '#/settings/family');
+    await page.waitForSelector('.roles-table', { timeout: 8000 });
+    const cols = await page.locator('.roles-table thead th').allInnerTexts();
+    check('4 ' + role + ': columns are Power, Owner, Tree admin, Chat admin, Member', cols.join('|') === 'Power|Owner|Tree admin|Chat admin|Member', cols.join('|'));
+    const cell = async (rowText) => { const r = page.locator('.roles-table tbody tr', { has: page.locator('th[scope="row"]', { hasText: rowText }) }).first(); return (await r.locator('td').allInnerTexts()).map(t => /yes/.test(t) ? 'Y' : 'N').join(''); };
+    check('4 ' + role + ': tree editing = owner + tree admin', (await cell('Add, edit or delete people in the tree')) === 'YYNN', await cell('Add, edit or delete people in the tree'));
+    check('4 ' + role + ': channel management = owner + chat admin', (await cell('Create, rename, reorder or archive chat channels')) === 'YNYN', '');
+    check('4 ' + role + ': moderating chat = owner + chat admin', (await cell('Delete other people’s messages in channels')) === 'YNYN', '');
+    check('4 ' + role + ': deleting the family = owner only', (await cell('Delete the whole family')) === 'YNNN', '');
+    check('4 ' + role + ': choosing admins = owner only', (await cell('Choose who is a tree admin')) === 'YNNN', '');
+    check('4 ' + role + ': basic family use = everyone', (await cell('See the feed and the family tree')) === 'YYYY', '');
+    check('4 ' + role + ': every power row has one cell per role', await page.locator('.roles-table tbody tr:has(th[scope="row"])').evaluateAll(rs => rs.every(r => r.querySelectorAll('td').length === 4)), '');
+    check('4 ' + role + ': says there is no parent/adult role', /no separate parent or adult role/.test(await page.locator('[aria-label="What each role can do"]').innerText()), '');
+    if (role === 'owner') { const t = await page.locator('body').innerText(); check('4 owner: table sits above the Tree admins list', t.indexOf('What each role can do') > -1 && t.indexOf('What each role can do') < t.indexOf('Family tree admins'), ''); await page.locator('[aria-label="What each role can do"]').screenshot({ path: path.join(shots, 'roles-table-mobile.png') }); }
+    check('4 ' + role + ': no page errors', errors.length === 0, errors.join('|'));
+    await ctx.close();
+  }
+
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
