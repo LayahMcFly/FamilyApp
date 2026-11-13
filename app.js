@@ -642,6 +642,53 @@
   }
   function spinnerLine(text, kind) { return h('div', { class: 'ld', role: 'status' }, loaderArt(kind), h('span', { class: 'ld-text', text: text })); }
 
+  // Full-screen photo viewer: pinch, scroll wheel, double-tap or the + / - buttons to zoom; drag to move; Close, Esc or a tap on the dark area to leave.
+  function openPhotoViewer(src, alt) {
+    var scale = 1, tx = 0, ty = 0, MAX = 6, pts = new Map(), lastDist = 0, lastMid = null, moved = false;
+    var img = h('img', { src: src, alt: alt || 'Photo', draggable: 'false' });
+    var stage = h('div', { class: 'pv-stage' }, img);
+    function paint() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')'; stage.classList.toggle('zoomed', scale > 1); }
+    function zoomAt(ns, px, py) {
+      ns = Math.max(1, Math.min(MAX, ns));
+      tx = px - (px - tx) * (ns / scale); ty = py - (py - ty) * (ns / scale); scale = ns;
+      if (scale === 1) { tx = 0; ty = 0; }
+      paint();
+    }
+    function rel(ev) { var r = stage.getBoundingClientRect(); return { x: ev.clientX - r.left - r.width / 2, y: ev.clientY - r.top - r.height / 2 }; }
+    stage.addEventListener('wheel', function (ev) { ev.preventDefault(); var p = rel(ev); zoomAt(scale * (ev.deltaY < 0 ? 1.2 : 1 / 1.2), p.x, p.y); }, { passive: false });
+    stage.addEventListener('dblclick', function (ev) { var p = rel(ev); zoomAt(scale > 1 ? 1 : 2.5, p.x, p.y); });
+    stage.addEventListener('pointerdown', function (ev) {
+      pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); moved = false;
+      try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* fine */ }
+      if (pts.size === 2) { var a = Array.from(pts.values()); lastDist = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); lastMid = null; }
+    });
+    stage.addEventListener('pointermove', function (ev) {
+      var prev = pts.get(ev.pointerId); if (!prev) return;
+      if (pts.size === 2) {
+        pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        var a = Array.from(pts.values()), d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
+        var r = stage.getBoundingClientRect(), mx = (a[0].x + a[1].x) / 2 - r.left - r.width / 2, my = (a[0].y + a[1].y) / 2 - r.top - r.height / 2;
+        if (lastMid && scale > 1) { tx += mx - lastMid.x; ty += my - lastMid.y; }
+        lastMid = { x: mx, y: my }; moved = true;
+        if (lastDist) zoomAt(scale * (d / lastDist), mx, my);
+        lastDist = d;
+      } else if (scale > 1) {
+        tx += ev.clientX - prev.x; ty += ev.clientY - prev.y; moved = true; pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); paint();
+      } else { pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); }
+    });
+    function up(ev) { pts.delete(ev.pointerId); lastDist = 0; lastMid = null; }
+    stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+    stage.addEventListener('click', function (ev) { if (ev.target === stage && !moved) close(); });
+    var dlg = h('dialog', { class: 'photo-viewer', 'aria-label': 'Photo, enlarged' }, stage,
+      h('div', { class: 'pv-tools' },
+        h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom out', text: '\u2212', onclick: function () { zoomAt(scale / 1.4, 0, 0); } }),
+        h('button', { class: 'tool', type: 'button', 'aria-label': 'Zoom in', text: '+', onclick: function () { zoomAt(scale * 1.4, 0, 0); } }),
+        h('button', { class: 'tool pv-close', type: 'button', 'aria-label': 'Close photo', text: 'Close', onclick: function () { close(); } })));
+    function close() { try { dlg.close(); } catch (e) { /* already closed */ } if (dlg.parentNode) dlg.parentNode.removeChild(dlg); }
+    dlg.addEventListener('close', function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
+    document.body.appendChild(dlg); dlg.showModal();
+  }
+
   function imageBlock(post) {
     var token = S.nav;
     var mime = OK_IMAGE.indexOf(post.mediaMime) >= 0 ? post.mediaMime : 'image/jpeg';
@@ -651,7 +698,13 @@
       fetchMedia(post.mediaFileId, true).then(function (blob) {
         if (token !== S.nav) return;
         clear(box); box.className = 'media';
-        box.appendChild(h('img', { src: blobUrl(blob, mime), alt: 'Photo shared by the family', loading: 'lazy' }));
+        var url = blobUrl(blob, mime), inThread = /^#\/post\//.test(location.hash);
+        // In the feed, pressing a photo opens the post as a thread (photo, caption, comments). Inside the thread it opens the full-screen zoom view.
+        function press() { if (inThread) openPhotoViewer(url, 'Photo shared by the family'); else location.hash = '#/post/' + post.$id; }
+        var img = h('img', { src: url, alt: 'Photo shared by the family', loading: 'lazy', class: 'zoomable', tabindex: '0', role: 'button', 'aria-label': 'Photo shared by the family. ' + (inThread ? 'Press to view it larger.' : 'Press to open the post.') });
+        img.addEventListener('click', press);
+        img.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); press(); } });
+        box.appendChild(img);
       }).catch(function (e) {
         if (token !== S.nav) return;
         clear(box);
