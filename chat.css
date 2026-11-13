@@ -876,3 +876,21 @@ dialog.designer .pd-actions { padding-top: 6px; }
 .cs-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border); }
 .designer .pd-actions > .btn, .bb-actions .btn { white-space: nowrap; height: 44px; min-height: 44px; }
 .designer .pd-lib-save .btn, .designer .btn.small { white-space: nowrap; }
+
+/* Customize my page: everything a size smaller so the whole preview and the settings fit a phone */
+dialog.designer { font-size: .9rem; padding-inline: 12px; }
+dialog.designer h2 { font-size: 1.15rem; }
+dialog.designer .pd-preview { zoom: .74; max-height: 38dvh; overflow-y: auto; }
+dialog.designer .pd-preview .pb-svg .gal-tab.bb-t, dialog.designer .pd-preview .pb-svg .btn.bb-t { border-width: 9px !important; border-image-width: 9px !important; }
+dialog.designer .pd-body { gap: 8px; }
+dialog.designer .pd-block { padding: 10px; gap: 6px; }
+dialog.designer .pd-block h3 { font-size: .95rem; }
+dialog.designer .pd-line select, dialog.designer select { min-height: 38px; padding: 4px 10px; font-size: .9rem; }
+dialog.designer .cp-sw { width: 30px; height: 30px; }
+dialog.designer .cp-grid { grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 6px; }
+dialog.designer .cp { padding: 8px; }
+dialog.designer .cp-note { display: none; }
+dialog.designer .cs-chip { min-height: 32px; font-size: .85rem; }
+dialog.designer .btn.small { min-height: 34px; padding: 4px 12px; }
+dialog.designer .pd-actions { align-items: center; }
+dialog.designer .pd-actions > .btn { margin: 0 !important; height: 42px; min-height: 42px; }
