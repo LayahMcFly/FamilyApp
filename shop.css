@@ -219,3 +219,7 @@
 
 /* On a computer the shop uses the width instead of staying phone-sized (the grid above grows to 5 columns). */
 @media (min-width: 700px) { .main[data-view="shop"] { max-width: 1240px; } }
+
+/* search words centered in the white bar */
+.tt-search .shop-search { align-self: center; height: 100% !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; line-height: 44px; box-sizing: border-box; }
+.tt-search svg { align-self: center; }
