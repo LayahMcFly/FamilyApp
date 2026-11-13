@@ -4073,7 +4073,9 @@
     ['pg-custom', 'pg-rainbow', 'pg-bg', 'pg-accent'].forEach(function (cl) { el.classList.remove(cl); });
     if (!st || !Object.keys(st).length) return;
     el.classList.add('pg-custom');
-    if (st.bg) { el.classList.add('pg-bg'); el.style.setProperty('--pg-bg', PAGE_GRADS[st.bg] ? PAGE_GRADS[st.bg][1] : st.bg); }
+    var gOK = /^#[0-9a-f]{6}$/i;
+    if (gOK.test(st.gc1 || '') && gOK.test(st.gc2 || '')) { el.classList.add('pg-bg'); el.style.setProperty('--pg-bg', 'linear-gradient(' + (PAGE_DIRS[st.gd] ? st.gd : '135') + 'deg,' + st.gc1 + ',' + st.gc2 + ')'); }   // custom two-color gradient
+    else if (st.bg) { el.classList.add('pg-bg'); el.style.setProperty('--pg-bg', PAGE_GRADS[st.bg] ? PAGE_GRADS[st.bg][1] : st.bg); }
     if (st.accent) {
       el.classList.add('pg-accent'); el.style.setProperty('--accent', st.accent); el.style.setProperty('--grad', st.accent);
       var rgb = rgbOf(st.accent), lum = rgb ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) : 0; el.style.setProperty('--on-accent', lum > 170 ? '#1b1230' : '#fff');
@@ -4084,7 +4086,8 @@
     el.style.setProperty('--pg-radius', (PAGE_ROUND[st.round] || PAGE_ROUND.md)[1]);
   }
   var PAGE_RAINBOWS = { candy: ['Candy', '#ff6bb5', '#ffb347', '#5ad1ff'], ocean: ['Ocean', '#2193b0', '#6dd5ed', '#7c5cff'], forest: ['Forest', '#5a8f4a', '#a8e063', '#f2c94c'], sunset: ['Sunset', '#ff5e62', '#ff9966', '#ffd86f'], berry: ['Berry', '#c33764', '#7c3aed', '#ff8fb1'], mono: ['Mono', '#222222', '#777777', '#cccccc'] };
-  var PAGE_OK = /^(bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|txt:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
+  var PAGE_DIRS = { '180': ['Top to bottom'], '0': ['Bottom to top'], '90': ['Left to right'], '270': ['Right to left'], '135': ['Top-left to bottom-right'], '225': ['Top-right to bottom-left'], '45': ['Bottom-left to top-right'], '315': ['Bottom-right to top-left'] };
+  var PAGE_OK = /^(gc[12]:#[0-9a-fA-F]{6}|gd:(0|45|90|135|180|225|270|315)|bg:(#[0-9a-fA-F]{6}|g[1-6])|btn:(none|classic|bold|double|dashed|dotted|inset|beveled|gradient|scallop|hearts|stars|flowers|ribbon|clouds|stitched|pearls|sparkles|lace|floral|rope|crochet|fringe|scroll)|btnc:#[0-9a-fA-F]{6}|btnw:[1-6]|btns:[1-3]|accent:#[0-9a-fA-F]{6}|txt:#[0-9a-fA-F]{6}|f[abc]:#[0-9a-fA-F]{6}|font:(sans|serif|rounded|script|mono)|round:(sm|md|lg))$/;
   function pageLib() {   // the person's saved page looks (kept on their account, so they follow them to any device)
     var l = S.user && S.user.prefs && S.user.prefs.pageLib; if (!Array.isArray(l)) return [];
     return l.map(function (x) {
@@ -4107,7 +4110,7 @@
       h('div', { class: 'card' }, h('h2', { text: 'A card on my page' }), h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', tabindex: '-1', text: 'Like' }), h('button', { class: 'btn secondary', type: 'button', tabindex: '-1', text: 'Share' }))),
       h('button', { class: 'btn secondary block bb-t', type: 'button', tabindex: '-1', text: 'Edit profile' }));
     function live() { applyPageStyle(page, st); applyPageStyle(prev, st); }
-    function setKey(k, v) { if (v) st[k] = v; else delete st[k]; live(); paint(); }
+    function setKey(k, v) { if (v) st[k] = v; else delete st[k]; if (k === 'bg' && v) { delete st.gc1; delete st.gc2; delete st.gd; } live(); paint(); }
     function swatches(key, list, label) {
       var row = h('div', { class: 'pd-sw', role: 'group', 'aria-label': label });
       list.forEach(function (col) {
@@ -4118,7 +4121,7 @@
     }
     function colorInput(key, label, fallback) {
       var inp = h('input', { type: 'color', 'aria-label': label }); inp.value = /^#[0-9a-f]{6}$/i.test(st[key] || '') ? st[key] : fallback;
-      inp.addEventListener('input', function () { st[key] = inp.value.toLowerCase(); live(); });
+      inp.addEventListener('input', function () { st[key] = inp.value.toLowerCase(); if (key === 'bg') { delete st.gc1; delete st.gc2; delete st.gd; } live(); });
       inp.addEventListener('change', function () { paint(); });
       return inp;
     }
@@ -4171,6 +4174,16 @@
       bgB.appendChild(bgRow);
       if (reco.length) bgB.appendChild(h('div', { class: 'pd-reco' }, h('span', { class: 'small muted', text: 'From your picture' }), swatches('bg', reco, 'Background')));
       bgB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Any color' }), colorInput('bg', 'Page background color', '#7c5cff')));
+      var hasG = !!(st.gc1 && st.gc2);   // custom two-color gradient: color 1, color 2 and a direction
+      var gB = h('div', { class: 'pd-sub' }, h('h4', { class: 'pd-sub-h', text: 'Custom gradient' }));
+      if (!hasG) gB.appendChild(h('button', { class: 'btn secondary small', type: 'button', text: 'Make my own gradient', onclick: function () { delete st.bg; st.gc1 = '#ff9a8b'; st.gc2 = '#7c5cff'; delete st.gd; live(); paint(); } }));
+      else {
+        gB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'First color' }), colorInput('gc1', 'Gradient first color', '#ff9a8b')));
+        gB.appendChild(h('div', { class: 'pd-line' }, h('span', { text: 'Second color' }), colorInput('gc2', 'Gradient second color', '#7c5cff')));
+        gB.appendChild(h('label', { class: 'pd-line' }, h('span', { text: 'Direction' }), select('gd', PAGE_DIRS, 'Gradient direction', '135')));
+        gB.appendChild(h('div', { class: 'pd-line pd-end' }, h('button', { class: 'btn secondary small', type: 'button', text: 'Remove my gradient', onclick: function () { delete st.gc1; delete st.gc2; delete st.gd; live(); paint(); } })));
+      }
+      bgB.appendChild(gB);
       body.appendChild(bgB);
       // accent
       var aB = block('Accent color', 'Buttons, tabs and highlights on your page.');

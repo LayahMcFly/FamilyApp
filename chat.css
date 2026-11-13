@@ -853,3 +853,5 @@ dialog.designer .pd-preview { flex: none; max-height: 24vh; max-height: 24dvh; o
 dialog.designer .pd-body { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; }
 dialog.designer .pd-actions { padding-top: 6px; }
 @media (max-height: 700px) { dialog.designer > p.small { display: none; } dialog.designer .pd-preview { max-height: 20dvh; } }
+.pd-sub { display: grid; gap: 8px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
+.pd-sub-h { margin: 0; font-size: .95rem; }
