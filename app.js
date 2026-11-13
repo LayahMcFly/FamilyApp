@@ -3174,6 +3174,14 @@
   /* ---------- FAMILY TREE PAGE (bottom bar): a view-only tree drawn by family-chart (see tree-chart.js) ---------- */
   var KIND_LABEL = { birth: 'Birth parent', adoptive: 'Adoptive parent', step: 'Step-parent', foster: 'Foster parent', guardian: 'Guardian' };
   function kindsOf(p) { return window.FamilyTreeChart ? window.FamilyTreeChart.parseKinds(p) : {}; }
+  // Mother / Father title from a parent's gender (Nonbinary, Other or not set keep the plain "Parent" wording)
+  function parentTitle(person, kind) {
+    var g = String((person && person.gender) || '').trim().toLowerCase();
+    var role = /^(f|w|girl|she)/.test(g) ? 'mother' : /^(m|boy|he)/.test(g) ? 'father' : '';
+    if (!role) return KIND_LABEL[kind || 'birth'] || 'Parent';
+    var cap = role.charAt(0).toUpperCase() + role.slice(1);
+    return kind === 'adoptive' ? 'Adoptive ' + role : kind === 'step' ? 'Step-' + role : kind === 'foster' ? 'Foster ' + role : kind === 'guardian' ? 'Guardian' : cap;
+  }
   function kindTag(kind) { return kind && kind !== 'birth' ? h('span', { class: 'kind-tag', text: KIND_LABEL[kind] || kind }) : null; }
 
   VIEWS.tree = async function (main, token, focusId) {
@@ -3300,13 +3308,14 @@
         });
         panel.appendChild(addRow);
       }
-      function group(label, items) {
+      function group(label, items, isParents) {
         if (!items.length) return;
         panel.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: label }), h('div', { class: 'rel-list' }, items.map(function (it) {
-          return h('button', { class: 'chip', type: 'button', onclick: function () { if (ctl) ctl.focus(it.id); select(it.id); } }, byId[it.id].name, kindTag(it.kind));
+          var tag = isParents ? h('span', { class: 'kind-tag', text: parentTitle(byId[it.id], it.kind) }) : kindTag(it.kind);
+          return h('button', { class: 'chip', type: 'button', onclick: function () { if (ctl) ctl.focus(it.id); select(it.id); } }, byId[it.id].name, tag);
         }))));
       }
-      group(r.parents.length > 1 ? 'Parents' : 'Parent', r.parents);
+      group(r.parents.length > 1 ? 'Parents' : 'Parent', r.parents, true);
       group(r.partners.length > 1 ? 'Partners' : 'Partner', r.partners.map(function (x) { return { id: x }; }));
       group(r.children.length > 1 ? 'Children' : 'Child', r.children);
       group(r.siblings.length > 1 ? 'Siblings' : 'Sibling', r.siblings.map(function (x) { return { id: x }; }));
@@ -5560,7 +5569,12 @@
     }
     function addParentRow(id, kind) {
       var ps = personPick(id, 'Parent'), ks = h('select', { 'aria-label': 'How is this parent related?' }, KIND_ORDER.map(function (k) { return h('option', { value: k, text: KIND_LABEL[k] }); }));
-      ks.value = kind || 'birth';
+      function relabel() {
+        var who = others.filter(function (x) { return x.$id === ps.value; })[0], cur = ks.value;
+        [].slice.call(ks.options).forEach(function (o) { o.textContent = parentTitle(who, o.value); });
+        ks.value = cur;
+      }
+      ks.value = kind || 'birth'; ps.addEventListener('change', relabel); relabel();
       var row = h('div', { class: 'row' }, h('div', { class: 'grow' }, ps), h('div', null, ks),
         h('button', { class: 'btn secondary small', type: 'button', text: 'Remove', 'aria-label': 'Remove this parent', onclick: function () { row.parentNode.removeChild(row); sync(); } }));
       row._id = ps; row._kind = ks; parentRows.appendChild(row); sync();
