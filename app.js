@@ -3322,11 +3322,11 @@
     }
     function personDetails(p, prof) {
       var box = h('div', { class: 'tree-details' }), a = ageOf(p), rows = [];
-      if (prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
+      if (!opts.noBio && prof && prof.bio) box.appendChild(h('p', { class: 'tree-bio', text: prof.bio }));
       if (a && a.n >= 0) rows.push(['Age', (a.approx ? 'About ' : '') + (a.n < 2 ? (a.n === 1 ? '1 year old' : 'Under 1') : a.n + ' years old')]);
       if (p.gender) rows.push(['Gender', p.gender]);
       var bd = fmtBirthday(p.birthday); if (bd) rows.push(['Birthday', bd]);
-      var ad = prof ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
+      var ad = prof && !opts.noAddress ? addressOf(prof) : ''; if (ad) rows.push(['Address', ad]);
       if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
       var cats = prof ? visibleAbout(prof).filter(function (c) { return c.items && c.items.length; }) : [];
       cats.forEach(function (c) {
@@ -4017,7 +4017,8 @@
     return loadTree(false).then(function (t) { var r = relationLabel(t, uid); return r === 'You' ? 'You' : r ? 'Your ' + r : ''; }).catch(function () { return ''; });
   }
   // Family info for one person (used by the chat profile sheet): bio, age, gender, birthday, address and favorite things. Fills in after the tree loads.
-  function profileFacts(uid) {
+  function profileFacts(uid, opts) {
+    opts = opts || {};
     var box = h('div', { class: 'tree-details pf-facts' });
     function fill(tree) {
       clear(box);
@@ -4033,7 +4034,7 @@
       var mem = (S.memberList || []).filter(function (m) { return m.userId === uid; })[0];
       if (mem && mem.joined) { var jd = new Date(mem.joined); if (!isNaN(jd)) rows.push(['Member since', jd.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })]); }
       if (rows.length) box.appendChild(h('dl', { class: 'tree-facts' }, rows.map(function (r) { return h('div', null, h('dt', { text: r[0] }), h('dd', { text: r[1] })); })));
-      (prof ? visibleAbout(prof) : []).filter(function (c) { return c.items && c.items.length; }).forEach(function (c) {
+      (prof && !opts.noAbout ? visibleAbout(prof) : []).filter(function (c) { return c.items && c.items.length; }).forEach(function (c) {
         box.appendChild(h('div', { class: 'rel-group' }, h('strong', { text: c.title }), h('ul', { class: 'tags' }, c.items.map(function (i) { return h('li', { class: 'tag', text: i }); }))));
       });
       if (!box.childNodes.length) box.appendChild(h('p', { class: 'muted small', text: 'No family info added yet.' }));
@@ -4541,17 +4542,22 @@
       top.appendChild(h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': 'Settings', title: 'Settings' }, icon('gear')));
     }
     main.appendChild(top);
+    var relLine = h('p', { class: 'pf-rel' });   // for example: Your older sister
+    if (!own) relationFor(uid).then(function (t) { if (t) relLine.textContent = t; });
     var pBan = bannerEl(prof, 'hero-bg'), hero = null;   // the banner sits behind the picture, name and Edit profile button
     if (pBan) { hero = h('div', { class: 'profile-hero has-banner' }, pBan); main.appendChild(hero); }
     (hero || main).appendChild(h('header', { class: 'profile-head' },
       h('div', { class: 'profile-avatar' }, avatarEl(prof, 'lg')),
       h('div', { class: 'profile-id' }, h('h2', { class: 'profile-name', text: prof.displayName }),
+        relLine,
         prof.bio ? h('p', { class: 'profile-bio', text: prof.bio }) : (mine ? h('p', { class: 'muted small', text: 'No bio yet.' }) : null))));
     if (mine) (hero || main).appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/profile/edit' }, icon('edit'), h('span', { text: 'Edit profile' })));
     if (mine) main.appendChild(h('button', { class: 'btn secondary block bb-t', type: 'button', onclick: function () { pageDesigner(S.profile, main); } }, icon('palette'), h('span', { text: 'Customize my page' })));
     if (mine) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/settings/privacy' }, icon('home'), h('span', { text: 'My address (private)' })));
     if (mine && shopEnabled()) main.appendChild(h('a', { class: 'btn secondary block bb-t', href: '#/orders', onclick: function () { S.ordersFrom = '#/profile'; } }, icon('bag'), h('span', { text: 'My orders' })));
     if (!own && !preview) { var addrHolder = h('div'); main.appendChild(addrHolder); addressOnProfile(addrHolder, token, uid); }
+    // The same family info the chat profile preview shows: age, gender, birthday, member since (the address has its own private card for other people)
+    main.appendChild(h('section', { class: 'card', 'aria-label': 'Details' }, h('h2', { text: 'Details' }), profileFacts(uid, { noBio: true, noAbout: true, noAddress: !own })));
     // Switching families (or starting another one) lives here, not in the top bar.
     if (mine) main.appendChild(h('section', { class: 'card profile-fam', 'aria-label': 'Family' }, h('h2', { text: 'Family' }), h('p', { class: 'muted small', text: 'You are in ' + famName() + '.' + (S.families.length > 1 || S.canCreateFamily ? ' Switch to another family, or start a new one:' : '') }), familySwitcher()));
 
