@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { createApi, TABLES } from '../src/logic.js';
 import { CHAT_TABLES, CHAT_LIMITS, DEFAULT_CHANNELS } from '../src/chat.js';
@@ -38,7 +39,7 @@ function makeWorld() {
       return row;
     },
     async getRow({ tableId, rowId }) { const r = world.tables[tableId].get(rowId); if (!r) throw err(404, 'nope'); return r; },
-    async updateRow({ tableId, rowId, data, permissions }) { const r = await db.getRow({ tableId, rowId }); Object.assign(r, data || {}); if (permissions) r.$permissions = permissions.slice(); return r; },
+    async updateRow({ tableId, rowId, data, permissions }) { if (world.failProfileUpdate && tableId === TABLES.profiles) { const e = new Error('simulated outage'); e.code = 500; throw e; } const r = await db.getRow({ tableId, rowId }); Object.assign(r, data || {}); if (permissions) r.$permissions = permissions.slice(); return r; },
     async deleteRow({ tableId, rowId }) { await db.getRow({ tableId, rowId }); world.tables[tableId].delete(rowId); return {}; },
     async listRows({ tableId, queries = [] }) {
       const t = world.tables[tableId];
@@ -478,4 +479,78 @@ test('picture from a web link: members only, safe addresses only, and a non-pict
     for (const u of ['http://127.0.0.1/a.png', 'file:///etc/passwd', '']) await w.fail('ann', 'pictureFromUrl', { familyId: 'famA', url: u }, 400);
     await w.fail('zed', 'pictureFromUrl', { familyId: 'famA', url: 'https://example.com/good.png' }, 403);
   } finally { delete EXTRA_CFG.fetchPicture; }
+});
+
+/* ---------- Checkpoint 3: access hardening (chat) ---------- */
+const CHAT_ACTIONS = [...readFileSync(new URL('../src/chat.js', import.meta.url), 'utf8').matchAll(/\n    async (\w+)\(\{ user/g)].map((m) => m[1]);
+const chatBody = (action, familyId, ch) => ({ action, familyId, kind: 'channel', convId: ch.general, messageId: 'm1', userId: 'bob', otherId: 'bob', body: 'hi', clientId: cid(), emoji: '👍', admin: true, at: new Date().toISOString(), name: 'x', slug: 'x', url: 'https://example.com', fileId: '', ids: [], order: [], channelId: ch.general, on: true, blocked: true });
+
+test('EVERY chat action (read from the source, none skipped) refuses an outsider, a member of another family and a removed member', async () => {
+  assert.ok(CHAT_ACTIONS.length >= 20, 'found the chat action list: ' + CHAT_ACTIONS.length);
+  const { w, ch } = await setup();
+  const gone = ['ann', 'bob'];            // bob is removed below
+  w.removeMember('famA', 'bob');
+  const checks = [['zed', 'member of another family'], ['yan', 'member of another family'], ['nobody', 'outsider'], ['bob', 'removed member']];
+  let n = 0;
+  for (const [who, label] of checks) for (const a of CHAT_ACTIONS) {
+    const r = await w.call(who, a, chatBody(a, 'famA', ch)); n++;
+    assert.equal(r.status, 403, `${label} (${who}): ${a} must be refused with 403, got ${r.status} ${JSON.stringify(r.json).slice(0, 120)}`);
+  }
+  assert.equal(n, CHAT_ACTIONS.length * checks.length); assert.ok(gone.length);
+});
+
+test('chat admin of family A has no chat powers in family B', async () => {
+  const { w, ch } = await setup();
+  await w.addFamily('famC', 'cora', ['ann']);                  // ann is a plain member of famC and in famA
+  await w.ok('owner', 'chatSetAdmin', { familyId: 'famA', userId: 'ann', admin: true });
+  await w.ok('ann', 'chatOpen', { familyId: 'famC' });
+  await w.fail('ann', 'chatChannelSave', { familyId: 'famC', name: 'sneaky', description: 'x' }, 403);
+  await w.fail('ann', 'chatModLog', { familyId: 'famC' }, 403);
+});
+
+test('DEFECT CHECK: chat-admin powers granted in an earlier membership do not come back when the same person is re-invited', async () => {
+  const { w } = await setup();
+  await w.ok('owner', 'chatSetAdmin', { familyId: 'famA', userId: 'bob', admin: true });
+  await w.ok('bob', 'chatModLog', { familyId: 'famA' });
+  w.removeMember('famA', 'bob');
+  await w.api.handleEvent({ event: 'teams.famA.memberships.m9.delete', payload: { teamId: 'famA', userId: 'bob' }, deadline: Number.MAX_SAFE_INTEGER });   // what Appwrite sends
+  await w.fail('bob', 'chatModLog', { familyId: 'famA' }, 403);
+  w.world.teams.famA.members.push({ userId: 'bob', roles: ['member'], confirm: true });          // re-invited as an ordinary member
+  const r = await w.call('bob', 'chatModLog', { familyId: 'famA' });
+  assert.equal(r.status, 403, 'a re-invited member must start with NO chat-admin powers; got ' + r.status);
+});
+
+const EVT = (fid, uid) => ({ event: `teams.${fid}.memberships.mX.delete`, payload: { teamId: fid, userId: uid }, deadline: Number.MAX_SAFE_INTEGER });
+test('cleanup covers tree-admin AND chat-admin together', async () => {
+  const { w } = await setup();
+  await w.ok('owner', 'chatSetAdmin', { familyId: 'famA', userId: 'bob', admin: true });
+  const prof = () => rows(w, TABLES.profiles).find((p) => p.profileKey === 'famA_bob');
+  prof().treeAdmin = true;
+  w.removeMember('famA', 'bob');
+  await w.api.handleEvent(EVT('famA', 'bob'));
+  assert.equal(prof().treeAdmin, false); assert.equal(prof().chatAdmin, false);
+});
+
+test('a delayed or repeated delete event cannot strip a member who was re-invited and given a NEW admin grant', async () => {
+  const { w } = await setup();
+  await w.ok('owner', 'chatSetAdmin', { familyId: 'famA', userId: 'bob', admin: true });
+  w.removeMember('famA', 'bob');
+  await w.api.handleEvent(EVT('famA', 'bob'));                                       // the real event
+  w.world.teams.famA.members.push({ userId: 'bob', roles: ['member'], confirm: true });   // re-invited
+  await w.fail('bob', 'chatModLog', { familyId: 'famA' }, 403);                        // starts as an ordinary member
+  await w.ok('owner', 'chatSetAdmin', { familyId: 'famA', userId: 'bob', admin: true });    // legitimately granted again
+  await w.api.handleEvent(EVT('famA', 'bob')); await w.api.handleEvent(EVT('famA', 'bob'));  // delayed duplicates of the OLD removal arrive
+  await w.ok('bob', 'chatModLog', { familyId: 'famA' });                               // the new grant survives
+});
+
+test('if the flag cleanup fails, direct messages are still closed, the event reports failure, and the flag stays set (known limitation)', async () => {
+  const { w } = await setup();
+  const dm = (await w.ok('ann', 'chatDmStart', { familyId: 'famA', userId: 'bob' })).dm; assert.ok(dm.id);
+  await w.ok('owner', 'chatSetAdmin', { familyId: 'famA', userId: 'bob', admin: true });
+  w.removeMember('famA', 'bob');
+  w.world.failProfileUpdate = true;
+  const ev = await w.api.handleEvent(EVT('famA', 'bob'));
+  assert.equal(ev.status, 500); assert.equal(ev.json.error, 'admin_cleanup_failed'); assert.equal(ev.json.closed, 1);
+  assert.equal(rows(w, CHAT_TABLES.dms)[0].status, 'closed');
+  assert.equal(rows(w, TABLES.profiles).find((p) => p.profileKey === 'famA_bob').chatAdmin, true, 'the flag is still set: this is why a durable binding is needed');
 });

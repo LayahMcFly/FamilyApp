@@ -217,10 +217,28 @@ export function createChat(c) {
   }
 
   /* ---------- leaving a family: close that person's DMs ---------- */
+  /** Admin powers (tree admin, chat admin) are stored on the person's profile row, which outlives the membership.
+   *  Switch them off when the person is gone, so being invited back later starts with ordinary member powers. */
+  async function dropAdminFlags(familyId, userId) {
+    const prof = await firstRow(profilesTable, [Query.equal('profileKey', [`${familyId}_${userId}`])]);
+    if (!prof || (prof.treeAdmin !== true && prof.chatAdmin !== true)) return;
+    const data = {};
+    if (prof.treeAdmin === true) data.treeAdmin = false;
+    if (prof.chatAdmin === true) data.chatAdmin = false;
+    await updateRow(profilesTable, prof.$id, data);
+  }
+
   /** Safe to call about anyone: it does nothing unless `userId` is really NOT a confirmed member of the family any more.
    *  The DM row and every message/reaction in it then become readable only by the person who stayed. */
   async function closeDmsFor(familyId, userId, deadline) {
-    if (await isMemberOf(familyId, userId)) return { done: true, closed: 0 };
+    if (await isMemberOf(familyId, userId)) return { done: true, closed: 0 };   // still (or again) a confirmed member: a late or repeated event changes nothing
+    let adminFailed = false;
+    try { await dropAdminFlags(familyId, userId); } catch (e) { adminFailed = true; }   // never stops the direct messages from being closed
+    const r = await closeDmsForMessages(familyId, userId, deadline);
+    if (adminFailed) r.adminCleanup = 'failed';
+    return r;
+  }
+  async function closeDmsForMessages(familyId, userId, deadline) {
     let closed = 0;
     const dms = await listRows(T.dms, [Query.equal('familyId', [familyId]), Query.or([Query.equal('userA', [userId]), Query.equal('userB', [userId])]), Query.limit(100)]);
     for (const dm of dms.rows) {
@@ -680,7 +698,7 @@ export function createChat(c) {
   /** Appwrite event trigger on "teams.*.memberships.*.delete". The payload is the deleted membership. */
   async function handleEvent({ event, payload, deadline }) {
     if (typeof event === 'string' && /\.memberships\.[^.]+\.delete$/.test(event) && payload && typeof payload.teamId === 'string' && typeof payload.userId === 'string') {
-      try { const r = await closeDmsFor(payload.teamId, payload.userId, deadline); return { status: 200, json: { ok: true, ...r } }; }
+      try { const r = await closeDmsFor(payload.teamId, payload.userId, deadline); if (r.adminCleanup === 'failed') return { status: 500, json: { ok: false, error: 'admin_cleanup_failed', ...r } }; return { status: 200, json: { ok: true, ...r } }; }
       catch (e) { if (sdkCode(e) === 404) return { status: 200, json: { ok: true, skipped: true } }; throw e; }
     }
     return { status: 200, json: { ok: true, ignored: true } };
