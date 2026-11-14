@@ -9,6 +9,7 @@ Family Circle includes the open-source code below. Keep this file and the `vendo
 | MediaPipe Selfie Segmentation (call backgrounds) | 0.1.1675465747 | `vendor/mediapipe/selfie_segmentation*` | Apache-2.0 | © Google LLC |
 | MediaPipe Face Mesh (call face filters) | 0.4.1633559619 | `vendor/mediapipe/face/*` | Apache-2.0 | © Google LLC |
 | d3 (family-chart needs it) | 7.9.0 | `vendor/d3.min.js` | ISC, see `vendor/LICENSE-d3.txt` | © 2010-2023 Mike Bostock |
+| The Family Recipe Book, Family Circle edition (Recipes) | v2.0.6 | `recipes-app/` | GPL-3.0-or-later, see `recipes-app/LICENSE-GPL-3.0.txt` | © 2026 Leia |
 
 ## family-chart
 
@@ -62,3 +63,7 @@ LiveKit client SDK 2.23.0 (npm `livekit-client`) and the two MediaPipe legacy so
 Lora, Nunito, Courier Prime, Merriweather, EB Garamond, Poppins, Montserrat, Bebas Neue, Fredoka, Pacifico, Playfair Display, Quicksand, Roboto Slab, Roboto Condensed and Permanent Marker (Latin subset), from the npm packages `@fontsource/*`. They are open fonts under the SIL Open Font License 1.1 (Roboto Slab and Roboto Condensed: Apache-2.0). They are used for the font choice in Customize my page and download only when a page uses them.
 
 More page fonts (shown under "Load more fonts"), all SIL Open Font License 1.1 and from `@fontsource/*`: Caveat, Sacramento, Great Vibes, Satisfy, Lobster, Shadows Into Light, Indie Flower, Patrick Hand, Amatic SC, Chewy, Cormorant Garamond, Cinzel, Abril Fatface, Josefin Sans, Righteous, Bangers, Special Elite, Yeseva One, Courgette, Pangolin, Kalam, Handlee, DM Serif Display and Raleway.
+
+## Recipes (`recipes-app/`)
+
+An adapted copy of the Recipe Book from the author's ZenfulOutput project, loaded in a frame inside Family Circle. It is a separate GPL-3.0-or-later component (see `recipes-app/README.md`); the rest of this repo keeps its own license. It carries its own third-party notices: `recipes-app/THIRD-PARTY-NOTICES-cookbook.txt` (pdf-lib and fontkit, MIT, and fonts) and the font license texts in `recipes-app/fonts/` (Courier Prime, Crimson Pro, IM Fell English: SIL OFL 1.1; Homemade Apple: Apache-2.0).

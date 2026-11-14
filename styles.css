@@ -1637,3 +1637,8 @@ button.hub-card { box-sizing: border-box; font: inherit; text-align: left; width
 .roles-table .roles-group th { text-align: left; background: var(--surface-2); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .roles-yes { font-weight: 700; color: var(--accent-text, var(--text)); }
 .roles-no { color: var(--muted); }
+
+/* Recipes: the adapted Recipe Book shown inside Family Circle (recipes-app/, same origin). It fills the space under the Back to Hub link and above the bottom bar. */
+.main[data-view="recipes"] { max-width: 960px; padding-left: 0; padding-right: 0; padding-bottom: 0; }
+.main[data-view="recipes"] > .hub-back { margin-left: 16px; }
+.recipes-frame { display: block; width: 100%; height: calc(100vh - var(--nav-h) - 96px - env(safe-area-inset-bottom)); height: calc(100dvh - var(--nav-h) - 96px - env(safe-area-inset-bottom)); min-height: 420px; border: 0; background: #ecdfc8; }

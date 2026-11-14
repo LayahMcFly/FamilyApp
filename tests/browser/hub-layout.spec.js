@@ -155,7 +155,7 @@ let PORT;
 
   // the card links and permission rules are untouched: same cards as before for the same configuration
   { const { ctx, page } = await openAt(browser, 1280, 800, TWO); const hrefs = await page.evaluate(() => [...document.querySelectorAll('a.hub-card')].map(a => a.getAttribute('data-hub') + '=' + a.getAttribute('href')));
-    check('links unchanged (the same six existing destinations, same targets; Planned cards add no links)', hrefs.join('|') === 'community=#/home|messages=#/chat|tree=#/tree|shop=#/shop|recipes=' + 'https://layahmcfly.github.io/ZenfulOutput/recipe-book/' + '|calendar=' + 'https://layahmcfly.github.io/ZenfulOutput/family-board/', hrefs.join('|')); await ctx.close(); }
+    check('links as expected (Recipes is now in-app; the other five unchanged; Planned cards add no links)', hrefs.join('|') === 'community=#/home|messages=#/chat|tree=#/tree|shop=#/shop|recipes=#/recipes' + '|calendar=' + 'https://layahmcfly.github.io/ZenfulOutput/family-board/', hrefs.join('|')); await ctx.close(); }
 
   await browser.close(); server.close();
   console.log(results.join('\n')); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);

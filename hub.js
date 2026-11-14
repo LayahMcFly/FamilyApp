@@ -59,6 +59,23 @@
       { id: 'assistant', name: 'Family Assistant', icon: 'sparkle', desc: 'Planned help with organizing family activities.' }
     ];
 
+    // Recipes: the adapted Recipe Book (recipes-app/) shown in a same-origin frame, so it opens inside Family Circle and uses this sign-in.
+    // The frame asks who is signed in; only a message from that exact frame, from this same origin, gets an answer. The answer is the member's
+    // id and nothing else (no session, no token). Recipes are stored on this device under that id, so nothing here reads or writes the server.
+    X.VIEWS.recipes = function (main, token) {
+      var uid = X.S.user && X.S.user.$id;
+      if (!uid) { main.appendChild(h('p', { class: 'muted', text: 'Sign in to open the recipe book.' })); return; }
+      var frame = h('iframe', { class: 'recipes-frame', src: 'recipes-app/index.html', title: 'The Family Recipe Book', 'data-fc-recipes': '1' });
+      function onMsg(e) {
+        if (X.S.nav !== token) { window.removeEventListener('message', onMsg); return; }
+        if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
+        if (!e.data || e.data.type !== 'fc-recipes-ready') return;
+        frame.contentWindow.postMessage({ type: 'fc-recipes-init', userId: String(uid) }, location.origin);
+      }
+      window.addEventListener('message', onMsg);
+      main.appendChild(frame);
+    };
+
     X.VIEWS.hub = function (main) {
       var chatOn = !!(window.FCChat && X.CFG.chatEnabled !== false);
       var switcher = X.familySwitcher();
@@ -74,7 +91,7 @@
       if (chatOn) cards.push({ id: 'messages', title: 'Messages', desc: 'Family channels and private direct messages.', icon: 'comment', href: '#/chat' });
       cards.push({ id: 'tree', title: 'Family Tree', desc: 'See how everyone is connected.', icon: 'tree', href: '#/tree' });
       if (X.shopEnabled()) cards.push({ id: 'shop', title: 'Shop', desc: 'Turn family photos into gifts.', icon: 'bag', href: '#/shop' });
-      cards.push({ id: 'recipes', title: 'Recipes', desc: 'The recipe book.', icon: 'book', href: RECIPES_URL, external: true });
+      cards.push({ id: 'recipes', title: 'Recipes', desc: 'The family recipe book, kept on this device.', icon: 'book', href: '#/recipes' });
       cards.push({ id: 'calendar', title: 'Calendar & Chores', desc: 'The family calendar and chore board.', icon: 'calendar', href: BOARD_URL, external: true });
 
       main.appendChild(h('nav', { 'aria-label': 'Family Hub' }, h('ul', { class: 'hub-grid' }, cards.map(card).concat(PLANNED.map(plannedCard)))));

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src data: blob:; form-action 'none'; base-uri 'none'">
+<meta name="robots" content="noindex">
+<title>The Family Recipe Book</title>
+<meta name="theme-color" content="#ecdfc8">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="recipes.css">
+</head>
+<body>
+<div class="frame" id="frame" aria-hidden="true"></div>
+<div class="stitch" aria-hidden="true"></div>
+<main class="page" id="app"><p class="note">Opening the book…</p></main>
+<p class="ver" id="ver"></p>
+<div id="toast" role="status" aria-live="polite"></div>
+<dialog id="sdlg"><form autocomplete="off" method="dialog">
+  <h2 style="font-size:26px">Settings</h2>
+  <section class="sgroup"><h3>Where your recipes live</h3><p class="hint">Your recipes are kept on this device, in this browser, for your Family Circle account only. They are not sent anywhere. To move them to another device, make a backup file and restore it there.</p></section>
+  <section class="sgroup"><h3>Backup</h3><p class="hint">A backup is a file with all your recipes and photos. Keep one somewhere safe.</p><div class="row"><button type="button" class="btn soft" data-act="backup">Save a backup</button><button type="button" class="btn soft" data-act="restore">Restore a backup</button></div><input type="file" id="restore" accept=".json,application/json" hidden></section>
+  <p class="hint" id="sver"></p>
+  <div class="row"><button type="button" class="btn" data-close="close">Done</button></div>
+</form></dialog>
+<dialog id="dlg"><form autocomplete="off" method="dialog"><p id="dlgmsg"></p><div class="row"><button type="button" class="btn soft" data-close="no" id="dlgno">Keep it</button><button class="btn" value="yes" id="dlgyes">Remove it</button></div></form></dialog>
+<div id="tray" aria-live="polite"></div>
+<dialog id="tdlg"><form autocomplete="off" method="dialog">
+  <h2 style="font-size:26px">Set a timer</h2>
+  <div class="row"><button type="button" class="pre" data-act="tpre" data-min="5">5 min</button><button type="button" class="pre" data-act="tpre" data-min="10">10 min</button><button type="button" class="pre" data-act="tpre" data-min="15">15 min</button><button type="button" class="pre" data-act="tpre" data-min="30">30 min</button><button type="button" class="pre" data-act="tpre" data-min="60">1 hour</button></div>
+  <div class="field"><label for="tmin">Minutes</label><input id="tmin" type="number" inputmode="decimal" min="0.1" step="any" value="10"></div>
+  <div class="field"><label for="tlab">What is it for? (optional)</label><input id="tlab" type="text" placeholder="Rice"></div>
+  <p class="hint">Keep this page open. Phones can pause timers when the screen turns off.</p>
+  <div class="row"><button class="btn" value="go">Start timer</button><button type="button" class="btn soft" data-close="cancel">Cancel</button></div>
+</form></dialog>
+<dialog id="ndlg"><form autocomplete="off" method="dialog"><h2 style="font-size:26px">What's for dinner?</h2><div id="ndbody"></div></form></dialog>
+<noscript><p style="padding:80px 60px">This recipe book needs JavaScript to open.</p></noscript>
+<script src="recipes.js"></script>
+</body>
+</html>
