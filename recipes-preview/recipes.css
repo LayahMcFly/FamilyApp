@@ -1,0 +1,83 @@
+/* Recipes preview styles (PREVIEW CODE). Classes only: the page's CSP is style-src 'self'. Colours come from the app's tokens. */
+[hidden] { display: none !important; }
+.pv { --nav-h: 0px; }
+.pv-banner { position: sticky; top: 0; z-index: 40; background: #fff3c4; color: #3d2f00; border-bottom: 2px solid #c79a00; padding: 10px 16px; font-size: .95rem; line-height: 1.35; }
+:root[data-theme="dark"] .pv-banner { background: #3b2f06; color: #ffe9a3; border-color: #a67c00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv-banner { background: #3b2f06; color: #ffe9a3; border-color: #a67c00; } }
+.pv-banner strong { display: block; }
+.pv-wrap { max-width: 900px; margin: 0 auto; padding: 14px 16px 48px; }
+.pv-controls { margin-bottom: 14px; }
+.pv-row { display: grid; gap: 4px 14px; grid-template-columns: 1fr; align-items: end; }
+.pv-reset { padding-top: 10px; }
+.pv-controls label { margin-top: 0; }
+.pv-controls .hint { margin: 8px 0 0; }
+.pv-main { min-width: 0; }
+@media (min-width: 700px) { .pv-row { grid-template-columns: 1fr auto; } }
+
+.rc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.rc-head h1 { margin: 0; }
+.rc-nav { display: flex; gap: 8px; margin: 8px 0 12px; flex-wrap: wrap; }
+.rc-tab { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-weight: 600; text-decoration: none; }
+.rc-tab[aria-current="page"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.rc-badge { display: inline-block; padding: 1px 9px; border: 1px solid var(--border); border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--surface-2); color: var(--text); }
+.rc-badge.is-private { border-style: dashed; }
+.rc-badge.is-bad { border-color: var(--danger); color: var(--danger); }
+.rc-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.rc-private-note { margin: 4px 0 12px; }
+.rc-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.rc-strong { font-weight: 700; }
+.rc-err { color: var(--danger); font-weight: 600; }
+.rc-empty, .rc-blocked, .rc-honest, .rc-confirm { margin: 14px 0; }
+.rc-empty h2, .rc-blocked h2, .rc-confirm h2 { margin-top: 0; }
+
+.rc-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 620px) { .rc-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 900px) { .rc-grid { grid-template-columns: 1fr 1fr 1fr; } }
+.rc-card { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-decoration: none; min-height: 44px; }
+.rc-card:hover { background: var(--surface-2); }
+.rc-card-body { display: grid; gap: 2px; min-width: 0; }
+.rc-card-name { overflow-wrap: anywhere; }
+.rc-card-meta { color: var(--muted); font-size: .9rem; }
+.rc-photo { width: 96px; height: 96px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.rc-photo img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+.rc-nophoto { color: var(--muted); font-size: .8rem; text-align: center; }
+.rc-photo.is-big { width: 100%; max-width: 560px; height: auto; min-height: 120px; max-height: 480px; margin: 0 0 12px; }
+.rc-photo.is-big img { max-height: 480px; object-fit: contain; }
+.rc-photo-prev { margin-top: 8px; }
+
+.rc-back { margin: 0 0 10px; }
+.rc-title { overflow-wrap: anywhere; margin-bottom: 6px; }
+.rc-facts { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin: 14px 0; }
+.rc-fact dt { font-size: .82rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.rc-fact dd { margin: 0; overflow-wrap: anywhere; }
+.rc-ings, .rc-steps { padding-left: 1.3em; display: grid; gap: 6px; }
+.rc-desc, .rc-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rc-source span { overflow-wrap: anywhere; }
+
+.rc-form .rc-field { margin-bottom: 6px; }
+.rc-form textarea { width: 100%; }
+.rc-pair { display: grid; gap: 0 12px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 420px) { .rc-pair { grid-template-columns: 1fr; } }
+.rc-formmsg { color: var(--danger); font-weight: 600; margin: 8px 0; }
+.rc-formmsg:empty { display: none; }
+
+.rc-items { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 10px; }
+.rc-item { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface); }
+.rc-item.is-invalid { border-color: var(--danger); }
+.rc-item-head { margin: 0 0 6px; overflow-wrap: anywhere; }
+.rc-reasons { margin: 4px 0; padding-left: 1.2em; }
+.rc-photoprob { border-left: 4px solid var(--danger); padding-left: 10px; margin: 6px 0; }
+.rc-report, .rc-result { margin: 14px 0; }
+.rc-report h2, .rc-result h2 { margin-top: 0; }
+
+.pv input:focus-visible, .pv select:focus-visible, .pv textarea:focus-visible, .pv button:focus-visible, .pv a:focus-visible { outline: 3px solid var(--accent-text) !important; outline-offset: 2px; }
+
+/* Printing the recipe on screen: only the recipe itself. Written fresh for this preview. */
+@media print {
+  .pv-banner, .pv-controls, .rc-nav, .rc-noprint, .rc-back, .toasts, .skip-link, .rc-private-note { display: none !important; }
+  body, .pv-wrap { background: #fff !important; color: #000 !important; max-width: none; padding: 0; }
+  .rc-photo.is-big { max-height: 60mm; border: 0; }
+  .rc-photo.is-big img { max-height: 60mm; }
+  .rc-recipe { break-inside: auto; }
+  .rc-ings li, .rc-steps li { break-inside: avoid; }
+}

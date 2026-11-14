@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-style="default" data-mode="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Recipes preview (sample data) | Family Circle</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <!-- This page can make NO network request: connect-src 'none' blocks fetch, XHR, WebSocket and the Appwrite SDK even if some code tried.
+       img-src allows only this site and data: pictures (the generated sample photos), never another website. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../fonts.css">
+  <link rel="stylesheet" href="../themes.css">
+  <link rel="stylesheet" href="recipes.css">
+  <script src="../theme.js"></script>
+</head>
+<body class="pv">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="pv-banner" id="pv-banner" role="note"><strong>Preview — sample data, not saved to your account.</strong> <span>Invented people and recipes. Nothing here is saved, sent or stored, and it clears when you reload.</span></div>
+  <div class="pv-wrap">
+    <section class="card pv-controls" id="pv-controls" aria-label="Preview controls"></section>
+    <main id="main" class="pv-main" data-view="recipes-preview"></main>
+  </div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript">This preview needs JavaScript.</p></noscript>
+  <script src="recipes-photos.js"></script>
+  <script src="recipes-core.js"></script>
+  <script src="recipes-fixtures.js"></script>
+  <script src="recipes-fake-server.js"></script>
+  <script src="recipes-ui.js"></script>
+  <script src="recipes-preview.js"></script>
+</body>
+</html>
