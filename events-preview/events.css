@@ -1,0 +1,87 @@
+/* Events preview styles (PREVIEW CODE). Classes only: the page's CSP is style-src 'self'. Colours come from the app's tokens. */
+[hidden] { display: none !important; }
+.pv { --nav-h: 0px; }
+.pv-banner { position: sticky; top: 0; z-index: 40; background: #fff3c4; color: #3d2f00; border-bottom: 2px solid #c79a00; padding: 10px 16px; font-size: .95rem; line-height: 1.35; }
+:root[data-theme="dark"] .pv-banner { background: #3b2f06; color: #ffe9a3; border-color: #a67c00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pv-banner { background: #3b2f06; color: #ffe9a3; border-color: #a67c00; } }
+.pv-banner strong { display: block; }
+.pv-wrap { max-width: 1100px; margin: 0 auto; padding: 14px 16px 48px; }
+.pv-controls { margin-bottom: 14px; }
+.pv-row { display: grid; gap: 4px 14px; grid-template-columns: 1fr; align-items: end; }
+.pv-reset { padding-top: 10px; }
+.pv-controls label { margin-top: 0; }
+.pv-controls .hint { margin: 8px 0 0; }
+.pv-main { min-width: 0; }
+
+.ev-head h1 { margin-bottom: 8px; }
+.ev-board { margin: 0 0 14px; display: grid; gap: 8px; }
+.ev-board-line { margin: 0; font-weight: 600; }
+.ev-board .btn { justify-self: start; flex-wrap: wrap; text-align: center; }
+
+/* Phone: one pane at a time. Desktop: list and detail side by side. */
+.ev-layout { display: block; }
+.ev-layout[data-pane="list"] .ev-detailpane { display: none; }
+.ev-layout[data-pane="detail"] .ev-listpane { display: none; }
+.ev-back { margin: 0 0 10px; }
+@media (min-width: 900px) {
+  .pv-row { grid-template-columns: 1fr 1fr auto; }
+  .ev-layout { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .ev-layout[data-pane="list"] .ev-detailpane, .ev-layout[data-pane="detail"] .ev-listpane { display: block; }
+  .ev-back { display: none; }
+  .ev-listpane { position: sticky; top: 76px; max-height: calc(100vh - 100px); overflow: auto; }
+}
+
+.ev-list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.ev-list-head h2 { margin: 0; }
+.ev-tabs { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.ev-tab { min-height: 40px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-weight: 600; cursor: pointer; }
+.ev-tab[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.ev-month { margin: 16px 0 6px; font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ev-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ev-row { text-decoration: none !important; display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-decoration: none; min-height: 44px; }
+.ev-row:hover { background: var(--surface-2); }
+.ev-row.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.ev-row-title { overflow-wrap: anywhere; }
+.ev-row-when { color: var(--muted); font-size: .9rem; }
+.ev-row-meta, .ev-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.ev-badge { display: inline-block; padding: 1px 9px; border: 1px solid var(--border); border-radius: 999px; font-size: .78rem; font-weight: 700; background: var(--surface-2); color: var(--text); }
+.ev-badge.is-invited { border-style: dashed; }
+.ev-badge.is-cancelled { border-color: var(--danger); color: var(--danger); }
+.ev-badge.is-rsvp { border-color: var(--accent); }
+.ev-empty, .ev-placeholder { padding: 16px 0; }
+
+.ev-title { overflow-wrap: anywhere; margin-bottom: 6px; }
+.ev-banner { padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); font-weight: 600; margin: 10px 0; }
+.ev-banner.is-cancelled { border-color: var(--danger); color: var(--danger); }
+.ev-facts { display: grid; gap: 10px; margin: 14px 0; }
+.ev-fact { display: grid; gap: 2px; }
+.ev-fact dt { font-size: .82rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.ev-fact dd { margin: 0; overflow-wrap: anywhere; }
+.ev-desc { white-space: pre-wrap; }
+.ev-rsvp h3, .ev-who h3 { margin-top: 0; }
+.ev-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ev-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.ev-choice { display: inline-flex; align-items: center; gap: 8px; margin: 0; min-height: 44px; padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-weight: 600; cursor: pointer; }
+.ev-choice input { width: 20px; height: 20px; margin: 0; }
+.ev-rsvp-form fieldset, .ev-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ev-rsvp-form legend, .ev-form legend { font-weight: 600; padding: 0; margin: 12px 0 4px; }
+.ev-formmsg { color: var(--danger); font-weight: 600; margin: 8px 0; }
+.ev-formmsg:empty { display: none; }
+.ev-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.ev-form .ev-field { margin-bottom: 4px; }
+.ev-pair { display: grid; gap: 0 12px; grid-template-columns: 1fr 1fr; }
+.ev-check { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.ev-check input { width: 22px; height: 22px; margin: 0; }
+.ev-check label { margin: 0; }
+.ev-form input[type="date"], .ev-form input[type="time"], .ev-rsvp-form input[type="number"] { width: 100%; padding: 11px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); min-height: 44px; }
+.ev-rsvp-form input[type="number"] { max-width: 120px; }
+.ev-invitees { margin: 8px 0; }
+.ev-invitees .ev-choice { margin: 0 8px 8px 0; }
+@media (max-width: 420px) { .ev-pair { grid-template-columns: 1fr; } }
+.ev-blocked h2 { margin-top: 0; }
+
+/* The app's ring covers text boxes and selects; these are the fields it does not cover. */
+.ev-form input[type="date"]:focus-visible, .ev-form input[type="time"]:focus-visible, .ev-rsvp-form input[type="number"]:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--ring, rgba(0,149,246,.3)); }
+.ev-choice:focus-within { outline: 3px solid var(--accent-text); outline-offset: 2px; }
+/* Keyboard focus must be easy to see on every field in the preview, whichever theme is active. */
+.pv input:focus-visible, .pv select:focus-visible, .pv textarea:focus-visible, .pv button:focus-visible, .pv a:focus-visible { outline: 3px solid var(--accent-text) !important; outline-offset: 2px; }
